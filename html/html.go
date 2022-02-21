@@ -1,7 +1,9 @@
 /* Package html have all the html elements and attributes */
 package html
 
-import "github.com/guillermo/lazyview/nodes"
+import (
+	"github.com/guillermo/lazyview/nodes"
+)
 
 //go:generate ./generate_tags
 //go:generate ./generate_attr

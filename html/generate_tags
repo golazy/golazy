@@ -11,7 +11,7 @@ f << "import \"github.com/guillermo/lazyview/nodes\"\n\n"
 tags.each do  |tag|
   fn = tag.capitalize
   f << "// #{fn} Creates a new #{tag} element\n"
-  f << "func #{fn}(options ...interface{}) *nodes.Element {\n"
+  f << "func #{fn}(options ...interface{}) nodes.Element {\n"
   f << "  return nodes.NewElement(\"#{tag}\", options...)\n"
   f << "}\n\n"
 end

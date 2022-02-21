@@ -5,6 +5,8 @@ import (
 	"io"
 )
 
+var Beautify = false
+
 type Element struct {
 	tag        string
 	children   []io.WriterTo
@@ -13,18 +15,32 @@ type Element struct {
 
 func (r *Element) add(something interface{}) {
 	switch v := something.(type) {
-	case *Element:
+	case Element:
+		r.children = append(r.children, v)
+	case Raw:
 		r.children = append(r.children, v)
 	case string:
 		r.children = append(r.children, Text(v))
 	case Attr:
 		r.attributes = append(r.attributes, v)
+	case []Element:
+		for _, arg := range v {
+			r.add(arg)
+		}
+	case []io.WriterTo:
+		for _, arg := range v {
+			r.add(arg)
+		}
 	case []interface{}:
 		for _, arg := range v {
 			r.add(arg)
 		}
+	case io.WriterTo:
+		r.children = append(r.children, v)
+	case nil:
+
 	default:
-		panic(fmt.Errorf("don't recognize that: %v", v))
+		panic(fmt.Errorf("don't recognize that: %#v", v))
 	}
 }
 
@@ -95,10 +111,19 @@ func (r Element) WriteTo(w io.Writer) (n64 int64, err error) {
 	// TODO
 	if isEmptyElement {
 		session.WriteS("/>")
+		if Beautify {
+			session.WriteS("\n")
+		}
 		return session.n, session.err
 	}
 
 	session.WriteS(">")
+	if Beautify && (r.tag == "html" ||
+		r.tag == "body" ||
+		r.tag == "head") {
+		session.WriteS("\n")
+
+	}
 
 	// Content
 	for _, c := range r.children {
@@ -106,6 +131,9 @@ func (r Element) WriteTo(w io.Writer) (n64 int64, err error) {
 	}
 	// Close
 	session.WriteS("</" + r.tag + ">")
+	if Beautify {
+		session.WriteS("\n")
+	}
 	return
 }
 
@@ -118,8 +146,8 @@ func (r Element) WriteTo(w io.Writer) (n64 int64, err error) {
 // * Any WriterTo interface
 // Attributes are output in order
 // The rest is output in the same order as received
-func NewElement(tagname string, options ...interface{}) *Element {
-	r := &Element{
+func NewElement(tagname string, options ...interface{}) Element {
+	r := Element{
 		tag: tagname,
 	}
 	r.add(options)

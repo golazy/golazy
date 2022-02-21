@@ -8,6 +8,7 @@ import (
 )
 
 func ExampleNewElement() {
+	Beautify = false
 	content := NewElement("html", NewAttr("lang", "en"),
 		NewElement("head",
 			NewElement("title", "Mi pagina")),
@@ -38,8 +39,4 @@ func TestRendererRenderTo(t *testing.T) {
 	trt(t, NewElement("html"), "<html/>")
 	trt(t, NewElement("html", NewAttr("lang", "en")), `<html lang="en"/>`)
 	trt(t, NewElement("meta"), `<meta/>`)
-}
-
-func ExampleElement() {
-
 }

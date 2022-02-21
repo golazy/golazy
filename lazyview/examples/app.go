@@ -1,8 +1,8 @@
 package main
 
 import (
-	. "github.com/guillermo/lazyview/html"
-	"github.com/guillermo/lazyview/serve"
+	. "github.com/guillermo/golazy/lazyview/html"
+	"github.com/guillermo/golazy/lazyview/serve"
 )
 
 func main() {

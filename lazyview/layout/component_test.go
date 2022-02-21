@@ -3,8 +3,8 @@ package layout
 import (
 	"os"
 
-	. "github.com/guillermo/lazyview/html"
-	"github.com/guillermo/lazyview/nodes"
+	. "github.com/guillermo/golazy/lazyview/html"
+	"github.com/guillermo/golazy/lazyview/nodes"
 )
 
 func ExampleComponent() {

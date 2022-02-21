@@ -9,7 +9,7 @@ import (
 	"os"
 
 	"github.com/gorilla/handlers"
-	"github.com/guillermo/lazyview/nodes"
+	"github.com/guillermo/golazy/lazyview/nodes"
 )
 
 func Page(e nodes.Element) http.HandlerFunc {

@@ -1,4 +1,4 @@
-module github.com/guillermo/lazyview
+module github.com/guillermo/golazy/lazyview
 
 go 1.17
 

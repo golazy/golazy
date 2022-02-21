@@ -1,8 +1,8 @@
 package layout
 
 import (
-	. "github.com/guillermo/lazyview/html"
-	"github.com/guillermo/lazyview/nodes"
+	. "github.com/guillermo/golazy/lazyview/html"
+	"github.com/guillermo/golazy/lazyview/nodes"
 )
 
 var BasicLayout = &LayoutTemplate{

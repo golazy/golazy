@@ -1,0 +1,104 @@
+package protocolmux
+
+import (
+	"bufio"
+	"bytes"
+	"fmt"
+	"log"
+	"net"
+)
+
+//From: https://go.dev/play/p/5M2V9GeTZ-
+
+type splitListener struct {
+	net.Listener
+	httpConnection  chan (net.Conn)
+	httpsConnection chan (net.Conn)
+}
+
+func newSplitListener(l net.Listener) *splitListener {
+	return &splitListener{
+		Listener:        l,
+		httpConnection:  make(chan (net.Conn)),
+		httpsConnection: make(chan (net.Conn)),
+	}
+}
+
+type httpListener struct {
+	*splitListener
+}
+type httpsListener struct {
+	*splitListener
+}
+
+func (l *httpListener) Accept() (net.Conn, error) {
+	log.Println("HTTP: Accept was called")
+	conn := <-l.httpConnection
+	log.Println("HTTP: Got a new connection")
+	return conn, nil
+}
+
+func (l *httpsListener) Accept() (net.Conn, error) {
+	return <-l.httpsConnection, nil
+}
+
+func (l *splitListener) HTTP() net.Listener {
+	return &httpListener{l}
+}
+
+func (l *splitListener) HTTPS() net.Listener {
+	return &httpsListener{l}
+}
+
+func (l *splitListener) Listen() {
+	fmt.Println("SL: Listen()")
+ListenLoop:
+	for {
+		c, err := l.Listener.Accept()
+		log.Println("MAIN: Got a new connection")
+		if err != nil {
+			log.Println(err)
+			return
+		}
+		bconn := &Conn{
+			Conn: c,
+			buf:  bufio.NewReader(c),
+		}
+
+		// inspect the first few bytes
+		hdr, err := bconn.buf.Peek(3)
+		log.Printf("%+v", hdr)
+		if err != nil {
+			log.Println(err)
+			bconn.Close()
+		}
+
+		for _, prefix := range tlsPrefix {
+			if bytes.Equal(hdr, prefix) {
+				log.Println("Is an httpS connection")
+				l.httpsConnection <- bconn
+				continue ListenLoop
+			}
+		}
+		log.Println("Is an http connection")
+		l.httpConnection <- bconn
+	}
+
+}
+
+var tlsPrefix = [][]byte{
+	[]byte{22, 3, 0},
+	[]byte{22, 3, 1},
+	[]byte{22, 3, 2},
+	[]byte{22, 3, 3},
+}
+
+// here's a buffered conn for peeking into the connection
+type Conn struct {
+	net.Conn
+	buf *bufio.Reader
+}
+
+func (c *Conn) Read(b []byte) (int, error) {
+	return c.buf.Read(b)
+}

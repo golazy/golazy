@@ -37,7 +37,7 @@ func (l *LayoutTemplate) AddComponent(c Component) {
 func (l *LayoutTemplate) With(content ...interface{}) io.WriterTo {
 	styles := []nodes.Element{}
 	for _, s := range l.Styles {
-		styles = append(styles, Style(s))
+		styles = append(styles, Style(nodes.Raw(s)))
 	}
 
 	var scripts []interface{}

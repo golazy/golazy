@@ -6,6 +6,8 @@ tidy:
 test:
 	go test ./...
 
+release: tag push
+
 tag:
 ifndef VERSION
 	$(error VERSION is not set)

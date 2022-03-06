@@ -1,0 +1,121 @@
+package protocolmux
+
+import (
+	"log"
+	"net"
+	"sync"
+	"testing"
+)
+
+func TestSplitListener(t *testing.T) {
+	var wg sync.WaitGroup
+
+	tcpl, err := net.Listen("tcp", ":9092")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tcpl.Close()
+
+	sl := newSplitListener(tcpl)
+	go sl.Listen()
+
+	s := "GET / HTTP/1.1\n\r\n\r"
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		httpl := sl.HTTP()
+		log.Println("Going to call Accept")
+		httpConn, err := httpl.Accept()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		b := make([]byte, 1024)
+		n, err := httpConn.Read(b)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n != 18 {
+			t.Fatal("got ", n)
+		}
+		if string(b[:n]) != s {
+			t.Fatalf("%+v", string(b[:n]))
+		}
+		_, err = httpConn.Write([]byte("Hola"))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+	}()
+
+	conn, err := net.Dial("tcp", "localhost:9092")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = conn.Write([]byte(s))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	buf := make([]byte, 1024)
+	n, err := conn.Read(buf)
+	if string(buf[:n]) != "Hola" {
+		t.Fatal(string(buf[:n]))
+	}
+	err = conn.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Now do an https
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		httpsl := sl.HTTPS()
+		log.Println("Going to call Accept")
+		httpsConn, err := httpsl.Accept()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		b := make([]byte, 1024)
+		n, err := httpsConn.Read(b)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n != 18 {
+			t.Fatal("got ", n)
+		}
+		if string(b[:n]) != s {
+			t.Fatalf("%+v", string(b[:n]))
+		}
+		_, err = httpsConn.Write([]byte("Hola"))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+	}()
+
+	conn, err = net.Dial("tcp", "localhost:9092")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = conn.Write(append([]byte{22, 3, 0}, []byte("hola")...))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	buf = make([]byte, 1024)
+	n, err = conn.Read(buf)
+	if string(buf[:n]) != "Hey" {
+		t.Fatal(string(buf[:n]))
+	}
+	err = conn.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	wg.Wait()
+
+}

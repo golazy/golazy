@@ -1,0 +1,99 @@
+:root {
+    --blue: #375EAB;
+    --blue-bg: #E0EBF5;
+    --green: #468847;
+    
+}
+* {
+    box-sizing: border-box;
+    color: #333;
+    margin: 0;
+    padding: 0;
+}
+
+ul {
+    list-style-position: inside;
+}
+
+h1,h2,h3,h4,h5,h6 {
+    margin-top: 20px;
+    margin-bottom: 10px;
+    font-weight: 500;
+    line-height: 1.1;
+}
+
+html {
+    scroll-behaviour: smooth;
+    font-size: 14px;
+}
+body, * {
+    font-family: "Helvetica Neue",Helvetica,Arial,sans-serif;
+}
+
+
+header {
+    background: var(--blue-bg);
+    padding: 40px 0;
+    margin-bottom: 10px;
+}
+header h1 {
+    color: var(--blue);
+    font-size: 48;
+    font-weight: 600;
+    text-align: center;
+}
+
+a {
+    color: var(--blue);
+    text-decoration: none;
+}
+
+a.button {
+    font-weight: 900;
+    padding: 10px 20px;
+    display: inline-block;
+    border-radius: 3px;
+}
+
+a.red {
+    background: var(--blue);
+    color: white;
+}
+a.blue {
+    background: var(--green);
+    color: white;
+}
+
+main {
+    max-width: 750px;
+    margin: 0 auto;
+}
+
+main h1 {
+    font-weight: 500;
+}
+
+main p {
+    margin-bottom: 10px;
+}
+
+nav {
+    max-width: 750px;
+    margin: 0 auto;
+    background: #eee;
+    border-radius: 3px;
+    padding: 10px;
+    text-align: right;
+}
+
+nav ul {
+    list-style: none;
+}
+
+nav ul li {
+    display: inline-block;
+    margin-left: 5px;
+}
+nav ul li::before {
+    content: "|"
+}

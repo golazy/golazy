@@ -19,3 +19,5 @@ It watches for changes in WatchPaths that defaults to the current directory. Mor
 
 */
 package lazydev
+
+// Gopher: https://quasilyte.dev/gopherkon/?state=01000a0105090000040000030000000007

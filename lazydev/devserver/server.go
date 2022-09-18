@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/dietsche/rfsnotify"
-	"github.com/guillermo/golazy/lazydev/devserver/autocerts"
-	"github.com/guillermo/golazy/lazydev/devserver/protocolmux"
-	"github.com/guillermo/golazy/lazydev/devserver/tcpdevserver"
+	"github.com/golazy/golazy/lazydev/devserver/autocerts"
+	"github.com/golazy/golazy/lazydev/devserver/protocolmux"
+	"github.com/golazy/golazy/lazydev/devserver/tcpdevserver"
 )
 
 type Server struct {

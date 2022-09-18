@@ -7,9 +7,9 @@ import (
 	"net/url"
 	"os"
 
-	. "github.com/guillermo/golazy/lazyview/html"
-	"github.com/guillermo/golazy/lazyview/layout"
-	"github.com/guillermo/golazy/lazyview/layout/lazylayout"
+	. "github.com/golazy/golazy/lazyview/html"
+	"github.com/golazy/golazy/lazyview/layout"
+	"github.com/golazy/golazy/lazyview/layout/lazylayout"
 )
 
 //go:embed http.js

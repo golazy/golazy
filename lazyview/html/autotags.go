@@ -1,6 +1,6 @@
 package html
 
-import "github.com/guillermo/golazy/lazyview/nodes"
+import "github.com/golazy/golazy/lazyview/nodes"
 
 // A Creates a new a element
 func A(options ...interface{}) nodes.Element {

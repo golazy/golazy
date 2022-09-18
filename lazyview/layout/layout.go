@@ -1,12 +1,11 @@
 // Package layout provides helpers to generate an html document
-//
 package layout
 
 import (
 	"io"
 
-	. "github.com/guillermo/golazy/lazyview/html"
-	"github.com/guillermo/golazy/lazyview/nodes"
+	. "github.com/golazy/golazy/lazyview/html"
+	"github.com/golazy/golazy/lazyview/nodes"
 )
 
 type LayoutTemplate struct {

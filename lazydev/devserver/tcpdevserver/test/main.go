@@ -7,7 +7,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/guillermo/golazy/lazydev/tcpdevserver"
+	"github.com/golazy/golazy/lazydev/tcpdevserver"
 )
 
 func EchoServer(l net.Listener) error {

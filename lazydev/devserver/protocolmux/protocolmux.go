@@ -21,10 +21,10 @@ var (
 		[]byte("PATCH"),
 	}
 	TLSPrefix = [][]byte{
-		[]byte{22, 3, 0},
-		[]byte{22, 3, 1},
-		[]byte{22, 3, 2},
-		[]byte{22, 3, 3},
+		{22, 3, 0},
+		{22, 3, 1},
+		{22, 3, 2},
+		{22, 3, 3},
 	}
 )
 
@@ -86,7 +86,7 @@ func (m *Mux) l(v ...interface{}) {
 func (m *Mux) Listen() error {
 	m.l("starting listener")
 	if m.L == nil {
-		return fmt.Errorf("Listener not defined")
+		return fmt.Errorf("listener not defined")
 	}
 
 	for {

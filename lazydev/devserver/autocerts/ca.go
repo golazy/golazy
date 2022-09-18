@@ -51,23 +51,23 @@ func LoadCA(certFile, keyFile string) (*CAFiles, error) {
 	// Cert
 	data, err := os.ReadFile(certFile)
 	if err != nil {
-		return nil, fmt.Errorf("Can't read cerfile %s: %q", certFile, err)
+		return nil, fmt.Errorf("can't read cerfile %s: %q", certFile, err)
 	}
 	block, _ := pem.Decode([]byte(data))
 	if block == nil {
 		return nil, fmt.Errorf("ca file %s is empty", certFile)
 	}
 	if block.Type != "CERTIFICATE" {
-		return nil, fmt.Errorf("Ca certificate %s of unknown type. %v", certFile, block.Type)
+		return nil, fmt.Errorf("ca certificate %s of unknown type. %v", certFile, block.Type)
 	}
 	cert, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
-		return nil, fmt.Errorf("Can't parse certificate in %s: %q", certFile, err)
+		return nil, fmt.Errorf("can't parse certificate in %s: %q", certFile, err)
 	}
 	// Key
 	data, err = os.ReadFile(keyFile)
 	if err != nil {
-		return nil, fmt.Errorf("Can't read key %s: %q", keyFile, err)
+		return nil, fmt.Errorf("can't read key %s: %q", keyFile, err)
 	}
 
 	block, _ = pem.Decode([]byte(data))
@@ -80,7 +80,7 @@ func LoadCA(certFile, keyFile string) (*CAFiles, error) {
 
 	key, err := x509.ParsePKCS1PrivateKey(block.Bytes)
 	if err != nil {
-		return nil, fmt.Errorf("Can't parse key in %s: %q", keyFile, err)
+		return nil, fmt.Errorf("can't parse key in %s: %q", keyFile, err)
 	}
 
 	return &CAFiles{
@@ -103,14 +103,14 @@ func (c *CAFiles) Save() error {
 	// Create certificate file
 	f, err := os.Create(c.certFile)
 	if err != nil {
-		return fmt.Errorf("Can't create CA file %q in %q", c.certFile, err)
+		return fmt.Errorf("can't create CA file %q in %q", c.certFile, err)
 	}
 	defer f.Close()
 
 	// Save certificate
 	_, err = f.WriteString(caPEM.String())
 	if err != nil {
-		return fmt.Errorf("Can't write Certificate Authority file in %s:%q", c.certFile, err)
+		return fmt.Errorf("can't write Certificate Authority file in %s:%q", c.certFile, err)
 	}
 
 	// Encode key
@@ -123,13 +123,13 @@ func (c *CAFiles) Save() error {
 	// Create key file
 	f, err = os.Create(c.keyFile)
 	if err != nil {
-		return fmt.Errorf("Can't create CA KEY file in %s:%q", c.keyFile, err)
+		return fmt.Errorf("can't create CA KEY file in %s:%q", c.keyFile, err)
 	}
 	defer f.Close()
 
 	_, err = f.WriteString(caPrivKeyPEM.String())
 	if err != nil {
-		return fmt.Errorf("Can't write CA KEY file in %s:%q", c.keyFile, err)
+		return fmt.Errorf("can't write CA KEY file in %s:%q", c.keyFile, err)
 	}
 	return nil
 }

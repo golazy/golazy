@@ -4,7 +4,7 @@ import (
 	_ "embed"
 	"net/http"
 
-	"github.com/guillermo/golazy/lazydev/injector"
+	"github.com/golazy/golazy/lazydev/injector"
 )
 
 //go:embed injector.js

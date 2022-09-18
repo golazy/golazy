@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/adrg/xdg"
-	"github.com/guillermo/golazy/lazydev/devserver"
+	"github.com/golazy/golazy/lazydev/devserver"
 )
 
 func certPEM() string {

@@ -4,8 +4,8 @@ import (
 	_ "embed"
 	"io"
 
-	. "github.com/guillermo/golazy/lazyview/html"
-	"github.com/guillermo/golazy/lazyview/layout"
+	. "github.com/golazy/golazy/lazyview/html"
+	"github.com/golazy/golazy/lazyview/layout"
 )
 
 //go:embed style.css

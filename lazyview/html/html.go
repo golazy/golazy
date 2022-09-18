@@ -2,7 +2,7 @@
 package html
 
 import (
-	"github.com/guillermo/golazy/lazyview/nodes"
+	"github.com/golazy/golazy/lazyview/nodes"
 )
 
 //go:generate ./generate_tags

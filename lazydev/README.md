@@ -1,7 +1,7 @@
 # lazydev
 
 ```go
-Package lazydev implements an autoreload server
+Package lazydev implements a lazy http server
 ```
 
 The main method Serve() will start a child process with `go run *.go` (except

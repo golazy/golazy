@@ -1,0 +1,15 @@
+
+
+docs: # Generates the README.md for all directories
+	dirs=$(find -type d | grep -v vscode)
+	for dir in $dirs; do
+		cd $dir 
+		goreadme -recursive -factories -functions > README.md 
+		cd - 
+	done
+
+
+install_dev_deps: #Install dev dependencies
+	GO111MODULE=on go get github.com/posener/goreadme/cmd/goreadme
+
+

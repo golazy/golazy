@@ -22,7 +22,8 @@ var DefaultCertificateSubject = &pkix.Name{
 	PostalCode:    []string{""},
 }
 
-type CAFiles struct {
+// CA is the certificate authority
+type CA struct {
 	// TODO: Make it a normal tls.Certificate
 	certFile, keyFile string
 
@@ -30,7 +31,10 @@ type CAFiles struct {
 	key  *rsa.PrivateKey
 }
 
-func LoadOrGenerateCA(subject *pkix.Name, certFile, keyFile string) (*CAFiles, error) {
+// LoadOrGenerateCA loads a certificate authority by the provided certFile and
+// keyFile. In case there is any error, it will generate the Certitifcate
+// Authority
+func LoadOrGenerateCA(subject *pkix.Name, certFile, keyFile string) (*CA, error) {
 	ca, err := LoadCA(certFile, keyFile)
 	if err == nil {
 		return ca, nil
@@ -43,7 +47,8 @@ func LoadOrGenerateCA(subject *pkix.Name, certFile, keyFile string) (*CAFiles, e
 	return ca, err
 }
 
-func LoadCA(certFile, keyFile string) (*CAFiles, error) {
+// LoadCA lodas a certificate authority by the provided certFile and keyFile.
+func LoadCA(certFile, keyFile string) (*CA, error) {
 	if certFile == "" || keyFile == "" {
 		return nil, fmt.Errorf("certFile and keyFile must be set")
 	}
@@ -83,7 +88,7 @@ func LoadCA(certFile, keyFile string) (*CAFiles, error) {
 		return nil, fmt.Errorf("can't parse key in %s: %q", keyFile, err)
 	}
 
-	return &CAFiles{
+	return &CA{
 		certFile: certFile,
 		keyFile:  keyFile,
 		cert:     cert,
@@ -92,7 +97,8 @@ func LoadCA(certFile, keyFile string) (*CAFiles, error) {
 
 }
 
-func (c *CAFiles) Save() error {
+// Save will persist to disk the Certificate Authority in the pem and key files provided through Generate or Load.
+func (c *CA) Save() error {
 	// Encode certificate
 	caPEM := new(bytes.Buffer)
 	pem.Encode(caPEM, &pem.Block{
@@ -134,7 +140,10 @@ func (c *CAFiles) Save() error {
 	return nil
 }
 
-func GenerateCA(subject *pkix.Name, certFile, keyFile string) (*CAFiles, error) {
+// GenerateCA generates a Certificate Authority.
+// Even if it requries certFile and keyFile, the Certificate Authority is not saved until Save is called
+// if subject is nil, the DefaultCertificateSubject will be used.
+func GenerateCA(subject *pkix.Name, certFile, keyFile string) (*CA, error) {
 	if certFile == "" || keyFile == "" {
 		return nil, fmt.Errorf("certFile and keyFile must be set")
 	}
@@ -171,7 +180,7 @@ func GenerateCA(subject *pkix.Name, certFile, keyFile string) (*CAFiles, error) 
 
 	}
 
-	return &CAFiles{
+	return &CA{
 		certFile: certFile,
 		keyFile:  keyFile,
 		cert:     cert,

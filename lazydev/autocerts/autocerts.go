@@ -14,30 +14,17 @@ import (
 	"time"
 )
 
-var (
-	DefaultCS = &CertificateServer{
-		CAPemFile: "ca.pem",
-		CAKeyFile: "ca.key",
-	}
-)
-
-func CertificateFromClientHello(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
-	return DefaultCS.CertificateFromClientHello(hello)
-}
-
-func CertificateFor(domain string) (*tls.Certificate, error) {
-	return DefaultCS.CertificateFor(domain)
-}
-
+// CertificateServer generates certificates dynamically from a certificate authority
 type CertificateServer struct {
 	sync.Mutex
 	Subject   *pkix.Name
 	CAPemFile string
 	CAKeyFile string
-	CA        *CAFiles
+	CA        *CA
 	cbh       map[string]*tls.Certificate // Certificates by host
 }
 
+// CertificateFromClientHello
 func (c *CertificateServer) CertificateFromClientHello(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
 	return c.CertificateFor(hello.ServerName)
 }

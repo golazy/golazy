@@ -5,9 +5,12 @@ import (
 	"testing"
 )
 
-func TestCa(t *testing.T) {
+func TestCA(t *testing.T) {
 
-	ca, err := GenerateCA(DefaultCertificateSubject, "ca.pem", "ca.key")
+	const pemFile = "TestCA.pem"
+	const keyFile = "TestCA.key"
+
+	ca, err := GenerateCA(DefaultCertificateSubject, pemFile, keyFile)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -20,7 +23,7 @@ func TestCa(t *testing.T) {
 		os.Remove(ca.keyFile)
 	}()
 
-	ca2, err := LoadCA("ca.pem", "ca.key")
+	ca2, err := LoadCA(pemFile, keyFile)
 	if err != nil {
 		t.Fatal(err)
 	}

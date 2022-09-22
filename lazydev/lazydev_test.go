@@ -6,4 +6,6 @@ import (
 
 func TestLazyDev(t *testing.T) {
 
+	Serve(nil)
+
 }

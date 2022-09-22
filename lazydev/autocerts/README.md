@@ -1,5 +1,7 @@
 # autocerts
 
+Package autocerts
+
 ## Functions
 
 ### func [CertificateFor](/autocerts.go#L28)

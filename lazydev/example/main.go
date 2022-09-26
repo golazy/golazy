@@ -1,13 +1,16 @@
 package main
 
 import (
-	"github.com/golazy/lazydev"
+	"github.com/golazy/golazy/lazydev"
 )
-
 
 func main() {
 
-	panic(lazydev.Serve())
+//	handlerFunc := func(w http.ResponseWriter, r *http.Request) {
+//		w.Write([]byte("hello"))
+//	}
+//	handler := http.HandlerFunc(handlerFunc)
 
+	lazydev.Serve(nil)
 
 }

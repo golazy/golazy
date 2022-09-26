@@ -114,6 +114,12 @@ func (c *CertificateServer) generateCertificateFor(domain string) (*tls.Certific
 		Bytes: certBytes,
 	})
 
+	// Append ca certificate
+	pem.Encode(certPEM, &pem.Block{
+		Type:  "CERTIFICATE",
+		Bytes: c.CA.cert.Raw,
+	})
+
 	// Get new Cert Key
 	certPrivKeyPEM := new(bytes.Buffer)
 	pem.Encode(certPrivKeyPEM, &pem.Block{

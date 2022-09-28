@@ -80,6 +80,7 @@ if err != nil {
     if err != nil {
         panic(err)
     }
+    defer os.Remove("my_app_ca.pem")
 }
 
 // Configure http server

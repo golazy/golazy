@@ -9,6 +9,7 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
+	"os"
 	"time"
 )
 
@@ -31,6 +32,7 @@ func Example() {
 		if err != nil {
 			panic(err)
 		}
+		defer os.Remove("my_app_ca.pem")
 	}
 
 	// Configure http server

@@ -1,7 +1,7 @@
 # lazydev
 
 ```go
-Package lazydev implements a lazy http server
+Package lazydev implements an autoreload server
 ```
 
 The main method Serve() will start a child process with `go run *.go` (except
@@ -34,21 +34,25 @@ LAZYWATCH=""./..." go run *.go
 
 ## Sub Packages
 
-* [devserver](./devserver)
+* [autocerts](./autocerts): Package autocerts generates tls certificate suitable for the http server with a common certificate authority
 
-* [devserver/autocerts](./devserver/autocerts)
+* [devserver](./devserver): package devserver implements and http and https servers with autoreload on files changes and automatic https certificate
 
-* [devserver/protocolmux](./devserver/protocolmux)
+* [example](./example)
 
-* [devserver/tcpdevserver](./devserver/tcpdevserver)
-
-* [devserver/tcpdevserver/app](./devserver/tcpdevserver/app)
-
-* [devserver/tcpdevserver/app/test](./devserver/tcpdevserver/app/test)
-
-* [devserver/tcpdevserver/test](./devserver/tcpdevserver/test)
+* [filewatcher](./filewatcher): Package filewatcher notifies when the filesystem has change.
 
 * [injector](./injector)
+
+* [protocolmux](./protocolmux): protocolmux allows to peek the first bytes of a connection and decided to which handler forward the connection.
+
+* [tcpdevserver](./tcpdevserver)
+
+* [tcpdevserver/app](./tcpdevserver/app)
+
+* [tcpdevserver/app/test](./tcpdevserver/app/test)
+
+* [tcpdevserver/test](./tcpdevserver/test)
 
 ---
 Readme created from Go doc with [goreadme](https://github.com/posener/goreadme)

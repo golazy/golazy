@@ -1,9 +1,5 @@
 # autocerts
 
-[![codecov](https://codecov.io/gh/./branch/master/graph/badge.svg)](https://codecov.io/gh/.)
-[![GoDoc](https://img.shields.io/badge/pkg.go.dev-doc-blue)](http://pkg.go.dev/.)
-[![Go Report Card](https://goreportcard.com/badge/.)](https://goreportcard.com/report/.)
-
 Package autocerts generates tls certificate suitable for the http server with a common certificate authority
 
 ## Variables

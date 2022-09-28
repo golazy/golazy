@@ -14,6 +14,8 @@ import (
 
 func Example() {
 
+	// import "github.com/golazy/golazy/lazydev/autocerts"
+
 	// Configure Autocerts
 	ac, err := Load("my_app_ca.pem")
 

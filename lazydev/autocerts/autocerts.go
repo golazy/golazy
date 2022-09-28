@@ -1,3 +1,4 @@
+// Package autocerts generates tls certificate suitable for the http server with a common certificate authority
 package autocerts
 
 import (
@@ -8,78 +9,223 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
-	"log"
+	"fmt"
 	"math/big"
+	"os"
 	"sync"
 	"time"
 )
 
-// CertificateServer generates certificates dynamically from a certificate authority
-type CertificateServer struct {
+var keyLength = 4096
+
+// DefaultCertificateSubject is used if no subject is supplied
+var DefaultCertificateSubject = &pkix.Name{
+	Organization:  []string{"autocerts"},
+	Country:       []string{"DE"},
+	Province:      []string{"Berlin"},
+	Locality:      []string{"Berlin"},
+	StreetAddress: []string{""},
+	PostalCode:    []string{""},
+}
+
+// Autocerts generates certificates for specific domains at runtime.
+// It can be use through a provided Certificate Authority or through a generated one.
+type Autocerts struct {
+	caFile string
+	caCert *x509.Certificate
+	caKey  *rsa.PrivateKey
 	sync.Mutex
-	Subject   *pkix.Name
-	CAPemFile string
-	CAKeyFile string
-	CA        *CA
-	cbh       map[string]*tls.Certificate // Certificates by host
+	certCache map[string]*tls.Certificate
 }
 
-// CertificateFromClientHello
-func (c *CertificateServer) CertificateFromClientHello(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
-	return c.CertificateFor(hello.ServerName)
+// CACert returns the Certificate Authority
+func (ac *Autocerts) CACert() *x509.Certificate {
+	return ac.caCert
 }
 
-func (c *CertificateServer) CertificatePool() (*x509.CertPool, error) {
-	certPool := x509.NewCertPool()
-	if c.CA == nil {
-		ca, err := LoadOrGenerateCA(c.Subject, c.CAPemFile, c.CAKeyFile)
+// Create creates a new CA with the given subject. If subject is nil, DefaultCertificateSubejct will be used.
+// Once the certificate is create, it is saved in caFile
+func Create(caFile string, subject *pkix.Name) (*Autocerts, error) {
+
+	ac := &Autocerts{
+		caFile: caFile,
+	}
+
+	if err := ac.generateCA(subject); err != nil {
+		return nil, err
+	}
+	if err := ac.saveCA(); err != nil {
+		return nil, err
+	}
+
+	return ac, nil
+
+}
+
+// Load reads the caFile.
+// The file should be in pem format and should contain a certificate and a rsa private key
+// If the file can't be found, the error will contain fs.PathError
+func Load(caFile string) (*Autocerts, error) {
+
+	ac := &Autocerts{
+		caFile: caFile,
+	}
+
+	data, err := os.ReadFile(ac.caFile)
+	if err != nil {
+		return nil, fmt.Errorf("can't read CA file %s: %w", ac.caFile, err)
+	}
+
+	for {
+		data, err = ac.decodeCAPem(data)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("error while decoding certificate %s: %w", ac.caFile, err)
 		}
-		c.CA = ca
+		if data == nil {
+			if ac.caCert == nil {
+				return nil, fmt.Errorf("ca file %s didn't countain a certificate", ac.caFile)
+			}
+			if ac.caKey == nil {
+				return nil, fmt.Errorf("ca file %s didn't countain a private key", ac.caFile)
+			}
+		}
+		if ac.caCert != nil && ac.caKey != nil {
+			break
+		}
 	}
 
-	certPool.AddCert(c.CA.cert)
-
-	return certPool, nil
+	return ac, nil
 }
 
-func (c *CertificateServer) CertificateFor(domain string) (*tls.Certificate, error) {
-	c.Lock()
-	defer c.Unlock()
-	if c.cbh == nil {
-		c.cbh = make(map[string]*tls.Certificate)
+func (ac *Autocerts) decodeCAPem(data []byte) ([]byte, error) {
+	block, data := pem.Decode(data)
+	if block == nil {
+		return nil, fmt.Errorf("can't decode certificate")
+	}
+	if block.Type == "CERTIFICATE" {
+		cert, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			return nil, fmt.Errorf("can't parse certificate: %w", err)
+		}
+		ac.caCert = cert
+	} else if block.Type == "RSA PRIVATE KEY" {
+		key, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+		if err != nil {
+			return nil, fmt.Errorf("can't parse private key: %w", err)
+		}
+		ac.caKey = key
 	}
 
-	if cert, ok := c.cbh[domain]; ok {
-		return cert, nil
+	return data, nil
+}
+
+func (ac *Autocerts) saveCA() error {
+	// Encode certificate
+	caPEM := new(bytes.Buffer)
+	pem.Encode(caPEM, &pem.Block{
+		Type:  "CERTIFICATE",
+		Bytes: ac.caCert.Raw,
+	})
+
+	pem.Encode(caPEM, &pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(ac.caKey),
+	})
+
+	// Create certificate file
+	f, err := os.OpenFile(ac.caFile, os.O_WRONLY|os.O_EXCL|os.O_CREATE, 0700)
+	if err != nil {
+		return fmt.Errorf("can't create CA in %s: %w", ac.caFile, err)
+	}
+	defer f.Close()
+
+	// Save certificate
+	_, err = f.WriteString(caPEM.String())
+	if err != nil {
+		return fmt.Errorf("can't write CA file in %s:%q", ac.caFile, err)
 	}
 
-	cert, err := c.generateCertificateFor(domain)
+	return nil
+}
+
+func (ac *Autocerts) generateCA(subject *pkix.Name) error {
+	if subject == nil {
+		subject = DefaultCertificateSubject
+	}
+
+	template := &x509.Certificate{
+		SerialNumber:          big.NewInt(time.Now().Unix()),
+		Subject:               *subject,
+		NotBefore:             time.Now(),
+		NotAfter:              time.Now().AddDate(10, 0, 0),
+		IsCA:                  true,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
+		BasicConstraintsValid: true,
+	}
+	// Create key
+	privateKey, err := rsa.GenerateKey(rand.Reader, keyLength)
+	if err != nil {
+		return fmt.Errorf("can't generate rsa key pair: %q", err)
+	}
+
+	// Get certificate bytes
+	caBytes, err := x509.CreateCertificate(rand.Reader, template, template, &privateKey.PublicKey, privateKey)
+	if err != nil {
+		return fmt.Errorf("can't create certificate: %q", err)
+	}
+
+	cert, err := x509.ParseCertificate(caBytes)
+	if err != nil {
+		return fmt.Errorf("can't parse created certificate: %q", err)
+	}
+
+	ac.caCert = cert
+	ac.caKey = privateKey
+
+	return nil
+}
+
+// CertificateFromHello returns a valid tls certificate for the given server name inside the tls clientHelloInfo
+// It is meant to be used inside tls.TLSConfig as GetCertificate
+func (ac *Autocerts) CertificateFromHello(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+	return ac.CertificateFor(hello.ServerName)
+}
+
+// CertificateFor returns a valid tls certificate for the given domain
+func (ac *Autocerts) CertificateFor(domain string) (*tls.Certificate, error) {
+	ac.Lock()
+	defer ac.Unlock()
+
+	if ac.certCache == nil {
+		ac.certCache = make(map[string]*tls.Certificate)
+	} else {
+
+		cert, ok := ac.certCache[domain]
+		if ok {
+			return cert, nil
+		}
+	}
+
+	cert, err := ac.generateCertFor(domain)
 	if err != nil {
 		return cert, err
 	}
-	c.cbh[domain] = cert
+	ac.certCache[domain] = cert
 	return cert, nil
-
 }
 
-func (c *CertificateServer) generateCertificateFor(domain string) (*tls.Certificate, error) {
-	var subject pkix.Name
-	if c.Subject != nil {
-		subject = *c.Subject
-	} else {
-		subject = *DefaultCertificateSubject
-	}
+func (ac *Autocerts) generateCertFor(domain string) (*tls.Certificate, error) {
+	subject := ac.caCert.Subject
 
 	subject.OrganizationalUnit = []string{domain}
 	subject.CommonName = domain
 
 	xCert := &x509.Certificate{
 		SerialNumber: big.NewInt(1658),
+		Issuer:       ac.caCert.Subject,
 		Subject:      subject,
 		DNSNames:     []string{domain},
-		//IPAddresses:  []net.IP{net.IPv4(127, 0, 0, 1), net.IPv6loopback},
 		NotBefore:    time.Now(),
 		NotAfter:     time.Now().AddDate(10, 0, 0),
 		SubjectKeyId: []byte{1, 2, 3, 4, 6},
@@ -88,26 +234,18 @@ func (c *CertificateServer) generateCertificateFor(domain string) (*tls.Certific
 	}
 
 	// Create key
-	certPrivKey, err := rsa.GenerateKey(rand.Reader, 4096)
+	certPrivKey, err := rsa.GenerateKey(rand.Reader, keyLength)
 	if err != nil {
 		return nil, err
-	}
-
-	if c.CA == nil {
-		ca, err := LoadOrGenerateCA(c.Subject, c.CAPemFile, c.CAKeyFile)
-		if err != nil {
-			return nil, err
-		}
-		c.CA = ca
 	}
 
 	// SignCertificate
-	certBytes, err := x509.CreateCertificate(rand.Reader, xCert, c.CA.cert, &certPrivKey.PublicKey, c.CA.key)
+	certBytes, err := x509.CreateCertificate(rand.Reader, xCert, ac.caCert, &certPrivKey.PublicKey, ac.caKey)
 	if err != nil {
 		return nil, err
 	}
 
-	// Get new Cert PEM
+	// Encode
 	certPEM := new(bytes.Buffer)
 	pem.Encode(certPEM, &pem.Block{
 		Type:  "CERTIFICATE",
@@ -117,20 +255,18 @@ func (c *CertificateServer) generateCertificateFor(domain string) (*tls.Certific
 	// Append ca certificate
 	pem.Encode(certPEM, &pem.Block{
 		Type:  "CERTIFICATE",
-		Bytes: c.CA.cert.Raw,
+		Bytes: ac.caCert.Raw,
 	})
 
 	// Get new Cert Key
-	certPrivKeyPEM := new(bytes.Buffer)
-	pem.Encode(certPrivKeyPEM, &pem.Block{
+	certKeyPEM := new(bytes.Buffer)
+	pem.Encode(certKeyPEM, &pem.Block{
 		Type:  "RSA PRIVATE KEY",
 		Bytes: x509.MarshalPKCS1PrivateKey(certPrivKey),
 	})
 
 	// Create certificate
-	cert, err := tls.X509KeyPair(certPEM.Bytes(), certPrivKeyPEM.Bytes())
-	if err == nil {
-		log.Println("Succesfully generate certificate for", domain)
-	}
+	cert, err := tls.X509KeyPair(certPEM.Bytes(), certKeyPEM.Bytes())
 	return &cert, err
+
 }

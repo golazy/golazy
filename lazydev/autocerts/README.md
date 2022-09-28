@@ -1,16 +1,80 @@
 # autocerts
 
-Package autocerts
+Package autocerts generates tls certificate suitable for the http server with a common certificate authority
 
-## Functions
+## Examples
 
-### func [CertificateFor](/autocerts.go#L28)
+```golang
+// Configure Autocerts
+ac, err := Load("my_app_ca.pem")
 
-`func CertificateFor(domain string) (*tls.Certificate, error)`
+if err != nil {
+    // Fail if the error is diferent that file not found
+    var pathError *fs.PathError
+    if !errors.As(err, &pathError) {
+        panic(err)
+    }
 
-### func [CertificateFromClientHello](/autocerts.go#L24)
+    // Create the certificate
+    ac, err = Create("my_app_ca.pem", nil)
+    if err != nil {
+        panic(err)
+    }
+}
 
-`func CertificateFromClientHello(hello *tls.ClientHelloInfo) (*tls.Certificate, error)`
+// Configure http server
+certPool := x509.NewCertPool()
+certPool.AddCert(ac.CACert())
+
+server := http.Server{
+    TLSConfig: &tls.Config{
+        GetCertificate: ac.CertificateFromHello,
+        RootCAs:        certPool,
+    },
+    Addr: ":7654",
+}
+
+// Add a handler
+http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+    w.Write([]byte("hello"))
+})
+
+// And start the server
+go server.ListenAndServeTLS("", "")
+defer server.Shutdown(context.Background())
+
+// Now lets try to do a request
+
+// Wait for the serer to start
+time.Sleep(time.Second)
+
+client := &http.Client{
+    Transport: &http.Transport{
+        TLSClientConfig: &tls.Config{
+            RootCAs: certPool,
+        },
+    },
+}
+
+res, err := client.Get("https://localhost:7654/")
+if err != nil {
+    panic(err)
+}
+defer res.Body.Close()
+
+body, err := io.ReadAll(res.Body)
+if err != nil {
+    panic(err)
+}
+
+fmt.Println(string(body))
+```
+
+ Output:
+
+```
+hello
+```
 
 ---
 Readme created from Go doc with [goreadme](https://github.com/posener/goreadme)

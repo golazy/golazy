@@ -13,10 +13,8 @@ func shouldIgnore(file string) bool {
 	return strings.Contains(file, "FETCH_HEAD")
 }
 
-func NewDelayer(input <-chan (fsnotify.Event)) <-chan ([]fsnotify.Event) {
-
+func newDelayer(input <-chan (fsnotify.Event)) <-chan ([]fsnotify.Event) {
 	out := make(chan ([]fsnotify.Event))
-
 	go func() {
 	Loop:
 		for {

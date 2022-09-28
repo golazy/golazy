@@ -1,24 +1,22 @@
 # devserver
 
+package devserver implements and http and https servers with autoreload on files changes and automatic https certificate
+
 ## Functions
 
 ### func [NewDelayer](/delayer.go#L16)
 
 `func NewDelayer(input <-chan (fsnotify.Event)) <-chan ([]fsnotify.Event)`
 
-## Sub Packages
+## Types
 
-* [autocerts](./autocerts)
+### type [Server](/server.go#L23)
 
-* [protocolmux](./protocolmux)
+`type Server struct { ... }`
 
-* [tcpdevserver](./tcpdevserver)
+#### func (*Server) [ListenAndServe](/server.go#L35)
 
-* [tcpdevserver/app](./tcpdevserver/app)
-
-* [tcpdevserver/app/test](./tcpdevserver/app/test)
-
-* [tcpdevserver/test](./tcpdevserver/test)
+`func (s *Server) ListenAndServe() error`
 
 ---
 Readme created from Go doc with [goreadme](https://github.com/posener/goreadme)

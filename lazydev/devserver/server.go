@@ -1,17 +1,19 @@
+// package devserver implements and http and https servers with autoreload on files changes and automatic https certificate
 package devserver
 
 import (
 	"crypto/tls"
+	"crypto/x509"
 	"crypto/x509/pkix"
-	"fmt"
+	"errors"
+	"io/fs"
 	"log"
 	"net"
 	"net/http"
-	"strings"
 	"time"
 
-	"github.com/dietsche/rfsnotify"
 	"github.com/golazy/golazy/lazydev/autocerts"
+	"github.com/golazy/golazy/lazydev/filewatcher"
 	"github.com/golazy/golazy/lazydev/protocolmux"
 	"github.com/golazy/golazy/lazydev/tcpdevserver"
 )
@@ -38,41 +40,19 @@ func (s *Server) ListenAndServe() error {
 	s.s.Run(func(r *tcpdevserver.Runner) error {
 		r.Start()
 		r.AfterRestart = s.AfterRestart
-		watcher, err := rfsnotify.NewWatcher()
 
+		fw, err := filewatcher.New(s.Dir)
 		if err != nil {
-			log.Fatal(err)
+			panic(err)
 		}
-
-		for _, s := range s.Watch {
-			if strings.HasSuffix(s, "/...") {
-				err = watcher.AddRecursive(s[:len(s)-4])
-			} else {
-				err = watcher.Add(s)
-			}
-			if err != nil {
-				log.Fatal("Can't watch " + s + ": " + err.Error())
-			}
+		changes, err := fw.Watch()
+		if err != nil {
+			panic(err)
 		}
-
-		// Don't refire constantly
-		bufferedMessages := NewDelayer(watcher.Events)
-		for {
-			select {
-			case events, ok := <-bufferedMessages:
-				if !ok {
-					panic("closed")
-				}
-				r.Restart()
-				fmt.Println(events)
-			case err, ok := <-watcher.Errors:
-				if !ok {
-					panic("closed")
-				}
-				log.Println("error:", err)
-				panic(err)
-			}
+		for range changes {
+			r.Restart()
 		}
+		return nil
 	})
 
 	return nil
@@ -84,18 +64,27 @@ func (s *Server) serveHTTP(l net.Listener) {
 
 func (s *Server) serveHTTPS(l net.Listener) {
 
-	cs := &autocerts.CertificateServer{
-		Subject:   s.CertSubject,
-		CAPemFile: s.CertPEMPath,
-		CAKeyFile: s.CertKEYPath,
-	}
-	certpool, err := cs.CertificatePool()
+	ac, err := autocerts.Load(s.CertPEMPath)
 	if err != nil {
-		panic(err)
+		// Fail if the error is diferent that file not found
+		var pathError *fs.PathError
+		if !errors.As(err, &pathError) {
+			panic(err)
+		}
+
+		// Create the certificate
+		ac, err = autocerts.Create(s.CertPEMPath, nil)
+		if err != nil {
+			panic(err)
+		}
 	}
+
+	certPool := x509.NewCertPool()
+	certPool.AddCert(ac.CACert())
+
 	cfg := &tls.Config{
-		GetCertificate: cs.CertificateFromClientHello,
-		RootCAs:        certpool,
+		GetCertificate: ac.CertificateFromHello,
+		RootCAs:        certPool,
 	}
 
 	srv := &http.Server{

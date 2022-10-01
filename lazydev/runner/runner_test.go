@@ -6,6 +6,31 @@ import (
 	"testing"
 )
 
+func TestReadEvent(t *testing.T) {
+
+	r := New(exec.Command("echo", "Listening 127.0.0.1:80"), nil)
+	defer r.Close()
+
+	r.Start()
+
+	if _, ok := (<-r.Events).(EventStart); !ok {
+		t.Fatal("Expected a EventSTart")
+	}
+	eventReady, ok := (<-r.Events).(EventReady)
+	if !ok {
+		t.Fatal("Expected a EventSTart")
+	}
+
+	if string(eventReady.Data) != "Listening 127.0.0.1:80\n" {
+		t.Fatalf("%q", string(eventReady.Data))
+	}
+
+	if _, ok := (<-r.Events).(EventStopped); !ok {
+		t.Fatal("Expected a EventSTart")
+	}
+
+}
+
 func TestLifecycle(t *testing.T) {
 
 	r := New(exec.Command("echo", "hello"), nil)

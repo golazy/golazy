@@ -12,16 +12,14 @@ import (
 
 // Options holds the runner options
 type Options struct {
-	KillWaitPeriod  time.Duration // Time wait for a proces to die before callking kill
-	ReadyString     []string      // ReadyString is the string that Runner looks for in the command output to send EventReady
-	CopyOutputToStd bool          // CopyOutputToStd copies the output of the command to the stdout and stderr
+	KillWaitPeriod time.Duration // Time wait for a proces to die before callking kill
+	ReadyString    []string      // ReadyString is the string that Runner looks for in the command output to send EventReady
 }
 
 // DefaultRunnerOptions are used when no RunnerOptions are passed
 var DefaultRunnerOptions = &Options{
-	KillWaitPeriod:  time.Second,
-	ReadyString:     []string{"Listening", "Started"},
-	CopyOutputToStd: true,
+	KillWaitPeriod: time.Second,
+	ReadyString:    []string{"Listening", "Started"},
 }
 
 // EventStart is fired whenever Start is called
@@ -217,16 +215,16 @@ func (r *Runner) loop() {
 			for _, readyString := range r.options.ReadyString {
 				if bytes.Contains(data, []byte(readyString)) {
 					r.e <- EventReady{string(data)}
+					readyEventSent = true
 				}
 			}
-			readyEventSent = true
 		}
 	}
 
 	buf := []byte{}
 	processIO := func(data []byte) {
-		if r.options.CopyOutputToStd {
-			os.Stdout.Write(data)
+		if r.cmd.Stdout != nil {
+			r.cmd.Stdout.Write(data)
 		}
 		buf := append(buf, data...)
 		if len(buf) == 0 {

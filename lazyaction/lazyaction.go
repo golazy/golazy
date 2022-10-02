@@ -2,86 +2,224 @@ package lazyaction
 
 import (
 	"fmt"
-	"io"
 	"net/http"
 	"reflect"
-	"runtime"
-
-	. "github.com/golazy/golazy/lazyview/html"
-	"github.com/golazy/golazy/lazyview/layout"
-	"github.com/golazy/golazy/lazyview/layout/lazylayout"
+	"regexp"
+	"strings"
 )
 
 type Controller struct {
-	path     string
-	dest     interface{}
-	template *layout.LayoutTemplate
 }
 
-func (c *Controller) error(w http.ResponseWriter, r *http.Request, code int, err error) {
-	w.WriteHeader(code)
-
-	lazylayout.Layout.With(
-		lazylayout.PageHeader(),
-		lazylayout.PageNav(),
-		Main(H1("Error"),
-			Pre(err.Error())),
-	).WriteTo(w)
-
+type ResponseWriter struct {
+	http.ResponseWriter
 }
 
-func (c *Controller) restIndex(w http.ResponseWriter, r *http.Request) interface{} {
-	v, ok := c.dest.(interface {
-		Index(w http.ResponseWriter, r *http.Request) interface{}
-	})
-	if !ok {
-		c.error(w, r, http.StatusMethodNotAllowed, fmt.Errorf("the resource does not implement that method"))
-		return nil
+type Request struct {
+	*http.Request
+}
+
+type controller interface{}
+
+type path string
+type route string
+type verb string
+type action reflect.Method
+
+type memberFunc func(string, ResponseWriter, *Request)
+type collectionFunc func(ResponseWriter, *Request)
+
+type resourceRoutes struct {
+	path        string
+	c           controller
+	name        string
+	collection  map[path]map[verb]action
+	member      map[path]map[verb]action
+	subResource []resourceRoutes
+}
+
+func (rr *resourceRoutes) call(method action, args ...interface{}) {
+	inputs := make([]reflect.Value, len(args))
+	for i := range args {
+		inputs[i] = reflect.ValueOf(args[i])
 	}
-	return v.Index(w, r)
+	reflect.ValueOf(rr.c).MethodByName(method.Name).Call(inputs)
 }
 
-func (c *Controller) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (rr *resourceRoutes) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	p := r.URL.Path
+	if !strings.HasPrefix(p, "/"+rr.path) {
+		http.NotFound(w, r)
+		return
+	}
+	p = p[len(rr.path)+1:] // Remove trailing resource name prefix
 
-	if r.Method == http.MethodGet {
-		ret := c.restIndex(w, r)
-		switch content := ret.(type) {
-		case nil:
-			return
-		case io.WriterTo:
-			layouter, ok := c.dest.(interface {
-				Layout(*http.Request) *layout.LayoutTemplate
-			})
-			if ok {
-				l := layouter.Layout(r)
-				l.With(content).WriteTo(w)
-				return
-			} else {
-				content.WriteTo(w)
-				return
+	if strings.HasSuffix(p, "/") {
+		http.Redirect(w, r, p[0:len(p)-1], http.StatusFound)
+		return
+	}
+
+	slashes := strings.Count(p, "/")
+	if slashes < 2 {
+		if verbs, ok := rr.collection[path(p)]; ok {
+			for v, a := range verbs {
+				if r.Method == string(v) {
+					rr.call(a, w, r)
+					return
+				}
 			}
-		case error:
-			c.error(w, r, 500, content)
-			return
-		default:
-			c.error(w, r, 500, fmt.Errorf("the action returned an unknonwn value %+v", content))
 		}
 	}
 
-	http.Error(w, "The resource does not implement that method", http.StatusMethodNotAllowed)
+	if slashes == 1 || slashes == 2 {
+		var id string
+		pos := strings.Index(p[1:], "/")
+		if pos == -1 {
+			id = p[1:]
+			p = ""
+		} else {
+			id = p[1 : pos+1]
+			p = p[pos+1:]
+		}
+
+		// Let's try with an id
+
+		if verbs, ok := rr.member[path(p)]; ok {
+			for v, a := range verbs {
+				if r.Method == string(v) {
+					rr.call(a, id, w, r)
+					return
+				}
+			}
+		}
+	}
+	http.NotFound(w, r)
 }
 
-func applicationController(path string, dest interface{}) http.Handler {
-	return &Controller{
-		path: path,
-		dest: dest,
-		template: &layout.LayoutTemplate{
-			Title: runtime.FuncForPC(reflect.ValueOf(dest).Pointer()).Name(),
-		},
+func (rr *resourceRoutes) addCollection(p path, v verb, a action) {
+	if _, ok := rr.collection[p]; !ok {
+		rr.collection[p] = make(map[verb]action)
+	}
+	rr.collection[p][v] = a
+}
+
+func (rr *resourceRoutes) addMember(p path, v verb, a action) {
+	if _, ok := rr.member[p]; !ok {
+		rr.member[p] = make(map[verb]action)
+	}
+	rr.member[p][v] = a
+}
+
+func (rr *resourceRoutes) String() string {
+	routes := []string{""}
+
+	appendPath := func(p path, v verb, a action) {
+		routes = append(routes, fmt.Sprintf("%6s /%s%-20s %s#%s", v, rr.path, p, rr.name, a.Name))
 	}
 
+	for p, verbs := range rr.collection {
+		for v, a := range verbs {
+			appendPath(p, v, a)
+		}
+	}
+
+	for p, verbs := range rr.member {
+		for v, a := range verbs {
+			appendPath("/:id"+p, v, a)
+		}
+	}
+	return strings.Join(routes, "\n")
 }
 
-func Route(path string, dest interface{}) {
-	http.Handle(path, applicationController(path, dest))
+func buildResourceRoutes(controller interface{}) *resourceRoutes {
+
+	cType := reflect.TypeOf(controller)
+	fullName := cType.Elem().Name()
+	name := toSnakeCase(fullName)
+	if strings.HasSuffix(name, "_controller") {
+		name = name[0 : len(name)-len("_controller")]
+	}
+
+	rr := &resourceRoutes{
+		name:       fullName,
+		path:       name,
+		c:          controller,
+		collection: make(map[path]map[verb]action),
+		member:     make(map[path]map[verb]action),
+	}
+
+	for i := 0; i < cType.NumMethod(); i++ {
+		m := cType.Method(i)
+		inputs := m.Type.NumIn()
+		// Todo check the method arguments comparing with memberFunc and collectionFunc
+		// Show a warning and ignore in case the arguments missmatch
+		if inputs == 3 {
+			switch {
+			case m.Name == "Index":
+				rr.addCollection("", "GET", action(m))
+			case m.Name == "New":
+				rr.addCollection("/new", "GET", action(m))
+			case m.Name == "Create":
+				rr.addCollection("", "POST", action(m))
+			default:
+				p, v := getPathAndVerb(m.Name)
+				rr.addCollection(path(p), verb(v), action(m))
+			}
+			continue
+		}
+		if inputs == 4 {
+			switch {
+			case m.Name == "Show":
+				rr.addMember("", "GET", action(m))
+			case m.Name == "Update":
+				rr.addMember("", "PUT", action(m))
+				rr.addMember("", "PATCH", action(m))
+			case m.Name == "Delete":
+				rr.addMember("", "DELETE", action(m))
+			default:
+				p, v := getPathAndVerb(m.Name)
+				rr.addMember(path(p), verb(v), action(m))
+			}
+			continue
+		}
+		/*
+			mfType := reflect.TypeOf((memberFunc)(nil))
+			cfType := reflect.TypeOf((collectionFunc)(nil))
+
+					if m.Type.Implements(mfType) {
+						panic("yeah")
+						continue
+					}
+					if m.Type.Implements(cfType) {
+						panic("yeah")
+						continue
+					}
+					panic("oh no")
+		*/
+	}
+	return rr
+}
+
+var prefixes = []string{"Get", "Post", "Delete", "Patch", "Put"}
+
+func getPathAndVerb(name string) (path, verb string) {
+	path = name
+	verb = "GET"
+	for _, prefix := range prefixes {
+		if strings.HasPrefix(name, prefix) {
+			verb = strings.ToUpper(prefix)
+			path = path[len(prefix):]
+		}
+	}
+	path = "/" + toSnakeCase(path)
+	return
+}
+
+var matchFirstCap = regexp.MustCompile("(.)([A-Z][a-z]+)")
+var matchAllCap = regexp.MustCompile("([a-z0-9])([A-Z])")
+
+func toSnakeCase(str string) string {
+	snake := matchFirstCap.ReplaceAllString(str, "${1}_${2}")
+	snake = matchAllCap.ReplaceAllString(snake, "${1}_${2}")
+	return strings.ToLower(snake)
 }

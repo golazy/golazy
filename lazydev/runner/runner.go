@@ -4,9 +4,9 @@ package runner
 import (
 	"bytes"
 	"errors"
-	"os"
 	"os/exec"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -19,17 +19,27 @@ type Options struct {
 // DefaultRunnerOptions are used when no RunnerOptions are passed
 var DefaultRunnerOptions = &Options{
 	KillWaitPeriod: time.Second,
-	ReadyString:    []string{"Listening", "Started"},
+	ReadyString:    []string{"Listening", "Started", "Ready"},
 }
 
 // EventStart is fired whenever Start is called
-type EventStart struct{}
+type EventStart struct {
+	// Err display any error that happen during start
+	// If Err is nil you can expect an EventStarted event
+	Err error
+}
 
 // EventStop is fired whenever Stop is called
-type EventStop struct{}
+type EventStop struct {
+	// Err display any error that happen during stop
+	Err error
+}
 
 // EventSignal is fired whenever
-type EventSignal struct{}
+type EventSignal struct {
+	// Err display any error that happen during stop
+	Err error
+}
 
 // EventReady is fired whenever the command outputs the string Listening
 type EventReady struct {
@@ -37,13 +47,22 @@ type EventReady struct {
 }
 
 // EventRestart is fired whenever Restart is called
-type EventRestart struct{}
+type EventRestart struct {
+	// Err display any error that happen during stop
+	// If Err is nil you can expect an EventStarted event
+	Err error
+}
 
 // EventStopped is fired whenever the process exits
 type EventStopped struct {
 	Output   []string // Holds the command output up to MaxOutputSize
 	ExitCode int      // ExitCode holds the exit code
 	RunTime  time.Duration
+}
+
+// EventStarted is fired whenever the subprocess is started
+type EventStarted struct {
+	Command string
 }
 
 // Runner is an command runner that produces events on start/stop and restart
@@ -57,7 +76,7 @@ type Runner struct {
 	stopCmd    chan (chan (error))
 	closeCmd   chan (chan (error))
 	signalCmd  chan (struct {
-		Signal os.Signal
+		Signal syscall.Signal
 		errC   chan (error)
 	})
 	closed bool
@@ -109,13 +128,13 @@ func (r *Runner) Stop() error {
 
 // Signal sends a signal to the process.
 // If the process is not running it returns ErrNotRunning
-func (r *Runner) Signal(s os.Signal) error {
+func (r *Runner) Signal(s syscall.Signal) error {
 	if r.closed {
 		return ErrRunnerClosed
 	}
 	errC := make(chan (error))
 	r.signalCmd <- struct {
-		Signal os.Signal
+		Signal syscall.Signal
 		errC   chan error
 	}{s, errC}
 	return <-errC
@@ -124,6 +143,7 @@ func (r *Runner) Signal(s os.Signal) error {
 // New creates a new runner for the given command
 // if options is nil, New will use DefaultRunnerOptions
 func New(cmd *exec.Cmd, options *Options) *Runner {
+
 	e := make(chan (interface{}), 1024)
 	if options == nil {
 		options = DefaultRunnerOptions
@@ -163,11 +183,14 @@ func (r *Runner) loop() {
 	var startTime time.Time
 	var cmd *exec.Cmd
 
-	signal := func(sig os.Signal) error {
+	signal := func(sig syscall.Signal) error {
 		if cmd == nil || cmd.Process == nil {
 			return ErrNotRunning
 		}
-		return cmd.Process.Signal(sig)
+		syscall.Kill(-cmd.Process.Pid, sig)
+		err := cmd.Process.Signal(sig)
+		return err
+
 	}
 
 	start := func() error {
@@ -179,14 +202,11 @@ func (r *Runner) loop() {
 			Env:         r.cmd.Env,
 			Dir:         r.cmd.Dir,
 			Stdin:       r.cmd.Stdin,
-			Stdout:      r.cmd.Stdout,
-			Stderr:      r.cmd.Stderr,
+			Stdout:      channelWriter(io),
+			Stderr:      channelWriter(io),
 			ExtraFiles:  r.cmd.ExtraFiles,
-			SysProcAttr: r.cmd.SysProcAttr,
+			SysProcAttr: &syscall.SysProcAttr{Setpgid: true},
 		}
-
-		cmd.Stdout = channelWriter(io)
-		cmd.Stderr = channelWriter(io)
 
 		output = make([]string, 0, 1024)
 		readyEventSent = false
@@ -195,6 +215,9 @@ func (r *Runner) loop() {
 			return err
 		}
 		running = true
+		r.e <- EventStarted{
+			Command: strings.Join(append([]string{cmd.Path}, cmd.Args...), " "),
+		}
 
 		// Wait for it to stop
 		done = make(chan (int))
@@ -250,12 +273,12 @@ func (r *Runner) loop() {
 	}
 
 	stop := func() error {
-		signal(os.Interrupt)
+		signal(syscall.SIGINT)
 
 		wait := time.After(time.Duration(r.options.KillWaitPeriod))
 		var kill <-chan (time.Time) = nil
 
-		for {
+		for running {
 			select {
 			case exitCode := <-done:
 				handleExit(exitCode)
@@ -263,40 +286,48 @@ func (r *Runner) loop() {
 			case data := <-io:
 				processIO(data)
 			case <-wait:
-				signal(os.Kill)
+				signal(syscall.SIGKILL)
 				kill = time.After(time.Duration(r.options.KillWaitPeriod))
 			case <-kill:
 				return ErrCantKill
 			}
 		}
+		return nil
 	}
 
 	for {
 		select {
 		case errC := <-r.startCmd:
-			r.e <- EventStart{}
 			if running {
 				errC <- ErrRunning
+				r.e <- EventStart{Err: ErrRunning}
 				continue
 			}
-			errC <- start()
+			err := start()
+			r.e <- EventStart{Err: err}
+			errC <- err
+
 		case errC := <-r.restartCmd:
-			r.e <- EventRestart{}
 			if running {
 				err := stop()
 				if err != nil {
+					r.e <- EventRestart{Err: err}
 					errC <- err
 					continue
 				}
 			}
-			errC <- start()
+			err := start()
+			r.e <- EventRestart{Err: err}
+			errC <- err
 		case errC := <-r.stopCmd:
 			if !running {
 				errC <- ErrNotRunning
+				r.e <- EventStop{Err: ErrNotRunning}
 				continue
 			}
-			r.e <- EventStop{}
-			errC <- stop()
+			err := stop()
+			r.e <- EventStop{Err: err}
+			errC <- err
 
 		case args := <-r.signalCmd:
 			args.errC <- signal(args.Signal)

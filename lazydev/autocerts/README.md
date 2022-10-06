@@ -4,11 +4,11 @@ Package autocerts generates tls certificate suitable for the http server with a 
 
 ## Variables
 
-DefaultCertificateSubject is used if no subject is supplied
+DefaultSubject is used if no subject is supplied
 
 ```golang
-var DefaultCertificateSubject = &pkix.Name{
-    Organization:  []string{"autocerts"},
+var DefaultSubject = &pkix.Name{
+    Organization:  []string{"golazy"},
     Country:       []string{"DE"},
     Province:      []string{"Berlin"},
     Locality:      []string{"Berlin"},
@@ -19,21 +19,21 @@ var DefaultCertificateSubject = &pkix.Name{
 
 ## Types
 
-### type [Autocerts](/autocerts.go#L33)
+### type [Autocerts](/autocerts.go#L35)
 
 `type Autocerts struct { ... }`
 
 Autocerts generates certificates for specific domains at runtime.
 It can be use through a provided Certificate Authority or through a generated one.
 
-#### func [Create](/autocerts.go#L48)
+#### func [Create](/autocerts.go#L50)
 
 `func Create(caFile string, subject *pkix.Name) (*Autocerts, error)`
 
 Create creates a new CA with the given subject. If subject is nil, DefaultCertificateSubejct will be used.
 Once the certificate is create, it is saved in caFile
 
-#### func [Load](/autocerts.go#L68)
+#### func [Load](/autocerts.go#L70)
 
 `func Load(caFile string) (*Autocerts, error)`
 
@@ -41,19 +41,26 @@ Load reads the caFile.
 The file should be in pem format and should contain a certificate and a rsa private key
 If the file can't be found, the error will contain fs.PathError
 
-#### func (*Autocerts) [CACert](/autocerts.go#L42)
+#### func [LoadOrCreate](/autocerts.go#L104)
+
+`func LoadOrCreate(certPath string, subject *pkix.Name) (*Autocerts, error)`
+
+LoadOrCreate tries to Load the certificate. If it does not exists, it will create one.
+If subject is nil, it will use DefaultSubject
+
+#### func (*Autocerts) [CACert](/autocerts.go#L44)
 
 `func (ac *Autocerts) CACert() *x509.Certificate`
 
 CACert returns the Certificate Authority
 
-#### func (*Autocerts) [CertificateFor](/autocerts.go#L196)
+#### func (*Autocerts) [CertificateFor](/autocerts.go#L212)
 
 `func (ac *Autocerts) CertificateFor(domain string) (*tls.Certificate, error)`
 
 CertificateFor returns a valid tls certificate for the given domain
 
-#### func (*Autocerts) [CertificateFromHello](/autocerts.go#L191)
+#### func (*Autocerts) [CertificateFromHello](/autocerts.go#L207)
 
 `func (ac *Autocerts) CertificateFromHello(hello *tls.ClientHelloInfo) (*tls.Certificate, error)`
 
@@ -65,9 +72,8 @@ It is meant to be used inside tls.TLSConfig as GetCertificate
 ```golang
 // import "github.com/golazy/golazy/lazydev/autocerts"
 
-// Configure Autocerts
+// Manually load or create
 ac, err := Load("my_app_ca.pem")
-
 if err != nil {
     // Fail if the error is diferent that file not found
     var pathError *fs.PathError
@@ -82,6 +88,7 @@ if err != nil {
     }
     defer os.Remove("my_app_ca.pem")
 }
+// The LoadOrCreate method could be called to do the same
 
 // Configure http server
 certPool := x509.NewCertPool()

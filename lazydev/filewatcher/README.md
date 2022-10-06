@@ -8,7 +8,7 @@ It goes up to the top directory that holds a go.mod file
 IgnoredDirs is a list of directories that should not tirgger a change
 
 ```golang
-var IgnoredDirs = []string{".git"}
+var IgnoredDirs = []string{".git", "log"}
 ```
 
 IgnoredFiles is a list of files that should not trigger a change
@@ -37,21 +37,22 @@ ChangeSet is a collection of changes
 
 FileWatcher looks for changes in the top most directory that have a go.mod
 
-#### func [New](/filewatcher.go#L44)
+#### func [New](/filewatcher.go#L45)
 
-`func New(dir string) (*FileWatcher, error)`
+`func New(dir string) (fw *FileWatcher, err error)`
 
 New initializes a FileWatcher in the given directory
 It will go up to the top most directory that holds a go.mod
+If dir is an empty string it will use the current directory
 
-#### func (*FileWatcher) [Close](/filewatcher.go#L61)
+#### func (*FileWatcher) [Close](/filewatcher.go#L68)
 
 `func (fw *FileWatcher) Close() error`
 
 Close stop listening for changes in the file system
 Once close, the channel will be closed
 
-#### func (*FileWatcher) [Watch](/filewatcher.go#L66)
+#### func (*FileWatcher) [Watch](/filewatcher.go#L73)
 
 `func (fw *FileWatcher) Watch() (<-chan (ChangeSet), error)`
 

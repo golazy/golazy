@@ -41,7 +41,14 @@ type FileWatcher struct {
 
 // New initializes a FileWatcher in the given directory
 // It will go up to the top most directory that holds a go.mod
-func New(dir string) (*FileWatcher, error) {
+// If dir is an empty string it will use the current directory
+func New(dir string) (fw *FileWatcher, err error) {
+	if dir == "" {
+		dir, err = os.Getwd()
+		if err != nil {
+			return nil, err
+		}
+	}
 	if !filepath.IsAbs(dir) {
 		return nil, fmt.Errorf("filepath is not absolute")
 	}
@@ -49,7 +56,7 @@ func New(dir string) (*FileWatcher, error) {
 	if err != nil {
 		return nil, err
 	}
-	fw := &FileWatcher{
+	fw = &FileWatcher{
 		topDir: topDir,
 	}
 
@@ -86,7 +93,7 @@ func (fw *FileWatcher) Watch() (<-chan (ChangeSet), error) {
 var IgnoredFiles = []string{}
 
 // IgnoredDirs is a list of directories that should not tirgger a change
-var IgnoredDirs = []string{".git"}
+var IgnoredDirs = []string{".git", "log"}
 
 func (fw *FileWatcher) shouldIgnore(e fsnotify.Event) bool {
 	changedPath := e.Name

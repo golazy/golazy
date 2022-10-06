@@ -17,9 +17,8 @@ func Example() {
 
 	// import "github.com/golazy/golazy/lazydev/autocerts"
 
-	// Configure Autocerts
+	// Manually load or create
 	ac, err := Load("my_app_ca.pem")
-
 	if err != nil {
 		// Fail if the error is diferent that file not found
 		var pathError *fs.PathError
@@ -34,6 +33,7 @@ func Example() {
 		}
 		defer os.Remove("my_app_ca.pem")
 	}
+	// The LoadOrCreate method could be called to do the same
 
 	// Configure http server
 	certPool := x509.NewCertPool()

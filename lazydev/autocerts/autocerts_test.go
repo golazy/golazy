@@ -11,7 +11,7 @@ func TestAutocerts(t *testing.T) {
 	os.Remove("autocerts.pem")
 	defer os.Remove("autocerts.pem")
 
-	_, err := Create("autocerts.pem", DefaultCertificateSubject)
+	_, err := Create("autocerts.pem", DefaultSubject)
 	if err != nil {
 		t.Fatal(err)
 	}

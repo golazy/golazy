@@ -9,7 +9,9 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"errors"
 	"fmt"
+	"io/fs"
 	"math/big"
 	"os"
 	"sync"
@@ -18,9 +20,9 @@ import (
 
 var keyLength = 4096
 
-// DefaultCertificateSubject is used if no subject is supplied
-var DefaultCertificateSubject = &pkix.Name{
-	Organization:  []string{"autocerts"},
+// DefaultSubject is used if no subject is supplied
+var DefaultSubject = &pkix.Name{
+	Organization:  []string{"golazy"},
 	Country:       []string{"DE"},
 	Province:      []string{"Berlin"},
 	Locality:      []string{"Berlin"},
@@ -97,6 +99,20 @@ func Load(caFile string) (*Autocerts, error) {
 	return ac, nil
 }
 
+// LoadOrCreate tries to Load the certificate. If it does not exists, it will create one.
+// If subject is nil, it will use DefaultSubject
+func LoadOrCreate(certPath string, subject *pkix.Name) (*Autocerts, error) {
+	ac, err := Load(certPath)
+	if err == nil {
+		return ac, err
+	}
+	var pathError *fs.PathError
+	if !errors.As(err, &pathError) {
+		return nil, err
+	}
+	return Create(certPath, subject)
+}
+
 func (ac *Autocerts) decodeCAPem(data []byte) ([]byte, error) {
 	block, data := pem.Decode(data)
 	if block == nil {
@@ -150,7 +166,7 @@ func (ac *Autocerts) saveCA() error {
 
 func (ac *Autocerts) generateCA(subject *pkix.Name) error {
 	if subject == nil {
-		subject = DefaultCertificateSubject
+		subject = DefaultSubject
 	}
 
 	template := &x509.Certificate{

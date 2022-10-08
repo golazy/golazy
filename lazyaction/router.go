@@ -1,5 +1,5 @@
 /*
-Package router implements a http router that support url params and http verbs
+package lazyaction implements a http router that support url params and http verbs
 
 It was design to use together lazyaction/controller:
 
@@ -28,7 +28,7 @@ But it can be used alone:
 		}},
 	}
 */
-package router
+package lazyaction
 
 import (
 	"net/http"

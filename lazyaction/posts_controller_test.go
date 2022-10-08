@@ -1,4 +1,4 @@
-package router
+package lazyaction
 
 type PostsController struct {
 }

@@ -1,4 +1,4 @@
-package router
+package lazyaction
 
 import "net/http"
 

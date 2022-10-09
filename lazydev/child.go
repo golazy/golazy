@@ -61,6 +61,7 @@ func (s *child) Serve(h http.Handler) error {
 	certPool.AddCert(ac.CACert())
 
 	httpsServer := http.Server{
+		Handler: h,
 		TLSConfig: &tls.Config{
 			GetCertificate: ac.CertificateFromHello,
 			RootCAs:        certPool,

@@ -32,7 +32,9 @@ func (s *child) Serve(h http.Handler) error {
 	pm := protocolmux.Mux{L: l}
 
 	// Setup http server
-	httpServer := http.Server{}
+	httpServer := http.Server{
+		Handler: h,
+	}
 
 	go func() {
 		err := httpServer.Serve(pm.ListenTo(protocolmux.HTTPPrefix))

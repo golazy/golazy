@@ -1,14 +1,36 @@
-# layout
+# document
 
-Package layout provides helpers to generate an html document
+package document provides helpers to generate an html document
+
+## Variables
+
+```golang
+var BasicLayout = &Document{
+    Lang:     "en",
+    Title:    "lazyview",
+    Viewport: "width=device-width",
+    Styles:   []string{SimpleCSS(), PageStyle()},
+    Head: []interface{}{
+        Script(Async(), Src("https://ga.jspm.io/npm:es-module-shims@1.4.6/dist/es-module-shims.js"), Crossorigin(("anonymous"))),
+        Script(Type("module"),
+            nodes.Raw(`import hotwiredTurbo from 'https://cdn.skypack.dev/@hotwired/turbo';`),
+        ),
+    },
+    LayoutBody: LayoutBody,
+}
+```
+
+```golang
+var DefaultLayout = &Document{}
+```
 
 ## Functions
 
-### func [AddComponent](/layout.go#L29)
+### func [AddComponent](/document.go#L28)
 
 `func AddComponent(c Component)`
 
-### func [Layout](/layout.go#L25)
+### func [Layout](/document.go#L24)
 
 `func Layout(content ...interface{}) io.WriterTo`
 
@@ -18,7 +40,7 @@ defer (func() {
     nodes.Beautify = false
 })()
 
-template := &LayoutTemplate{}
+template := &Document{}
 
 template.With("hola mundo").WriteTo(os.Stdout)
 ```
@@ -27,7 +49,8 @@ template.With("hola mundo").WriteTo(os.Stdout)
 
 ```
 <html>
-<head/>
+<head>
+</head>
 <body>
 hola mundo</body>
 </html>
@@ -41,7 +64,7 @@ defer (func() {
     nodes.Beautify = false
 })()
 
-template := &LayoutTemplate{
+template := &Document{
     Lang:     "en",
     Title:    "lazyview",
     Viewport: "width=device-width",
@@ -55,7 +78,7 @@ template := &LayoutTemplate{
     Scripts: []string{
         `document.write("hello");`,
     },
-    LayoutBody: func(l *LayoutTemplate, content ...interface{}) io.WriterTo {
+    LayoutBody: func(l *Document, content ...interface{}) io.WriterTo {
         return Body(Main(content...))
     },
 }
@@ -81,25 +104,23 @@ template.With("hello").WriteTo(os.Stdout)
 </html>
 ```
 
-### func [LayoutBody](/layout.go#L96)
+### func [LayoutBody](/document.go#L95)
 
-`func LayoutBody(l *LayoutTemplate, content ...interface{}) io.WriterTo`
+`func LayoutBody(l *Document, content ...interface{}) io.WriterTo`
 
-### func [PageStyle](/layout.go#L111)
+### func [PageStyle](/document.go#L110)
 
 `func PageStyle() string`
 
-### func [SimpleCSS](/layout.go#L178)
+### func [SimpleCSS](/document.go#L177)
 
 `func SimpleCSS() string`
 
-## Sub Packages
+## Types
 
-* [lazylayout](./lazylayout)
+### type [Component](/component.go#L3)
 
-## Examples
-
-### Component
+`type Component struct { ... }`
 
 ```golang
 nodes.Beautify = true
@@ -107,7 +128,7 @@ defer (func() {
     nodes.Beautify = false
 })()
 
-template := &LayoutTemplate{}
+template := &Document{}
 template.AddComponent(Component{
     Scripts: []string{`document.Write("hello world");`},
     Styles:  []string{`body{background: red;}`},
@@ -132,6 +153,22 @@ template.With("hola mundo").WriteTo(os.Stdout)
 hola mundo</body>
 </html>
 ```
+
+### type [Document](/document.go#L11)
+
+`type Document struct { ... }`
+
+#### func (*Document) [AddComponent](/document.go#L32)
+
+`func (l *Document) AddComponent(c Component)`
+
+#### func (*Document) [With](/document.go#L36)
+
+`func (l *Document) With(content ...interface{ ... }) io.WriterTo`
+
+## Sub Packages
+
+* [lazylayout](./lazylayout)
 
 ---
 Readme created from Go doc with [goreadme](https://github.com/posener/goreadme)

@@ -1,4 +1,4 @@
-package layout
+package document
 
 import (
 	"os"
@@ -14,7 +14,7 @@ func ExampleComponent() {
 		nodes.Beautify = false
 	})()
 
-	template := &LayoutTemplate{}
+	template := &Document{}
 	template.AddComponent(Component{
 		Scripts: []string{`document.Write("hello world");`},
 		Styles:  []string{`body{background: red;}`},

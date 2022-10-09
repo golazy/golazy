@@ -1,11 +1,12 @@
 package nodes
 
 import (
+	"bytes"
 	"io"
 	"strings"
 )
 
-//Attr holds information about an attribute for an Element Node
+// Attr holds information about an attribute for an Element Node
 type Attr struct {
 	key  string
 	prop *string
@@ -22,13 +23,25 @@ func NewAttr(key string, value ...string) Attr {
 }
 
 // WriteTo writes the current string to the writer w
-func (a Attr) WriteTo(w io.Writer) (int64, error) {
+func (a Attr) WriteTo(w io.Writer) (n int64, err error) {
+
+	//Otherwise, the quotation marks are really needed only if the attribute
+	//value contains a space, a line break, an Ascii quotation mark ("), an
+	//Ascii apostrophe ('), a grave accent (`), an equals sign (=), a less than
+	//sign (<), or a greater than sign (>)
+
 	n16, err := w.Write([]byte(a.key))
 	if err != nil || a.prop == nil {
 		return int64(n16), err
 	}
-	n := int64(n16)
-	n16, err = w.Write([]byte("=\""))
+	quote := ""
+
+	if len(*a.prop) == 0 || strings.ContainsAny(*a.prop, "\"'`=<> ") {
+		quote = `"`
+	}
+	n = int64(n16)
+
+	n16, err = w.Write([]byte("=" + quote))
 	n += int64(n16)
 	if err != nil {
 		return n, err
@@ -45,7 +58,13 @@ func (a Attr) WriteTo(w io.Writer) (int64, error) {
 		return n, err
 	}
 
-	n16, err = w.Write([]byte(`"`))
+	n16, err = w.Write([]byte(quote))
 	n += int64(n16)
 	return n, err
+}
+
+func (a Attr) String() string {
+	w := &bytes.Buffer{}
+	a.WriteTo(w)
+	return w.String()
 }

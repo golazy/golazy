@@ -24,7 +24,7 @@ func TestServe(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(body) != `<html lang="es"><body><h1>hola</h1></body></html>` {
-		t.Error("Got", string(body))
+	if string(body) != `<!DOCTYPE html>\n<html lang=es>\n  <body>\n    <h1>hola</h1>\n\n` {
+		t.Errorf("Got %q", string(body))
 	}
 }

@@ -1,11 +1,11 @@
-package layout
+package document
 
 import (
 	. "github.com/golazy/golazy/lazyview/html"
 	"github.com/golazy/golazy/lazyview/nodes"
 )
 
-var BasicLayout = &LayoutTemplate{
+var BasicLayout = &Document{
 	Lang:     "en",
 	Title:    "lazyview",
 	Viewport: "width=device-width",

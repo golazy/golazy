@@ -1,5 +1,5 @@
-// Package layout provides helpers to generate an html document
-package layout
+// package document provides helpers to generate an html document
+package document
 
 import (
 	"io"
@@ -8,7 +8,7 @@ import (
 	"github.com/golazy/golazy/lazyview/nodes"
 )
 
-type LayoutTemplate struct {
+type Document struct {
 	Styles     []string
 	Scripts    []string
 	Head       []interface{}
@@ -16,10 +16,10 @@ type LayoutTemplate struct {
 	Lang       string
 	Title      string
 	Viewport   string
-	LayoutBody func(l *LayoutTemplate, content ...interface{}) io.WriterTo
+	LayoutBody func(l *Document, content ...interface{}) io.WriterTo
 }
 
-var DefaultLayout = &LayoutTemplate{}
+var DefaultLayout = &Document{}
 
 func Layout(content ...interface{}) io.WriterTo {
 	return DefaultLayout.With(content)
@@ -29,11 +29,11 @@ func AddComponent(c Component) {
 	DefaultLayout.AddComponent(c)
 }
 
-func (l *LayoutTemplate) AddComponent(c Component) {
+func (l *Document) AddComponent(c Component) {
 	l.Components = append(l.Components, c)
 }
 
-func (l *LayoutTemplate) With(content ...interface{}) io.WriterTo {
+func (l *Document) With(content ...interface{}) io.WriterTo {
 	styles := []nodes.Element{}
 	for _, s := range l.Styles {
 		styles = append(styles, Style(nodes.Raw(s)))
@@ -92,7 +92,7 @@ func (l *LayoutTemplate) With(content ...interface{}) io.WriterTo {
 	)
 }
 
-func LayoutBody(l *LayoutTemplate, content ...interface{}) io.WriterTo {
+func LayoutBody(l *Document, content ...interface{}) io.WriterTo {
 	return Body(
 		Header(
 			Nav(

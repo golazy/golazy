@@ -1,4 +1,4 @@
-package layout
+package document
 
 import (
 	"io"
@@ -14,13 +14,14 @@ func ExampleLayout() {
 		nodes.Beautify = false
 	})()
 
-	template := &LayoutTemplate{}
+	template := &Document{}
 
 	template.With("hola mundo").WriteTo(os.Stdout)
 
 	// Output:
 	// <html>
-	// <head/>
+	// <head>
+	// </head>
 	// <body>
 	// hola mundo</body>
 	// </html>
@@ -31,7 +32,7 @@ func ExampleLayout_complete() {
 		nodes.Beautify = false
 	})()
 
-	template := &LayoutTemplate{
+	template := &Document{
 		Lang:     "en",
 		Title:    "lazyview",
 		Viewport: "width=device-width",
@@ -45,7 +46,7 @@ func ExampleLayout_complete() {
 		Scripts: []string{
 			`document.write("hello");`,
 		},
-		LayoutBody: func(l *LayoutTemplate, content ...interface{}) io.WriterTo {
+		LayoutBody: func(l *Document, content ...interface{}) io.WriterTo {
 			return Body(Main(content...))
 		},
 	}

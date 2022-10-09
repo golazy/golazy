@@ -3,9 +3,12 @@ package nodes
 import (
 	"fmt"
 	"io"
+	"strings"
+
+	"github.com/golazy/golazy/lazysupport"
 )
 
-var Beautify = false
+var Beautify = true
 
 type Element struct {
 	tag        string
@@ -46,13 +49,21 @@ func (r *Element) add(something interface{}) {
 
 type writeSession struct {
 	io.Writer
-	n   int64
-	err error
+	n     int64
+	err   error
+	level int
+}
+
+func (w *writeSession) NewLine() {
+	if Beautify {
+		w.WriteS("\n")
+	}
 }
 
 func (w *writeSession) WriteS(s string) (n int, err error) {
 	return w.Write([]byte(s))
 }
+
 func (w *writeSession) Write(data []byte) (n int, err error) {
 	if w.err != nil {
 		return
@@ -63,78 +74,207 @@ func (w *writeSession) Write(data []byte) (n int, err error) {
 	return
 }
 
-// WriteTo writes the current string to the writer w
-func (r Element) WriteTo(w io.Writer) (n64 int64, err error) {
+// voidElements don't require a closing tag neither need to be self close
+var voidElements = lazysupport.NewSet(
+	"area",
+	"base",
+	"br",
+	"col",
+	"embed",
+	"hr",
+	"img",
+	"input",
+	"keygen",
+	"link",
+	"meta",
+	"param",
+	"source",
+	"track",
+	"wbr",
+)
 
-	session := &writeSession{Writer: w}
+// html elements that don't require a closing tag
+var skipCloseTag = lazysupport.NewSet(
+	"html",
+	"head",
+	"body",
+	"p",
+	"li",
+	"dt",
+	"dd",
+	"option",
+	"thead",
+	"th",
+	"tbody",
+	"tr",
+	"td",
+	"tfoot",
+	"colgroup",
+)
 
-	isEmptyElement := false
-	if len(r.children) == 0 ||
-		r.tag == "area" ||
-		r.tag == "base" ||
-		r.tag == "br" ||
-		r.tag == "col" ||
-		r.tag == "embed" ||
-		r.tag == "hr" ||
-		r.tag == "img" ||
-		r.tag == "input" ||
-		r.tag == "keygen" ||
-		r.tag == "link" ||
-		r.tag == "meta" ||
-		r.tag == "param" ||
-		r.tag == "source" ||
-		r.tag == "track" ||
-		r.tag == "wbr" {
-		isEmptyElement = true
+// https://developer.mozilla.org/en-US/docs/Web/HTML/Inline_elements
+var inlineElements = lazysupport.NewSet(
+	"a",
+	"abbr",
+	"acronym",
+	"audio",
+	"b",
+	"bdi",
+	"bdo",
+	"big",
+	"br",
+	"button",
+	"canvas",
+	"cite",
+	"code",
+	"data",
+	"datalist",
+	"del",
+	"dfn",
+	"em",
+	"embed",
+	"i",
+	"iframe",
+	"img",
+	"input",
+	"ins",
+	"kbd",
+	"label",
+	"map",
+	"mark",
+	"meter",
+	"noscript",
+	"object",
+	"output",
+	"picture",
+	"progress",
+	"q",
+	"ruby",
+	"s",
+	"samp",
+	"script",
+	"select",
+	"slot",
+	"small",
+	"span",
+	"strong",
+	"sub",
+	"sup",
+	"svg",
+	"template",
+	"textarea",
+	"time",
+	"u",
+	"tt",
+	"var",
+	"video",
+	"wbr",
+	// Plus some that are not styled like the ones in head
+	"title",
+	"meta",
+	// Plus some that are rendered as block by usually formated as onelines
+	"h1",
+	"h2",
+	"h3",
+	"h4",
+	"h5",
+	"h6",
+	"h7",
+)
+
+func (r Element) isInline() bool {
+	for _, e := range r.children {
+		switch child := e.(type) {
+		case Element:
+			if !child.isInline() {
+				return false
+			}
+		case Text:
+		default:
+			return false
+		}
+	}
+	return inlineElements.Has(r.tag)
+}
+
+// Rule to render a the content of a tag inline
+// The tag is title, p, b, strong, i, em,li or there are no Elements inside
+
+func (r Element) writeOpenTag(session *writeSession) {
+	if Beautify {
+		for i := 0; i < session.level; i++ {
+			session.WriteS("  ")
+		}
+	}
+	if r.tag == "html" {
+		session.WriteS("<!DOCTYPE html>")
+		session.NewLine()
 	}
 
 	// Open tag
 	session.WriteS("<" + r.tag)
 
 	// Process atributes
-	nAttr := len(r.attributes)
-	if nAttr != 0 {
+	for _, attr := range r.attributes {
 		session.WriteS(" ")
-
-		// Write the list of tags
-		for i, attr := range r.attributes {
-			// Write a space before
-			if i != 0 {
-				// Put space before except for the first
-				session.WriteS(" ")
-			}
-			attr.WriteTo(session)
-		}
-
+		attr.WriteTo(session)
 	}
-	// Is an empty element
-	// TODO
-	if isEmptyElement {
-		session.WriteS("/>")
-		if Beautify {
-			session.WriteS("\n")
-		}
+	session.WriteS(">")
+}
+
+// WriteTo writes the current string to the writer w
+func (r Element) WriteTo(w io.Writer) (n64 int64, err error) {
+
+	var session *writeSession
+
+	if s, ok := w.(*writeSession); ok {
+		session = s
+	} else {
+		session = &writeSession{Writer: w, level: 0}
+	}
+
+	r.writeOpenTag(session)
+
+	if voidElements.Has(r.tag) {
 		return session.n, session.err
 	}
 
-	session.WriteS(">")
-	if Beautify && (r.tag == "html" ||
-		r.tag == "body" ||
-		r.tag == "head") {
-		session.WriteS("\n")
-
-	}
-
 	// Content
+	isInline := r.isInline()
+	if !isInline {
+		session.level = session.level + 1
+	}
 	for _, c := range r.children {
+		if r.tag == "html" {
+			session.NewLine()
+			c.WriteTo(session)
+			continue
+		}
+		if !isInline {
+			session.NewLine()
+		}
 		c.WriteTo(session)
 	}
-	// Close
-	session.WriteS("</" + r.tag + ">")
-	if Beautify {
-		session.WriteS("\n")
+	if !isInline {
+		session.NewLine()
+		session.level = session.level - 1
 	}
-	return
+
+	// Some elements
+	if skipCloseTag.Has(r.tag) {
+		//session.WriteS("\n")
+		return session.n, session.err
+	}
+
+	// Close tag
+	session.WriteS("</" + r.tag + ">")
+	return session.n, session.err
+}
+
+func (r Element) String() string {
+	buf := &strings.Builder{}
+	r.WriteTo(buf)
+	return buf.String()
 }
 
 // NewElement creates a new element with the provided tagname and the provided options

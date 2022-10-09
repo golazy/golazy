@@ -4,14 +4,14 @@ import (
 	_ "embed"
 	"io"
 
+	"github.com/golazy/golazy/lazyview/document"
 	. "github.com/golazy/golazy/lazyview/html"
-	"github.com/golazy/golazy/lazyview/layout"
 )
 
 //go:embed style.css
 var style string
 
-var Layout = &layout.LayoutTemplate{
+var Layout = &document.Document{
 	Lang:     "en",
 	Title:    "golazy",
 	Viewport: "width=device-width",

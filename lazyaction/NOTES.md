@@ -17,3 +17,4 @@ Things to add:
 * Use our own ResponseWriter and Request
 * Autogenerate a JS/TS client with types.
 * DOCS
+* Add Middlewares

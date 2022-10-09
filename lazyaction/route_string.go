@@ -64,6 +64,8 @@ func (r Routes) eachRoute(prefix string, fn func(method, path, target string)) {
 			route.Routes.eachRoute(prefix+"/"+route.Prefix, fn)
 		case CatchAllPrefix:
 			route.Routes.eachRoute(prefix+"/:"+route.ParamName, fn)
+		case Routes:
+			route.eachRoute(prefix, fn)
 		}
 	}
 }

@@ -28,6 +28,11 @@ func ExampleResource() {
 
 func TestController(t *testing.T) {
 
+	say := func(what string) Handler {
+		return HandlerFunc(func(w ResponseWriter, r *Request) {
+			w.Write([]byte(fmt.Sprint(what, r.Params)))
+		})
+	}
 	c := Router{Resource(new(PostsController))}
 
 	testRoute := func(method, path, expectation string) {

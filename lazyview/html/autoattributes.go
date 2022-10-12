@@ -1,6 +1,6 @@
 package html
 
-import "github.com/golazy/golazy/lazyview/nodes"
+import "golazy.dev/lazyview/nodes"
 
 // Accept sets accept attribute
 func Accept(value ...string) nodes.Attr {

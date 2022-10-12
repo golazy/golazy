@@ -1,4 +1,4 @@
-module github.com/golazy/golazy
+module golazy.dev
 
 go 1.19
 

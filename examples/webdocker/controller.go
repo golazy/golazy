@@ -8,9 +8,9 @@ import (
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
-	. "github.com/golazy/golazy/lazyview/html"
-	"github.com/golazy/golazy/lazyview/layout"
-	"github.com/golazy/golazy/lazyview/nodes"
+	. "golazy.dev/lazyview/html"
+	"golazy.dev/lazyview/layout"
+	"golazy.dev/lazyview/nodes"
 )
 
 var (

@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/golazy/golazy/lazysupport"
+	"golazy.dev/lazysupport"
 )
 
 type Controller struct {

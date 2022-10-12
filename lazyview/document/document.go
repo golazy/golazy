@@ -4,8 +4,8 @@ package document
 import (
 	"io"
 
-	. "github.com/golazy/golazy/lazyview/html"
-	"github.com/golazy/golazy/lazyview/nodes"
+	. "golazy.dev/lazyview/html"
+	"golazy.dev/lazyview/nodes"
 )
 
 type Document struct {

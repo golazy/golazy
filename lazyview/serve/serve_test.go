@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	. "github.com/golazy/golazy/lazyview/html"
+	. "golazy.dev/lazyview/html"
 )
 
 func TestServe(t *testing.T) {

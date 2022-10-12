@@ -10,7 +10,7 @@ f = File.open("autoattributes.go", "w")
 
 f << "package html\n\n"
 
-f << "import \"github.com/golazy/golazy/lazyview/nodes\"\n\n"
+f << "import \"golazy.dev/lazyview/nodes\"\n\n"
 
 attributes.each do  |attr|
   fn = camelize(attr.gsub("-","_"))

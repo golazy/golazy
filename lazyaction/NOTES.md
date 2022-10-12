@@ -17,3 +17,5 @@ Things to add:
 * Autogenerate a JS/TS client with types.
 * DOCS
 * Add Middlewares
+* Assets
+* Wildcard path elemnts /docs/*docspath (that can include slashes)

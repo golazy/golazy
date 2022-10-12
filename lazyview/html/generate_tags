@@ -6,7 +6,7 @@ f = File.open("autotags.go", "w")
 
 f << "package html\n\n"
 
-f << "import \"github.com/golazy/golazy/lazyview/nodes\"\n\n"
+f << "import \"golazy.dev/lazyview/nodes\"\n\n"
 
 tags.each do  |tag|
   fn = tag.capitalize

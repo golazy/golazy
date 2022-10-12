@@ -1,9 +1,9 @@
 package main
 
 import (
-	"github.com/golazy/golazy/lazyaction"
-	"github.com/golazy/golazy/lazydev"
-	"github.com/golazy/golazy/lazyview/nodes"
+	"golazy.dev/lazyaction"
+	"golazy.dev/lazydev"
+	"golazy.dev/lazyview/nodes"
 )
 
 func main() {

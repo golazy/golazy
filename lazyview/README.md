@@ -2,13 +2,13 @@
 
 ## Sub Packages
 
+* [document](./document): package document provides helpers to generate an html document
+
+* [document/lazylayout](./document/lazylayout)
+
 * [examples](./examples)
 
 * [html](./html): Package html have all the html elements and attributes
-
-* [layout](./layout): Package layout provides helpers to generate an html document
-
-* [layout/lazylayout](./layout/lazylayout)
 
 * [nodes](./nodes): Package nodes provides data structures to represents Html ElementNodes, TextNodes and Attributes.
 

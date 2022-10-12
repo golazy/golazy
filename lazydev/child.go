@@ -11,8 +11,8 @@ import (
 	"os/signal"
 
 	"github.com/adrg/xdg"
-	"github.com/golazy/golazy/lazydev/autocerts"
-	"github.com/golazy/golazy/lazydev/protocolmux"
+	"golazy.dev/lazydev/autocerts"
+	"golazy.dev/lazydev/protocolmux"
 )
 
 type child struct {

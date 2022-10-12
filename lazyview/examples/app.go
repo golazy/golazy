@@ -1,13 +1,14 @@
 package main
 
 import (
-	. "github.com/golazy/golazy/lazyview/html"
-	"github.com/golazy/golazy/lazyview/serve"
+	. "golazy.dev/lazyview/document"
+	. "golazy.dev/lazyview/html"
+	"golazy.dev/lazyview/serve"
 )
 
 func main() {
 
-	DefineComponent(
+	AddComponent(
 		Use("https://unpkg.com/@hotwired/stimulus@3.0.1/dist/stimulus.js"),
 		Script(`
 		// hello_controller.js

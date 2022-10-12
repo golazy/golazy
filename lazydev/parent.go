@@ -12,8 +12,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/golazy/golazy/lazydev/filewatcher"
-	"github.com/golazy/golazy/lazydev/runner"
+	"golazy.dev/lazydev/filewatcher"
+	"golazy.dev/lazydev/runner"
 )
 
 type parent struct {

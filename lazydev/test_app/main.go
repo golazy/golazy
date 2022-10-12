@@ -3,7 +3,7 @@ package main
 import (
 	"net/http"
 
-	"github.com/golazy/golazy/lazydev/lazydev"
+	"golazy.dev/lazydev"
 )
 
 func main() {

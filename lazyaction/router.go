@@ -13,7 +13,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/golazy/golazy/lazysupport"
+	"golazy.dev/lazysupport"
 )
 
 var methods = []string{"GET", "POST", "OPTIONS", "PUT", "PATCH", "DELETE", "WS"}

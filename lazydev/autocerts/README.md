@@ -70,7 +70,7 @@ It is meant to be used inside tls.TLSConfig as GetCertificate
 ## Examples
 
 ```golang
-// import "github.com/golazy/golazy/lazydev/autocerts"
+// import "golazy.dev/lazydev/autocerts"
 
 // Manually load or create
 ac, err := Load("my_app_ca.pem")

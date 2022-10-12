@@ -204,6 +204,10 @@ ham_and_eggs
 fancy_categories
 ```
 
+### func [ToSentence](/sentence.go#L5)
+
+`func ToSentence(last_join string, parts ...string) string`
+
 ### func [ToSnakeCase](/naming.go#L11)
 
 `func ToSnakeCase(str string) string`
@@ -236,6 +240,18 @@ multiple_http_calls
 
 ## Types
 
+### type [Set](/set.go#L5)
+
+`type Set[T comparable] map[T]Void`
+
+#### func [NewSet](/set.go#L7)
+
+`func NewSet[T comparable](values ...T) Set[T]`
+
+#### func (Set[T]) [Has](/set.go#L15)
+
+`func (s Set[T]) Has(item T) bool`
+
 ### type [Table](/table.go#L9)
 
 `type Table struct { ... }`
@@ -267,6 +283,14 @@ Other Filem          123123
 #### func (*Table) [String](/table.go#L40)
 
 `func (t *Table) String() string`
+
+### type [Void](/set.go#L3)
+
+`type Void struct{ ... }`
+
+## Sub Packages
+
+* [log](./log)
 
 ---
 Readme created from Go doc with [goreadme](https://github.com/posener/goreadme)

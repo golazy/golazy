@@ -8,8 +8,8 @@ import (
 	"net/http/httputil"
 	"os"
 
-	"github.com/golazy/golazy/lazyview/nodes"
 	"github.com/gorilla/handlers"
+	"golazy.dev/lazyview/nodes"
 )
 
 func Page(e nodes.Element) http.HandlerFunc {

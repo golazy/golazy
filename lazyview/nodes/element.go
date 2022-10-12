@@ -5,7 +5,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/golazy/golazy/lazysupport"
+	"golazy.dev/lazysupport"
 )
 
 var Beautify = true

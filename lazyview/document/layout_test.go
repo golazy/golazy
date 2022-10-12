@@ -4,8 +4,8 @@ import (
 	"io"
 	"os"
 
-	. "github.com/golazy/golazy/lazyview/html"
-	"github.com/golazy/golazy/lazyview/nodes"
+	. "golazy.dev/lazyview/html"
+	"golazy.dev/lazyview/nodes"
 )
 
 func ExampleLayout() {

@@ -7,7 +7,6 @@ Things to add:
 * Mime encoding
 * Response timing
 * Proper logging
-* Before filters
 * Nested routes
 * Context support
 * Allow to receive random structs that are parsed from the input form encoded or json

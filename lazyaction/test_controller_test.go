@@ -1,5 +1,32 @@
 package lazyaction
 
+import "net/http"
+
+type MultiArgsController struct{}
+
+type User struct {
+	Name string
+}
+
+func (mac *MultiArgsController) Show(string, ResponseWriter, *http.Request) interface{} {
+
+	return "hello"
+}
+
+type UsersController struct {
+}
+
+func (uc *UsersController) Show(w ResponseWriter, r *Request) {
+	w.Write([]byte("Showing user " + r.GetParam("user_id")))
+}
+
+type DevicesController struct {
+}
+
+func (dc *DevicesController) Show(w ResponseWriter, r *Request) {
+	w.Write([]byte("Showing device " + r.GetParam("device_id")))
+}
+
 type PostsController struct {
 }
 

@@ -1,119 +1,95 @@
 package lazyaction
 
 import (
-	"encoding/json"
 	"fmt"
+	"math/rand"
+	"net/http"
 	"net/http/httptest"
+	"os"
+	"regexp"
 	"strings"
 	"testing"
+	"time"
 )
 
-func TestRedirect(t *testing.T) {
+var routes [][]string
 
-	router := Router(Routes{
-		Prefix{"posts", Routes{
-			RedirectPath{To: "../posts"},
-		}},
-	})
-
-	testRoute := func(path, expectation string) {
-		t.Helper()
-		r := httptest.NewRequest("", path, nil)
-		w := httptest.NewRecorder()
-		router.ServeHTTP(w, r)
-		if strings.TrimSpace(w.Body.String()) != expectation {
-			t.Errorf("Expecting %q to send %q. Got %q", path, expectation, w.Body.String())
-		}
+func init() {
+	data, err := os.ReadFile("routes.txt")
+	if err != nil {
+		panic(err)
 	}
 
-	testRoute("/posts/", "<a href=\"/posts\">Permanent Redirect</a>.")
+	whitespaces := regexp.MustCompile(`\s+`)
 
+	routes = make([][]string, 0, 1500)
+	for _, line := range strings.Split(string(data), "\n") {
+		cleanLine := whitespaces.ReplaceAllString(line, " ")
+		parts := strings.Split(cleanLine, " ")
+		if len(parts) != 2 {
+			panic(fmt.Sprintf("%q", line))
+		}
+		if methodIndex(parts[0]) < 0 {
+			panic(parts[0] + parts[1])
+		}
+		routes = append(routes, []string{parts[0], parts[1]})
+	}
+}
+
+type testRouteAction string
+
+func (tra testRouteAction) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.Write([]byte(tra))
+}
+func (tra testRouteAction) String() string {
+	return string(tra)
+}
+
+func say(what string) RouteAction {
+	return testRouteAction(what)
+}
+
+func exampleRouter() *Router {
+	r := NewRouter()
+
+	for _, route := range routes {
+		r.Add(route[0], route[1], say(route[0]+" "+route[1]))
+	}
+
+	return r
 }
 
 func TestRouter(t *testing.T) {
 
-	say := func(what string) Handler {
-		return HandlerFunc(func(w ResponseWriter, r *Request) {
-			w.Write([]byte(fmt.Sprint(what, r.Params)))
-		})
-	}
+	router := exampleRouter()
 
-	router := &Router{
-		Path{"pizza", "", "", say("pizza")},
-		CatchAllPrefix{"page_id", Routes{
-			Path{"", "", "", say("show_page")},
-			Path{"publish", "", "", say("publish_page")},
-		}},
-		Path{"posts", "", "", say("posts_index")},
-		Prefix{"posts", Routes{
-			CatchAllPath{"post_id", "", "", say("post_show")},
-			Path{"", "", "", say("post index")},
-			Path{"new", "", "", say("post new")},
-			CatchAllPrefix{"post_id", Routes{
-				Path{"publish", "", "", say("publish")},
-			}},
-			Path{"publish", "", "", say("publish")},
-		}},
-	}
-
-	testRoute := func(path, expectation string) {
-		t.Helper()
-		r := httptest.NewRequest("", path, nil)
+	for _, route := range routes {
 		w := httptest.NewRecorder()
+		r := httptest.NewRequest(route[0], route[1], nil)
+
 		router.ServeHTTP(w, r)
-		if strings.TrimSpace(w.Body.String()) != expectation {
-			t.Errorf("Expecting %q to send %q. Got %q", path, expectation, w.Body.String())
+		expectation := route[0] + " " + route[1]
+		got := strings.TrimSpace(w.Body.String())
+		if got != expectation {
+			t.Errorf("Expecting %q got %q", expectation, got)
 		}
 	}
-
-	testRoute("/posts/33/publish.json?hola=mundo", "publishmap[format:[json] post_id:[33]]")
-	testRoute("/", "Not Found")
-	testRoute("/posts", "posts_indexmap[]")
-	testRoute("/posts/33", "post_showmap[post_id:[33]]")
-	testRoute("/posts/33.json", "post_showmap[format:[json] post_id:[33]]")
-	testRoute("/posts/new", "post newmap[]")
-	testRoute("/what", "Not Found")
 }
 
-func ExampleRoutes() {
+func BenchmarkRouter(b *testing.B) {
 
-	say := func(what string) HandlerFunc {
-		return func(w ResponseWriter, r *Request) {
-			params, _ := json.Marshal(r.Params)
-			w.Write([]byte(fmt.Sprintf("%s Params: %s", what, params)))
-		}
-	}
+	router := exampleRouter()
 
-	router := &Router{
-		Path{"", "GET", "", say("Home page")},
-		Path{"pages", "", "", say("Pages index")}, // HTTP Medoth defaults to GET
-		Prefix{"pages", Routes{ // Handles `pages/`
-			RedirectPath{
-				Path: "",
-				To:   "../pages",
-			},
-			CatchAllPath{"page_id", "", "", say("Nice Page")}, // Matches `/pages/:page_id` assiging `page_id` to httpRequest.Form.Values.Get("page_id")
-			CatchAllPrefix{"page_id", Routes{
-				Path{"share", "POST", "", say("Page shared!")}, // Matches `POST /pages/:page_id/share`
-				Prefix{"paragraphs", Routes{
-					CatchAllPath{"paragraph_id", "", "", say("Paragraph")},
-				}},
-			}},
-		}},
-	}
+	b.ResetTimer()
+	rand.Seed(time.Now().Unix())
+	order := rand.Perm(len(routes))
 
-	// For testing
-	query := func(path string) string {
+	// run the Fib function b.N times
+	for n := 0; n < b.N; n++ {
 		w := httptest.NewRecorder()
-		r := httptest.NewRequest("GET", path, nil)
+		route := routes[order[n%len(order)]]
+		r := httptest.NewRequest(route[0], route[1], nil)
+
 		router.ServeHTTP(w, r)
-		return w.Body.String()
-
 	}
-
-	fmt.Println(query("/pages/33"))
-	fmt.Println(query("/pages/33/paragraph/42.json"))
-	// Output:
-	// Nice Page Params: {"page_id":["33"]}
-	// Paragraph Params: {"format":["json"],"page_id":["33"],"paragraph_id":["42"]}
 }

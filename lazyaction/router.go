@@ -1,20 +1,32 @@
-/*
-package lazyaction implements a http router that support url params and http verbs
-
-It was design to use together lazyaction/controller:
-
-But it can be used alone:
-*/
 package lazyaction
 
 import (
 	"fmt"
 	"net/http"
-	"sort"
 	"strings"
-
-	"golazy.dev/lazysupport"
 )
+
+type RouteDefinition struct {
+	Verb           string
+	Path           string
+	Name           string
+	Destination    string
+	Handler        http.Handler
+	ResourceName   string // comment or comments or post_comments
+	ResourceMember bool   // true if it adds a member path
+	ResourceAction string // "new" or "edit" or custom
+	ParamsPosition []int
+	Member         bool
+}
+
+func (rd *RouteDefinition) String() string {
+	return fmt.Sprintf("%s %s %s %s", rd.Name, rd.Verb, rd.Path, rd.Destination)
+}
+
+type Router struct {
+	Routes       []*RouteDefinition
+	treeByMethod map[int]*routeTree[http.Handler]
+}
 
 var methods = []string{"GET", "POST", "OPTIONS", "PUT", "PATCH", "DELETE", "WS"}
 
@@ -28,80 +40,45 @@ func methodIndex(method string) int {
 
 }
 
-type RouteAction interface {
-	http.Handler
-	fmt.Stringer
-}
-
-type Router struct {
-	byMethod map[int]*routingTable[RouteAction]
-}
-
 func NewRouter() *Router {
-
 	r := &Router{
-		byMethod: make(map[int]*routingTable[RouteAction], len(methods)),
+		Routes:       []*RouteDefinition{},
+		treeByMethod: make(map[int]*routeTree[http.Handler], len(methods)),
 	}
 	for i := range methods {
-		r.byMethod[i] = &routingTable[RouteAction]{}
+		r.treeByMethod[i] = &routeTree[http.Handler]{}
 	}
 	return r
 }
 
-func (r *Router) Add(method, path string, handler RouteAction) {
-	i := methodIndex(method)
-	if i < 0 {
-		panic("Method can only be " + lazysupport.ToSentence("or ", methods...) + ".Got " + method)
+func (r *Router) Add(verb, path, name, destination string, h http.Handler) {
+	route := &RouteDefinition{
+		Verb:        verb,
+		Path:        path,
+		Name:        name,
+		Destination: destination,
+		Handler:     h,
 	}
+	r.Routes = append(r.Routes, route)
 
-	rt := r.byMethod[i]
-	rt.Add(path, &handler)
+	for _, verb := range strings.Split(route.Verb, "|") {
+		i := methodIndex(verb)
+		if i < 0 {
+			panic("Invalid verb: " + verb)
+		}
+		rt := r.treeByMethod[i]
+		rt.Add(path, &route.Handler)
+	}
 }
 
-type byPath [][]string
-
-func (a byPath) Len() int      { return len(a) }
-func (a byPath) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
-func (a byPath) Less(i, j int) bool {
-
-	k := strings.Compare(
-		strings.ReplaceAll(a[i][1], ":", "|"),
-		strings.ReplaceAll(a[j][1], ":", "|")) // For wildchards to be last
-	if k != 0 {
-		return k < 0
-	}
-	var iPos, jPos int
-	for l, m := range methods {
-		if m == a[i][0] {
-			iPos = l
-		}
-		if m == a[j][0] {
-			jPos = l
-		}
-	}
-	return iPos < jPos
-
+func (router *Router) AddResourceDefinition(r *ResourceDefinition) {
+	router.AddResource(NewResource(r))
 }
 
-func (r *Router) Table() *lazysupport.Table {
-	t := lazysupport.Table{
-		Header: []string{"METHOD", "PATH", "DESTINATION"},
-		Values: [][]string{},
+func (router *Router) AddResource(resource *Resource) {
+	for _, action := range resource.Actions {
+		router.Add(action.Verb, action.Path, action.RouteName, action.Destination, action)
 	}
-
-	for i, table := range r.byMethod {
-		for _, route := range table.Routes() {
-			t.Values = append(t.Values, []string{methods[i], route.path, (*route.t).String()})
-		}
-	}
-
-	sort.Sort(byPath(t.Values))
-
-	return &t
-}
-
-func (r *Router) String() string {
-	return r.Table().String()
 }
 
 func (router *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -122,7 +99,7 @@ func (router *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rt := router.byMethod[i]
+	rt := router.treeByMethod[i]
 	h := rt.Find(r.URL.Path)
 	if h != nil {
 		(*h).ServeHTTP(w, r)
@@ -130,18 +107,13 @@ func (router *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.NotFound(w, r)
-
 }
 
-func (r *Router) Resource(c interface{}) {
-	controller := newController(c)
-	for _, route := range controller.Routes() {
-		for _, method := range strings.Split(route.Verb, "|") {
-			path := "/" + route.Controller.name
-			if route.Path != "" {
-				path = path + "/" + route.Path
-			}
-			r.Add(method, path, route)
-		}
-	}
+// LinkTo(user1, "posts", "new") => "/users/1/posts/new"
+// LinkTo(post1, comment1, "edit") => "/posts/1/comments/1/edit"
+// LinkTo("posts", "new") => "/posts/new"
+// LinkTo("posts", "publish") => "/posts/publish"
+func (r *Router) LinkTo(name string, params ...any) string {
+
+	return ""
 }

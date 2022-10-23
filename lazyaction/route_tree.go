@@ -67,18 +67,18 @@ func (n node[T]) Routes() []routeInfo[T] {
 
 }
 
-// routingTable holds information for routing urls with wildcard
-type routingTable[T any] struct {
+// routeTree holds information for routing urls with wildcard
+type routeTree[T any] struct {
 	node[T]
 }
 
-func NewRouteTable[T any]() *routingTable[T] {
-	return &routingTable[T]{node: node[T]{}}
+func NewRouteTable[T any]() *routeTree[T] {
+	return &routeTree[T]{node: node[T]{}}
 }
 
 // Add a new route to the table
 // Paths not starting with / or ending with slash results in panic
-func (rt *routingTable[T]) Add(path string, dest *T) {
+func (rt *routeTree[T]) Add(path string, dest *T) {
 	if len(path) == 0 || path[0] != '/' {
 		panic("Path should start with /")
 	}
@@ -95,10 +95,10 @@ func (rt *routingTable[T]) Add(path string, dest *T) {
 	node.leaf = dest
 }
 
-func (rt *routingTable[T]) Routes() []routeInfo[T] {
+func (rt *routeTree[T]) Routes() []routeInfo[T] {
 	return rt.node.Routes()
 }
-func (n *routingTable[T]) Find(path string) *T {
+func (n *routeTree[T]) Find(path string) *T {
 	if len(path) < 1 || path[0] != '/' {
 		panic("path should start with /")
 	}

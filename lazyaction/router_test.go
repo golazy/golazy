@@ -2,15 +2,28 @@ package lazyaction
 
 import (
 	"fmt"
-	"math/rand"
-	"net/http"
 	"net/http/httptest"
 	"os"
 	"regexp"
 	"strings"
 	"testing"
-	"time"
 )
+
+func TestRouter(t *testing.T) {
+
+	router := NewRouter()
+	router.AddResourceDefinition(&ResourceDefinition{Controller: new(PostsController)})
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/posts", nil)
+
+	router.ServeHTTP(w, r)
+
+	if w.Body.String() != "Index" {
+		t.Error(w.Body.String())
+	}
+
+}
 
 var routes [][]string
 
@@ -33,63 +46,5 @@ func init() {
 			panic(parts[0] + parts[1])
 		}
 		routes = append(routes, []string{parts[0], parts[1]})
-	}
-}
-
-type testRouteAction string
-
-func (tra testRouteAction) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte(tra))
-}
-func (tra testRouteAction) String() string {
-	return string(tra)
-}
-
-func say(what string) RouteAction {
-	return testRouteAction(what)
-}
-
-func exampleRouter() *Router {
-	r := NewRouter()
-
-	for _, route := range routes {
-		r.Add(route[0], route[1], say(route[0]+" "+route[1]))
-	}
-
-	return r
-}
-
-func TestRouter(t *testing.T) {
-
-	router := exampleRouter()
-
-	for _, route := range routes {
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest(route[0], route[1], nil)
-
-		router.ServeHTTP(w, r)
-		expectation := route[0] + " " + route[1]
-		got := strings.TrimSpace(w.Body.String())
-		if got != expectation {
-			t.Errorf("Expecting %q got %q", expectation, got)
-		}
-	}
-}
-
-func BenchmarkRouter(b *testing.B) {
-
-	router := exampleRouter()
-
-	b.ResetTimer()
-	rand.Seed(time.Now().Unix())
-	order := rand.Perm(len(routes))
-
-	// run the Fib function b.N times
-	for n := 0; n < b.N; n++ {
-		w := httptest.NewRecorder()
-		route := routes[order[n%len(order)]]
-		r := httptest.NewRequest(route[0], route[1], nil)
-
-		router.ServeHTTP(w, r)
 	}
 }

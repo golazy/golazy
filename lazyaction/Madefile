@@ -1,0 +1,4 @@
+
+bench: # Run benchmarks
+  go test -bench=. -cpuprofile=router_prof.out -benchmem
+

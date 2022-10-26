@@ -43,7 +43,7 @@ func (r *Element) add(something interface{}) {
 	case nil:
 
 	default:
-		panic(fmt.Errorf("don't recognize that: %#v", v))
+		panic(fmt.Errorf("when processing elements of a view, found an unexpected type: %T inside %v", v, r.tag))
 	}
 }
 

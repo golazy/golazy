@@ -12,7 +12,7 @@ type Comment struct {
 }
 
 type CommentsController struct {
-	RestController[Comment]
+	RestController[Comment, MemStore[Comment]]
 }
 
 type PostsController struct {

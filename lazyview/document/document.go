@@ -96,9 +96,9 @@ func LayoutBody(l *Document, content ...interface{}) io.WriterTo {
 	return Body(
 		Header(
 			Nav(
-				A(Href("/", "Home")),
-				A(Href("/", "Home")),
-				A(Href("/", "Home")),
+				A(Href("/"), "Home"),
+				A(Href("/"), "Home"),
+				A(Href("/"), "Home"),
 			),
 			H1(l.Title),
 		),

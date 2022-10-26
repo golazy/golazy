@@ -15,10 +15,7 @@ import (
 	"golazy.dev/lazydev/protocolmux"
 )
 
-type child struct {
-}
-
-func (s *child) Serve(h http.Handler) error {
+func (s *server) serveChild(h http.Handler) error {
 
 	listenerFile := os.NewFile(3, "listener")
 	if listenerFile == nil {

@@ -2,6 +2,8 @@ package lazyaction
 
 import (
 	"fmt"
+	"io"
+	"log"
 	"net/http"
 	"reflect"
 	"strings"
@@ -89,7 +91,9 @@ func (a *Action) String() string {
 	return fmt.Sprintf("%s %s %s %s", a.RouteName, a.Verb, a.Path, a.Destination)
 }
 
-func (a *Action) prepareArgs(w http.ResponseWriter, r *http.Request) []reflect.Value {
+func (a *Action) prepareArgs(ctx *Context) []reflect.Value {
+	w := ctx.w
+	r := ctx.r
 	ins := make([]reflect.Value, len(a.Args))
 
 	seenStrings := 0
@@ -97,7 +101,6 @@ func (a *Action) prepareArgs(w http.ResponseWriter, r *http.Request) []reflect.V
 	for i, t := range a.Args {
 		switch t {
 		case "string":
-
 			arg := UrlExtractor(r.URL.Path).Extract(seenStrings, a.ParamsPosition)
 			ins[i] = reflect.ValueOf(arg)
 			seenStrings++
@@ -113,6 +116,10 @@ func (a *Action) prepareArgs(w http.ResponseWriter, r *http.Request) []reflect.V
 			ins[i] = reflect.ValueOf(r)
 		case "http.Request":
 			panic("Should use *http.Request")
+		case "*lazyaction.Session":
+			ins[i] = reflect.ValueOf(&ctx.Session)
+		case "*lazyaction.Context":
+			ins[i] = reflect.ValueOf(ctx)
 		default:
 			panic(fmt.Sprintf("Can't fill the argument of type %s for %s", t, a.RouteName))
 		}
@@ -121,17 +128,39 @@ func (a *Action) prepareArgs(w http.ResponseWriter, r *http.Request) []reflect.V
 	return ins
 }
 
+func (a *Action) NewContext(w http.ResponseWriter, r *http.Request) (*Context, error) {
+	c := &Context{
+		Context: r.Context(),
+		w:       w,
+		r:       r,
+	}
+	err := c.loadFromRequest(r)
+	return c, err
+}
+
 func (a *Action) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	outs := a.method.Call(a.prepareArgs(w, r))
-	if len(a.Rets) == 0 {
+	log.Println("Processing Request", r.URL.Path, a.Destination)
+
+	ctx, err := a.NewContext(w, r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	status := 200
+	outs := a.method.Call(a.prepareArgs(ctx))
+
+	for k := range ctx.headers {
+		w.Header().Set(k, ctx.headers.Get(k))
+	}
+
 	content := []byte{}
+	var wt io.WriterTo
 	for i, t := range outs {
 		switch a.Rets[i] {
 		case "error":
+			if t.IsNil() {
+				continue
+			}
 			err := t.Interface().(error)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -140,14 +169,32 @@ func (a *Action) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case "[]uint8":
 			content = t.Bytes()
 		case "int":
-			status = int(t.Int())
+			ctx.status = int(t.Int())
+		case "io.WriterTo":
+			if t.IsNil() {
+				continue
+			}
+			wt = t.Interface().(io.WriterTo)
 		default:
 			panic(fmt.Sprintf("Can't fill the argument of type %s for %s#%s", a.Rets[i], a.RouteName, t))
 		}
 	}
 
-	w.WriteHeader(status)
-	w.Write(content)
+	if ctx.Session.modified {
+		err := ctx.s.Save(r, w)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	if ctx.status != 0 {
+		w.WriteHeader(ctx.status)
+	}
+	if wt != nil {
+		wt.WriteTo(w)
+	} else if len(content) > 0 {
+		w.Write(content)
+	}
 }
 
 type UrlExtractor string

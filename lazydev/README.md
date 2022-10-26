@@ -1,8 +1,22 @@
 # lazydev
 
+## Variables
+
+```golang
+var DefaultServer = &server{
+    BootMode:  ParentMode,
+    HTTPAddr:  ":3000",
+    HTTPSAddr: ":3000",
+}
+```
+
 ## Functions
 
-### func [Serve](/lazydev.go#L16)
+### func [IsProduction](/server.go#L33)
+
+`func IsProduction() bool`
+
+### func [Serve](/lazydev.go#L17)
 
 `func Serve(handler http.Handler) error`
 

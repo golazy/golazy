@@ -16,17 +16,11 @@ import (
 	"golazy.dev/lazydev/runner"
 )
 
-type parent struct {
-	listenAddr string
-}
-
-var defaultListenAddr = ":3000"
-
-func (s *parent) Serve(h http.Handler) error {
+func (s *server) startParent(h http.Handler) error {
 	// listen Addr
 	addr := os.Getenv("PORT")
 	if addr == "" {
-		addr = defaultListenAddr
+		addr = s.HTTPSAddr
 	} else {
 		if !strings.Contains(addr, ":") {
 			addr = ":" + addr
@@ -41,7 +35,7 @@ func (s *parent) Serve(h http.Handler) error {
 	if err != nil {
 		return err
 	}
-	// Working directory
+	// Child runner
 	cmd, err := childCmd(l)
 	if err != nil {
 		return err
@@ -59,6 +53,7 @@ func (s *parent) Serve(h http.Handler) error {
 		}
 	}()
 
+	// File monitoring
 	fw, err := filewatcher.New("")
 	if err != nil {
 		return err
@@ -71,9 +66,11 @@ func (s *parent) Serve(h http.Handler) error {
 		fw.Close()
 	}()
 
+	// Signal handling
 	intSignal := make(chan os.Signal, 1)
 	signal.Notify(intSignal, os.Interrupt)
 
+	// Event handling
 	for {
 		select {
 		case event := <-r.Events:

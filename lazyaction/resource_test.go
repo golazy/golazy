@@ -1,9 +1,18 @@
-package lazyaction
+package lazyaction_test
 
 import (
 	"testing"
 	"time"
+
+	"golazy.dev/lazyaction"
 )
+
+type InternalController struct {
+}
+
+func (i *InternalController) Index(w lazyaction.ResponseWriter, r *lazyaction.Request) {
+	w.Write([]byte("Index"))
+}
 
 type Comment struct {
 	Comment   string
@@ -18,43 +27,43 @@ type CommentsController struct {
 type PostsController struct {
 }
 
-func (p *PostsController) Index(w ResponseWriter, r *Request) {
+func (p *PostsController) Index(w lazyaction.ResponseWriter, r *lazyaction.Request) {
 	w.Write([]byte("Index"))
 }
 
-func (p *PostsController) New(w ResponseWriter, r *Request) {
+func (p *PostsController) New(w lazyaction.ResponseWriter, r *lazyaction.Request) {
 	w.Write([]byte("New"))
 }
-func (p *PostsController) Edit(w ResponseWriter, r *Request) {
+func (p *PostsController) Edit(w lazyaction.ResponseWriter, r *lazyaction.Request) {
 	w.Write([]byte("New"))
 }
-func (p *PostsController) Create(w ResponseWriter, r *Request) {
+func (p *PostsController) Create(w lazyaction.ResponseWriter, r *lazyaction.Request) {
 	w.Write([]byte("Create"))
 }
 
-func (p *PostsController) MemberPutActivateLater(w ResponseWriter, r *Request) {
+func (p *PostsController) MemberPutActivateLater(w lazyaction.ResponseWriter, r *lazyaction.Request) {
 	w.Write([]byte("ActivateLater " + r.GetParam("post_id")))
 }
 
-func (p *PostsController) Show(w ResponseWriter, r *Request) {
+func (p *PostsController) Show(w lazyaction.ResponseWriter, r *lazyaction.Request) {
 	w.Write([]byte("Show " + r.GetParam("post_id")))
 }
 
-func (p *PostsController) Update(w ResponseWriter, r *Request) {
+func (p *PostsController) Update(w lazyaction.ResponseWriter, r *lazyaction.Request) {
 	w.Write([]byte("Update " + r.GetParam("post_id")))
 }
 
-func (p *PostsController) Destroy(w ResponseWriter, r *Request) {
+func (p *PostsController) Destroy(w lazyaction.ResponseWriter, r *lazyaction.Request) {
 	w.Write([]byte("Destroy " + r.GetParam("post_id")))
 }
 
-func (p *PostsController) PostCreateSuper(w ResponseWriter, r *Request) {
+func (p *PostsController) PostCreateSuper(w lazyaction.ResponseWriter, r *lazyaction.Request) {
 	w.Write([]byte("CreateSuper"))
 }
 
-func testResourceExpectations(t *testing.T, r *ResourceDefinition, expectations []string) {
+func testResourceExpectations(t *testing.T, r *lazyaction.ResourceDefinition, expectations []string) {
 	t.Helper()
-	routes := NewResource(r).Actions
+	routes := lazyaction.NewResource(r).Actions
 	if len(expectations) != len(routes) {
 		t.Errorf("Expected %d routes, got %d", len(expectations), len(routes))
 	}
@@ -81,7 +90,7 @@ func TestResourceRoutes_Basic(t *testing.T) {
 
 	testResourceExpectations(
 		t,
-		&ResourceDefinition{Controller: new(PostsController)},
+		&lazyaction.ResourceDefinition{Controller: new(PostsController)},
 		[]string{
 			"posts POST /posts PostsController#Create",
 			"post DELETE /posts/:post_id PostsController#Destroy",
@@ -100,7 +109,7 @@ func TestResourceRoutes_PathNames(t *testing.T) {
 
 	testResourceExpectations(
 		t,
-		&ResourceDefinition{Controller: new(PostsController), PathNames: struct{ New, Edit string }{"nuevo", "editar"}},
+		&lazyaction.ResourceDefinition{Controller: new(PostsController), PathNames: struct{ New, Edit string }{"nuevo", "editar"}},
 		[]string{
 			"posts POST /posts PostsController#Create",
 			"post DELETE /posts/:post_id PostsController#Destroy",
@@ -119,7 +128,7 @@ func TestResourceRoutes_Path(t *testing.T) {
 
 	testResourceExpectations(
 		t,
-		&ResourceDefinition{Controller: new(PostsController), Path: "/articles"},
+		&lazyaction.ResourceDefinition{Controller: new(PostsController), Path: "/articles"},
 		[]string{
 			"posts POST /articles PostsController#Create",
 			"post DELETE /articles/:post_id PostsController#Destroy",
@@ -138,7 +147,7 @@ func TestResourceRoutes_Path_TopLevel(t *testing.T) {
 
 	testResourceExpectations(
 		t,
-		&ResourceDefinition{Controller: new(PostsController), Path: "/"},
+		&lazyaction.ResourceDefinition{Controller: new(PostsController), Path: "/"},
 		[]string{
 			"posts POST / PostsController#Create",
 			"post DELETE /:post_id PostsController#Destroy",
@@ -157,7 +166,7 @@ func TestResourceRoutes_Path_NameAndSingular(t *testing.T) {
 
 	testResourceExpectations(
 		t,
-		&ResourceDefinition{Controller: new(PostsController), Path: "/", Plural: "people", Singular: "person"},
+		&lazyaction.ResourceDefinition{Controller: new(PostsController), Path: "/", Plural: "people", Singular: "person"},
 		[]string{
 			"people POST / PostsController#Create",
 			"person DELETE /:person_id PostsController#Destroy",
@@ -175,7 +184,7 @@ func TestResourceRoutes_Path_NameAndSingular(t *testing.T) {
 func TestResourceRoutes_ParamName(t *testing.T) {
 	testResourceExpectations(
 		t,
-		&ResourceDefinition{Controller: new(PostsController), ParamName: "article_id"},
+		&lazyaction.ResourceDefinition{Controller: new(PostsController), ParamName: "article_id"},
 		[]string{
 			"posts POST /posts PostsController#Create",
 			"post DELETE /posts/:article_id PostsController#Destroy",
@@ -193,7 +202,7 @@ func TestResourceRoutes_ParamName(t *testing.T) {
 func TestResource_RestController(t *testing.T) {
 	testResourceExpectations(
 		t,
-		&ResourceDefinition{Controller: new(CommentsController)},
+		&lazyaction.ResourceDefinition{Controller: new(CommentsController)},
 		[]string{
 			"comments POST /comments CommentsController#Create",
 			"comment DELETE /comments/:comment_id CommentsController#Destroy",
@@ -207,12 +216,25 @@ func TestResource_RestController(t *testing.T) {
 
 }
 
+func TestResourceRoutes_PackageController(t *testing.T) {
+	testResourceExpectations(
+		t,
+		&lazyaction.ResourceDefinition{
+			Controller: new(InternalController),
+		},
+		[]string{
+			"internal GET /internal InternalController#Index",
+		},
+	)
+
+}
+
 func TestResourceRoutes_SubResource(t *testing.T) {
 	testResourceExpectations(
 		t,
-		&ResourceDefinition{
+		&lazyaction.ResourceDefinition{
 			Controller: new(PostsController),
-			SubResources: []*ResourceDefinition{
+			SubResources: []*lazyaction.ResourceDefinition{
 				{
 					Controller: new(CommentsController),
 				},

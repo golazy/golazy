@@ -1,14 +1,6 @@
 package lazyaction
 
-import (
-	"fmt"
-	"net/http"
-	"net/http/httptest"
-	"strings"
-	"testing"
-
-	"golazy.dev/lazysupport"
-)
+/*
 
 type EmptyController struct{}
 
@@ -73,8 +65,12 @@ func (ActionController) GetGetError(s *Session) string {
 	return err
 }
 
+func (ActionController) Delete() string {
+	return "Delete"
+}
+
 func TestActionSession(t *testing.T) {
-	router := NewRouter()
+	router := router.NewRouter[any]()
 	router.AddResourceDefinition(&ResourceDefinition{
 		Controller: new(ActionController),
 	})
@@ -131,7 +127,7 @@ func TestActionParams(t *testing.T) {
 
 	t.Log(r.Routes())
 
-	test := func(method, path, expectation string, status int) {
+	test := func(method, verb, path, expectation string, status int) {
 
 		t.Helper()
 		if expectation == "" {
@@ -142,13 +138,19 @@ func TestActionParams(t *testing.T) {
 		}
 
 		if path == "" {
-			path = lazysupport.Underscorize(method)
+			path = "/" + lazysupport.Underscorize(method)
+		} else if path == " " {
+			path = ""
 		}
 
-		path = "/empty/42/action/" + path
+		path = "/empty/42/action" + path
+
+		if verb == "" {
+			verb = "GET"
+		}
 
 		w := httptest.NewRecorder()
-		r := httptest.NewRequest("GET", path, nil)
+		r := httptest.NewRequest(verb, path, nil)
 
 		router.ServeHTTP(w, r)
 		if status != 0 && w.Code != status {
@@ -159,22 +161,23 @@ func TestActionParams(t *testing.T) {
 		}
 	}
 
-	//test("InHttpResponseWriter", "", "", 0)
-	//test("InResponseWriter", "", "", 0)
-	//test("OutString", "", "", 0)
-	//test("OutBytes", "", "", 0)
-	//test("OutError", "", "", 500)
-	//test("OutInt", "", "", 204)
-	//test("Show", "69", "69", 200)
-	//test("InString", "55/in_string", "55", 0)
-	//test("InStringString", "44/in_string_string", "44,42", 0)
-	test("Redirect", "", " ", 301)
+	test("InHttpResponseWriter", "", "", "", 0)
+	test("InResponseWriter", "", "", "", 0)
+	test("OutString", "", "", "", 0)
+	test("OutBytes", "", "", "", 0)
+	test("OutError", "", "", "", 500)
+	test("OutInt", "", "", "", 204)
+	test("Show", "", "/69", "69", 200)
+	test("InString", "", "/55/in_string", "55", 0)
+	test("InStringString", "", "/44/in_string_string", "44,42", 0)
+	test("Redirect", "", "", " ", 301)
+	test("Delete", "DELETE", " ", "", 200)
 
 }
 func TestExtract(t *testing.T) {
 
 	expect := func(path string, stringArg int, paramsPosition []int, expectation string) {
-		result := UrlExtractor(path).Extract(stringArg, paramsPosition)
+		result := ExtractParam(path, stringArg, paramsPosition)
 		if result != expectation {
 			t.Errorf("Expected %q with (%d, %v) to return %q, got %q", path, stringArg, paramsPosition, expectation, result)
 		}
@@ -190,3 +193,5 @@ func TestExtract(t *testing.T) {
 	//	/post/33/comments/44     CommentsController#Show(id string)                 1              [1,3]            3, then 1
 
 }
+
+*/

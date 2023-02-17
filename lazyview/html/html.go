@@ -12,3 +12,7 @@ import (
 func DataAttr(attr string, value ...string) nodes.Attr {
 	return nodes.NewAttr("data-"+attr, value...)
 }
+
+func Attribute(attr string, value ...string) nodes.Attr {
+	return nodes.NewAttr(attr, value...)
+}

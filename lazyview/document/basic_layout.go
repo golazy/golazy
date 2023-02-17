@@ -11,7 +11,7 @@ var BasicLayout = &Document{
 	Viewport: "width=device-width",
 	Styles:   []string{SimpleCSS(), PageStyle()},
 	Head: []interface{}{
-		Script(Async(), Src("https://ga.jspm.io/npm:es-module-shims@1.4.6/dist/es-module-shims.js"), Crossorigin(("anonymous"))),
+		Script(Async(), nodes.NewAttr("nomodule"), Src("https://ga.jspm.io/npm:es-module-shims@1.4.6/dist/es-module-shims.js"), Crossorigin(("anonymous"))),
 		Script(Type("module"),
 			nodes.Raw(`import hotwiredTurbo from 'https://cdn.skypack.dev/@hotwired/turbo';`),
 		),

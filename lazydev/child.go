@@ -15,7 +15,7 @@ import (
 	"golazy.dev/lazydev/protocolmux"
 )
 
-func (s *server) serveChild(h http.Handler) error {
+func (s *Server) serveChild() error {
 
 	listenerFile := os.NewFile(3, "listener")
 	if listenerFile == nil {
@@ -30,7 +30,7 @@ func (s *server) serveChild(h http.Handler) error {
 
 	// Setup http server
 	httpServer := http.Server{
-		Handler: h,
+		Handler: s.Handler,
 	}
 
 	go func() {
@@ -58,7 +58,7 @@ func (s *server) serveChild(h http.Handler) error {
 	certPool.AddCert(ac.CACert())
 
 	httpsServer := http.Server{
-		Handler: h,
+		Handler: s.Handler,
 		TLSConfig: &tls.Config{
 			GetCertificate: ac.CertificateFromHello,
 			RootCAs:        certPool,

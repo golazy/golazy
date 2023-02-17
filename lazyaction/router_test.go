@@ -1,50 +1,36 @@
-package lazyaction
+package lazyaction_test
 
 import (
-	"fmt"
 	"net/http/httptest"
-	"os"
-	"regexp"
-	"strings"
 	"testing"
+
+	"golazy.dev/lazyaction"
 )
 
-func TestRouter(t *testing.T) {
+func TestApp(t *testing.T) {
 
-	router := NewRouter()
-	router.AddResourceDefinition(&ResourceDefinition{Controller: new(PostsController)})
-
-	w := httptest.NewRecorder()
-	r := httptest.NewRequest("GET", "/posts", nil)
-
-	router.ServeHTTP(w, r)
-
-	if w.Body.String() != "Index" {
-		t.Error(w.Body.String())
+	a := lazyaction.Router{
+		Name: "TestApp",
 	}
+
+	f1 := func(id string) (html string, err error) {
+		return id, nil
+	}
+
+	a.Route("/", f1)
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest("GET", "/hola", nil)
+	a.ServeHTTP(response, request)
+
+	t.Error(response.Body.String())
 
 }
 
-var routes [][]string
-
-func init() {
-	data, err := os.ReadFile("routes.txt")
-	if err != nil {
-		panic(err)
-	}
-
-	whitespaces := regexp.MustCompile(`\s+`)
-
-	routes = make([][]string, 0, 1500)
-	for _, line := range strings.Split(string(data), "\n") {
-		cleanLine := whitespaces.ReplaceAllString(line, " ")
-		parts := strings.Split(cleanLine, " ")
-		if len(parts) != 2 {
-			panic(fmt.Sprintf("%q", line))
-		}
-		if methodIndex(parts[0]) < 0 {
-			panic(parts[0] + parts[1])
-		}
-		routes = append(routes, []string{parts[0], parts[1]})
+func TestExtractParam2(t *testing.T) {
+	route := "/posts/:id"
+	path := "/posts/1"
+	params := lazyaction.ExtractParam2(route, path)
+	if params["id"] != "1" {
+		t.Error(params)
 	}
 }

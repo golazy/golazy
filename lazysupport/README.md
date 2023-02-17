@@ -252,6 +252,26 @@ multiple_http_calls
 
 `func (s Set[T]) Has(item T) bool`
 
+### type [Strings](/strings.go#L5)
+
+`type Strings Set[string]`
+
+#### func [NewStrings](/strings.go#L30)
+
+`func NewStrings(s ...string) Strings`
+
+#### func (Strings) [Has](/strings.go#L25)
+
+`func (s Strings) Has(what string) bool`
+
+#### func (Strings) [HasPrefix](/strings.go#L16)
+
+`func (s Strings) HasPrefix(what string) bool`
+
+#### func (Strings) [TrimPrefix](/strings.go#L7)
+
+`func (s Strings) TrimPrefix(what string) (prefix, trimmed string)`
+
 ### type [Table](/table.go#L9)
 
 `type Table struct { ... }`

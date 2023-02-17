@@ -27,6 +27,6 @@ func (s Strings) Has(what string) bool {
 	return ok
 }
 
-func NewStrings(s ...string) Strings {
+func NewStringSet(s ...string) Strings {
 	return Strings(NewSet(s...))
 }

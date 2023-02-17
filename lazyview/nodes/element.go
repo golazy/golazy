@@ -40,6 +40,10 @@ func (r *Element) add(something interface{}) {
 		}
 	case io.WriterTo:
 		r.children = append(r.children, v)
+	case int64, int32, int16, int8, int:
+		r.children = append(r.children, Text(fmt.Sprintf("%d", v)))
+	case uint64, uint32, uint16, uint8, uint:
+		r.children = append(r.children, Text(fmt.Sprintf("%d", v)))
 	case nil:
 
 	default:

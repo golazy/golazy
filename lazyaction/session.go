@@ -29,6 +29,14 @@ func (s *Session) Get(key string) any {
 	return v
 }
 
+func (s *Session) Delete(key string) {
+	if s.s.Values == nil {
+		return
+	}
+	delete(s.s.Values, key)
+	s.modified = true
+}
+
 func (s *Session) GetString(key string) string {
 	v, ok := s.s.Values[key]
 	if !ok || v == nil {
@@ -69,6 +77,7 @@ func (s *Session) SetFlash(key string, val string) {
 
 func (s *Session) GetFlash(key string) string {
 	flashes := s.s.Flashes(key)
+	s.modified = true
 	strs := []string{}
 	for _, v := range flashes {
 		if str, ok := v.(string); ok {

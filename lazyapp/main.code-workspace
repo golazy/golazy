@@ -1,0 +1,17 @@
+{
+	"folders": [
+		{
+			"path": ".."
+		},
+		{
+			"path": "../lazyaction"
+		},
+		{
+			"path": "."
+		},
+		{
+			"path": "../lazydev"
+		}
+	],
+	"settings": {}
+}

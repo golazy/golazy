@@ -277,6 +277,31 @@ func H1(options ...interface{}) nodes.Element {
 	return nodes.NewElement("h1", options...)
 }
 
+// H2 Creates a new h2 element
+func H2(options ...interface{}) nodes.Element {
+	return nodes.NewElement("h2", options...)
+}
+
+// H3 Creates a new h3 element
+func H3(options ...interface{}) nodes.Element {
+	return nodes.NewElement("h3", options...)
+}
+
+// H4 Creates a new h4 element
+func H4(options ...interface{}) nodes.Element {
+	return nodes.NewElement("h4", options...)
+}
+
+// H5 Creates a new h5 element
+func H5(options ...interface{}) nodes.Element {
+	return nodes.NewElement("h5", options...)
+}
+
+// H6 Creates a new h6 element
+func H6(options ...interface{}) nodes.Element {
+	return nodes.NewElement("h6", options...)
+}
+
 // Head Creates a new head element
 func Head(options ...interface{}) nodes.Element {
 	return nodes.NewElement("head", options...)

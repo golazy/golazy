@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/dietsche/rfsnotify"
@@ -92,6 +93,10 @@ func (fw *FileWatcher) Watch() (<-chan (ChangeSet), error) {
 // IgnoredFiles is a list of files that should not trigger a change
 var IgnoredFiles = []string{}
 
+// IgnoredExtensions is a list of extensions that should not trigger a change
+var IgnoredExtensions = []string{".db", ".sql"}
+var IgnoredSuffixes = []string{"-journal"}
+
 // IgnoredDirs is a list of directories that should not tirgger a change
 var IgnoredDirs = []string{".git", "log"}
 
@@ -99,6 +104,18 @@ func (fw *FileWatcher) shouldIgnore(e fsnotify.Event) bool {
 	changedPath := e.Name
 	for _, file := range IgnoredFiles {
 		if path.Base(changedPath) == file {
+			return true
+		}
+	}
+
+	for _, ext := range IgnoredExtensions {
+		if path.Ext(changedPath) == ext {
+			return true
+		}
+	}
+
+	for _, suffix := range IgnoredSuffixes {
+		if strings.HasSuffix(changedPath, suffix) {
 			return true
 		}
 	}

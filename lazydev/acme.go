@@ -12,7 +12,7 @@ type productionServer struct {
 	DirCache autocert.DirCache
 }
 
-func (s *server) serveProduction(h http.Handler) error {
+func (s *Server) serveProduction() error {
 
 	s.DirCache = autocert.DirCache("golazy")
 	s.Manager = autocert.Manager{
@@ -20,18 +20,20 @@ func (s *server) serveProduction(h http.Handler) error {
 		Cache:  s.DirCache,
 	}
 
-	server := &http.Server{
+	s.server = &http.Server{
 		Addr:    s.HTTPSAddr,
-		Handler: h,
+		Handler: s.Handler,
 		TLSConfig: &tls.Config{
 			GetCertificate: s.Manager.GetCertificate,
 		},
 	}
 
+	// Start http server to handle acme challenge
+	// This will not handle our app
 	go http.ListenAndServe(s.HTTPAddr, s.Manager.HTTPHandler(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, "https://"+r.Host+r.URL.String(), http.StatusMovedPermanently)
 		}),
 	))
-	return server.ListenAndServeTLS("", "")
+	return s.server.ListenAndServeTLS("", "")
 }

@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "lazyaction"
+		},
+		{
+			"path": "lazydev"
+		},
+		{
+			"path": "cmd/lazy"
+		}
+	],
+	"settings": {}
+}

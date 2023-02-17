@@ -92,8 +92,8 @@ func (a *Action) String() string {
 }
 
 func (a *Action) prepareArgs(ctx *Context) []reflect.Value {
-	w := ctx.w
-	r := ctx.r
+	w := ctx.ResponseWritter
+	r := ctx.Request
 	ins := make([]reflect.Value, len(a.Args))
 
 	seenStrings := 0
@@ -101,7 +101,7 @@ func (a *Action) prepareArgs(ctx *Context) []reflect.Value {
 	for i, t := range a.Args {
 		switch t {
 		case "string":
-			arg := UrlExtractor(r.URL.Path).Extract(seenStrings, a.ParamsPosition)
+			arg := ExtractParam(r.URL.Path, seenStrings, a.ParamsPosition)
 			ins[i] = reflect.ValueOf(arg)
 			seenStrings++
 		case "lazyaction.ResponseWriter":
@@ -130,9 +130,9 @@ func (a *Action) prepareArgs(ctx *Context) []reflect.Value {
 
 func (a *Action) NewContext(w http.ResponseWriter, r *http.Request) (*Context, error) {
 	c := &Context{
-		Context: r.Context(),
-		w:       w,
-		r:       r,
+		Context:         r.Context(),
+		ResponseWritter: w,
+		Request:         r,
 	}
 	err := c.loadFromRequest(r)
 	return c, err
@@ -197,11 +197,9 @@ func (a *Action) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-type UrlExtractor string
+func ExtractParam(url string, stringArg int, paramsPosition []int) string {
 
-func (u UrlExtractor) Extract(stringArg int, paramsPosition []int) string {
-
-	components := strings.Split(string(u)[1:], "/")
+	components := strings.Split(string(url)[1:], "/")
 
 	paramPos := len(paramsPosition) - 1 - stringArg
 	if paramPos < 0 {

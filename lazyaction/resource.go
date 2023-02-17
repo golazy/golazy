@@ -2,28 +2,12 @@ package lazyaction
 
 import (
 	"fmt"
+	"path"
 	"reflect"
 	"strings"
 
 	"golazy.dev/lazysupport"
 )
-
-type Resource struct {
-	ResourceDefinition
-	Prefix  []string
-	Actions []*Action
-}
-
-type ResourceDefinition struct {
-	Controller     any
-	ControllerName string // PostsController
-	Plural         string // posts
-	Singular       string // post
-	PathNames      struct{ New, Edit string }
-	Path           string // "" means default, "/" means empty
-	ParamName      string
-	SubResources   []*ResourceDefinition
-}
 
 func NewResource(rd *ResourceDefinition) *Resource {
 	r := &Resource{
@@ -35,6 +19,12 @@ func NewResource(rd *ResourceDefinition) *Resource {
 	r.analyzeMethods()
 	r.addSubResources()
 	return r
+}
+
+type Resource struct {
+	ResourceDefinition
+	Prefix  []string
+	Actions []*Action
 }
 
 func (r *Resource) addSubResources() {
@@ -87,6 +77,10 @@ func (r *Resource) setDefaults() {
 	if r.ControllerName == "" {
 		r.ControllerName = cType.Elem().Name() // "PostsController"
 	}
+	if r.ControllerName == "Controller" {
+		n := path.Base(cType.Elem().PkgPath())
+		r.ControllerName = lazysupport.Camelize(n) + "Controller"
+	}
 	if r.Plural == "" {
 		r.Plural = strings.TrimSuffix(lazysupport.Underscorize(r.ControllerName), "_controller") // "posts"
 	}
@@ -107,24 +101,6 @@ func (r *Resource) setDefaults() {
 		r.ParamName = ":" + strings.TrimPrefix(r.ParamName, ":")
 	}
 
-}
-
-var prefixes = lazysupport.NewStrings("Get", "Post", "Delete", "Patch", "Put", "Options")
-var Actions = lazysupport.NewStrings("Index", "Show", "Create", "Update", "Destroy", "New", "Edit")
-
-const Member = "Member"
-
-func IsRouterMethod(method string) bool {
-	if Actions.Has(method) {
-		return true
-	}
-	if prefixes.HasPrefix(method) {
-		return true
-	}
-	if strings.HasPrefix(method, Member) {
-		return IsRouterMethod(strings.TrimPrefix(method, Member))
-	}
-	return false
 }
 
 func (r *Resource) pathForMethod(method string) (string, []int) {
@@ -152,13 +128,16 @@ func (r *Resource) pathForMethod(method string) (string, []int) {
 		argsPos = append(argsPos, len(pathSegments))
 		pathSegments = append(pathSegments, r.ParamName)
 	default:
+		// Handle prefixes like Get, Post, Delete, Patch, Put, Options alone
 		if strings.HasPrefix(method, Member) {
 			argsPos = append(argsPos, len(pathSegments))
 			pathSegments = append(pathSegments, r.ParamName)
 			method = strings.TrimPrefix(method, Member)
 		}
 		_, method := prefixes.TrimPrefix(method)
-		pathSegments = append(pathSegments, lazysupport.Underscorize(method))
+		if method != "" {
+			pathSegments = append(pathSegments, lazysupport.Underscorize(method))
+		}
 
 	}
 
@@ -220,4 +199,22 @@ func (r *Resource) Routes() string {
 	}
 
 	return t.String()
+}
+
+var prefixes = lazysupport.NewStringSet("Get", "Post", "Delete", "Patch", "Put", "Options")
+var Actions = lazysupport.NewStringSet("Index", "Show", "Create", "Update", "Destroy", "New", "Edit")
+
+const Member = "Member"
+
+func IsRouterMethod(method string) bool {
+	if Actions.Has(method) {
+		return true
+	}
+	if prefixes.HasPrefix(method) {
+		return true
+	}
+	if strings.HasPrefix(method, Member) {
+		return IsRouterMethod(strings.TrimPrefix(method, Member))
+	}
+	return false
 }

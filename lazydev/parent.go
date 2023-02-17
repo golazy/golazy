@@ -3,7 +3,6 @@ package lazydev
 import (
 	"log"
 	"net"
-	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -16,7 +15,7 @@ import (
 	"golazy.dev/lazydev/runner"
 )
 
-func (s *server) startParent(h http.Handler) error {
+func (s *Server) startParent() error {
 	// listen Addr
 	addr := os.Getenv("PORT")
 	if addr == "" {

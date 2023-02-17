@@ -17,6 +17,7 @@ type Document struct {
 	Title      string
 	Viewport   string
 	LayoutBody func(l *Document, content ...interface{}) io.WriterTo
+	embedStyle string
 }
 
 var DefaultLayout = &Document{}
@@ -33,8 +34,15 @@ func (l *Document) AddComponent(c Component) {
 	l.Components = append(l.Components, c)
 }
 
+func (l *Document) AddStyle(s string) {
+	l.Styles = append(l.Styles, s+"\n")
+}
+
 func (l *Document) With(content ...interface{}) io.WriterTo {
 	styles := []nodes.Element{}
+	if l.embedStyle != "" {
+		styles = append(styles, Style(nodes.Raw(l.embedStyle)))
+	}
 	for _, s := range l.Styles {
 		styles = append(styles, Style(nodes.Raw(s)))
 	}

@@ -63,6 +63,13 @@ func (m *Mux) l(v ...interface{}) {
 	fmt.Println(append([]interface{}{"MUX:"}, v...)...)
 }
 
+func (m *Mux) Close() {
+	m.L.Close()
+	for _, h := range m.handlers {
+		h.Close()
+	}
+}
+
 func (m *Mux) Listen() error {
 	m.l("starting listener")
 	if m.L == nil {

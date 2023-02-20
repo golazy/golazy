@@ -20,6 +20,8 @@ type Server struct {
 	Handler             http.Handler
 	productionServer
 	server *http.Server
+	ClientCmd string
+	ClientWD string
 }
 
 var DefaultServer = &Server{

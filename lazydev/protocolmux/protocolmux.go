@@ -41,6 +41,7 @@ func (h *handler) Close() error {
 type Mux struct {
 	L        net.Listener
 	handlers []*handler
+	closed   bool
 }
 
 type conn struct {
@@ -64,6 +65,7 @@ func (m *Mux) l(v ...interface{}) {
 }
 
 func (m *Mux) Close() {
+	m.closed = true
 	m.L.Close()
 	for _, h := range m.handlers {
 		h.Close()
@@ -79,11 +81,15 @@ func (m *Mux) Listen() error {
 	for {
 		m.l("Waiting for connection")
 		conn, err := m.L.Accept()
-		m.l("Got new Connection", conn.RemoteAddr())
 		fmt.Println()
 		if err != nil {
+			if m.closed {
+				return nil
+			}
+			m.l("Got error", err)
 			return err
 		}
+		m.l("Got new Connection", conn.RemoteAddr())
 		go m.handleConn(conn)
 	}
 }

@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"os"
+	"path"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -10,15 +11,11 @@ import (
 
 var (
 	// Used for flags.
-	cfgFile     string
-	userLicense string
 
 	rootCmd = &cobra.Command{
 		Use:   "lazy",
-		Short: "A generator for Cobra based Applications",
-		Long: `Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+		Short: "Golazy companion tool",
+		Long:  `lazy is a companion tool for the golazy framework.`,
 	}
 )
 
@@ -30,9 +27,7 @@ func Execute() error {
 func init() {
 	cobra.OnInitialize(initConfig)
 
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.cobra.yaml)")
 	rootCmd.PersistentFlags().StringP("author", "a", "YOUR NAME", "author name for copyright attribution")
-	rootCmd.PersistentFlags().StringVarP(&userLicense, "license", "l", "", "name of license for the project")
 	rootCmd.PersistentFlags().Bool("viper", true, "use Viper for configuration")
 	viper.BindPFlag("author", rootCmd.PersistentFlags().Lookup("author"))
 	viper.BindPFlag("useViper", rootCmd.PersistentFlags().Lookup("viper"))
@@ -42,19 +37,14 @@ func init() {
 }
 
 func initConfig() {
-	if cfgFile != "" {
-		// Use config file from the flag.
-		viper.SetConfigFile(cfgFile)
-	} else {
-		// Find home directory.
-		home, err := os.UserHomeDir()
-		cobra.CheckErr(err)
+	// Find home directory.
+	home, err := os.UserConfigDir()
+	cobra.CheckErr(err)
 
-		// Search config in home directory with name ".cobra" (without extension).
-		viper.AddConfigPath(home)
-		viper.SetConfigType("yaml")
-		viper.SetConfigName(".cobra")
-	}
+	// Search config in home directory with name ".cobra" (without extension).
+	viper.AddConfigPath(path.Join(home, "lazy"))
+	viper.SetConfigType("yaml")
+	viper.SetConfigName("config")
 
 	viper.AutomaticEnv()
 

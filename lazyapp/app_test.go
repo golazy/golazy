@@ -27,11 +27,6 @@ func TestLazyApp(t *testing.T) {
 		},
 	}
 
-	app.Route(&lazyaction.ResourceDefinition{
-		Controller: new(PagesController),
-		Path:       "/",
-	})
-
 	running := make(chan (struct{}))
 	go func() {
 		err := app.ListenAndServe()

@@ -14,22 +14,19 @@ type Router struct {
 	router *router.Router[any]
 }
 
-func (a *Router) String() string {
-	if a.router == nil {
-		return ""
-	}
-	return a.router.String()
+func (r *Router) String() string {
+	return r.router.String()
 }
 
-func (a *Router) Route(args ...any) {
-	if a.router == nil {
-		a.router = router.NewRouter[any]()
+func (r *Router) Route(args ...any) {
+	if r.router == nil {
+		r.router = router.NewRouter[any]()
 	}
 	var verb string
 	var path string
 	var target any
 
-	for _, arg := range args {
+	for i, arg := range args {
 		k := reflect.ValueOf(arg).Kind()
 		if k == reflect.Ptr {
 			k = reflect.ValueOf(arg).Elem().Kind()
@@ -49,6 +46,13 @@ func (a *Router) Route(args ...any) {
 			}
 		case reflect.Func:
 			target = arg
+		case reflect.Struct:
+			// create a slice with all the elements of args minus the current element
+			// and pass it to routeResource
+
+			r.routeResource(arg, append(args[:i], args[i+1:]...))
+			return
+
 		default:
 			panic(fmt.Sprintf("Invalid argument type: %s", k))
 		}
@@ -63,7 +67,11 @@ func (a *Router) Route(args ...any) {
 		Target: target,
 	}
 
-	a.router.Add(route)
+	r.router.Add(route)
+
+}
+
+func (r *Router) routeResource(resource any, options ...any) {
 
 }
 

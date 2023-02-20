@@ -17,13 +17,9 @@ import (
 
 func (s *Server) startParent() error {
 	// listen Addr
-	addr := os.Getenv("PORT")
-	if addr == "" {
-		addr = s.HTTPSAddr
-	} else {
-		if !strings.Contains(addr, ":") {
-			addr = ":" + addr
-		}
+	addr := s.HTTPSAddr
+	if !strings.Contains(addr, ":") {
+		addr = ":" + addr
 	}
 
 	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)

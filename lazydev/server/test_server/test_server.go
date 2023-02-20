@@ -27,12 +27,12 @@ func getListener() (net.Listener, error) {
 		}
 		listenerFile := os.NewFile(uintptr(fd), "listener")
 		if listenerFile == nil {
-			return nil, fmt.Errorf("Expecting listener in FD %d", fd)
+			return nil, fmt.Errorf("expecting listener in FD %d", fd)
 		}
 
 		l, err := net.FileListener(listenerFile)
 		if err != nil {
-			return nil, fmt.Errorf("Error creating listener: %s", err)
+			return nil, fmt.Errorf("error creating listener: %s", err)
 		}
 		return l, nil
 	}
@@ -45,6 +45,8 @@ func getListener() (net.Listener, error) {
 }
 
 func main() {
+
+	flag.Parse()
 	if helpWanted {
 		flag.Usage()
 		os.Exit(0)
@@ -57,7 +59,7 @@ func main() {
 
 	httpServer := http.Server{
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Write([]byte("Hello world"))
+			w.Write([]byte("backend"))
 		}),
 	}
 

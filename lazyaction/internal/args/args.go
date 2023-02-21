@@ -10,9 +10,13 @@ var (
 	ErrNonFuncAction = fmt.Errorf("action is not a function")
 )
 
-func ExtractArgs(action reflect.Method) (args, rets []string, err error) {
-
-	t := action.Type
+func ExtractArgs(t reflect.Type) (args, rets []string, err error) {
+	if t == nil {
+		return nil, nil, ErrNilAction
+	}
+	if t.Kind() != reflect.Func {
+		return nil, nil, ErrNonFuncAction
+	}
 
 	args = make([]string, t.NumIn())
 	for i := 0; i < t.NumIn(); i++ {

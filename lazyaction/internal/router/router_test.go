@@ -17,10 +17,9 @@ func TestRouter(t *testing.T) {
 	router := NewRouter[TestRoute]()
 
 	route := &Route{
-		Verb:   "GET",
-		Path:   "/posts",
-		Name:   "test_route",
-		Target: TestRoute{Name: "test_route"},
+		Verb: "GET",
+		Path: "/posts",
+		Name: "test_route",
 	}
 
 	router.Add(route)
@@ -36,7 +35,7 @@ func TestRouter(t *testing.T) {
 func TestRouter(t *testing.T) {
 
 	router := NewRouter()
-	router.AddResource(&Resource{Controller: new(ArticlesController)})
+	router.AddResourceDefinition(&ResourceDefinition{Controller: new(ArticlesController)})
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/posts", nil)

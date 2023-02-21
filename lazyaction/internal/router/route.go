@@ -3,17 +3,18 @@ package router
 import (
 	"fmt"
 	"net/http"
+	"reflect"
 	"strings"
 )
 
 type Route struct {
-	Verb   string
-	Path   string
-	Name   string
-	Fn     http.HandlerFunc // If Fn is defined, Target is ignored (for generated code)
-	Target any
-	Args   []string
-	Rets   []string
+	Verb    string
+	Path    string
+	Name    string
+	Handler http.HandlerFunc // If Fn is defined, Target is ignored (for generated code)
+	Target  reflect.Value
+	Args    []string
+	Rets    []string
 
 	Controller     any
 	ControllerName string // PostsController

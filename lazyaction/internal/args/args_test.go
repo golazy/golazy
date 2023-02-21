@@ -21,7 +21,10 @@ func (c *controller) Show(id int, d *myData) (int, error) {
 func TestExtractArgs(t *testing.T) {
 
 	expect := func(action any, ins, out []string, err error) {
-		args, returns, e := ExtractArgs(action)
+
+		val := reflect.TypeOf(action)
+
+		args, returns, e := ExtractArgs(val)
 		if e != err {
 			t.Errorf("expected error %v, got %v", err, e)
 		}

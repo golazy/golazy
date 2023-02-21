@@ -35,16 +35,17 @@ func (r *Routes) Route(arguments ...any) {
 	}
 	var verb string
 	var path string
-	var target any
+	var target reflect.Value
+	var handler http.HandlerFunc
 	var ins []string
 	var outs []string
 
 	for _, arg := range arguments {
 		switch tArg := arg.(type) {
-		case http.Handler:
-			target = tArg.ServeHTTP
 		case http.HandlerFunc:
-			target = tArg
+			handler = tArg
+		case http.Handler:
+			handler = tArg.ServeHTTP
 		case string:
 			if router.IsMethod(tArg) != -1 {
 				verb = tArg
@@ -55,6 +56,12 @@ func (r *Routes) Route(arguments ...any) {
 				continue
 			}
 			panic(fmt.Sprintf("invalid path: %q", arg.(string)))
+		default:
+			if reflect.ValueOf(arg).Kind() == reflect.Func {
+				target = reflect.ValueOf(arg)
+				continue
+			}
+			panic(fmt.Sprintf("invalid argument type: %T", arg))
 		}
 	}
 	if verb == "" {
@@ -62,12 +69,13 @@ func (r *Routes) Route(arguments ...any) {
 	}
 
 	route := &router.Route{
-		Verb:   verb,
-		Path:   path,
-		Target: target,
-		Args:   ins,
-		Rets:   outs,
-		Name:   "Annonymous",
+		Verb:    verb,
+		Path:    path,
+		Target:  target,
+		Handler: handler,
+		Args:    ins,
+		Rets:    outs,
+		Name:    "Annonymous",
 	}
 
 	r.router.Add(route)
@@ -129,61 +137,63 @@ func (a Routes) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		panic("No routes defined")
 	}
 	route := a.router.Find(r)
-	a.Dispatch(route, w, r)
+	if route == nil {
+		panic("No route found")
+	}
+	if route.Handler != nil {
+		route.Handler(w, r)
+		return
+	}
+
+	ins := a.getInputs(route, w, r)
+	if route.Target.IsZero() {
+		panic("is zero")
+	}
+	if route.Target.IsNil() {
+		panic("is nil")
+	}
+	if route.Target.IsValid() == false {
+		panic("is invalid")
+	}
+	outs := route.Target.Call(ins)
+	a.processOutputs(route, w, r, outs)
 }
 
-func (a *Routes) Dispatch(route *router.Route, w http.ResponseWriter, r *http.Request) {
-	val := reflect.ValueOf(route.Target)
-	if val.Kind() == reflect.Ptr {
-		val = val.Elem()
+func (a *Routes) processOutputs(route *router.Route, w http.ResponseWriter, r *http.Request, outs []reflect.Value) {
+	for _, out := range outs {
+		switch out.Kind() {
+		case reflect.String:
+			w.Write([]byte(out.String()))
+		case reflect.Int:
+			w.WriteHeader(int(out.Int()))
+		case reflect.Interface:
+			if out.IsNil() {
+				continue
+			}
+			switch tOut := out.Interface().(type) {
+			case error:
+			default:
+				panic(fmt.Sprintf("invalid output type: %T", tOut))
+			}
+		default:
+			panic(fmt.Sprintf("invalid output type: %T", out.Interface()))
+		}
 	}
-	if val.Kind() != reflect.Func {
-		panic("Invalid route target")
-	}
+}
 
-	//prepare args
-	mType := val.Type()
-	ins := make([]reflect.Value, mType.NumIn())
-
-	seenStrings := 0
-
-	for i := 0; i < mType.NumIn(); i++ {
-		inType := mType.In(i).String()
-		switch inType {
-		case "string":
-			arg := ExtractParam2(r.URL.Path, 1)
-			ins[i] = reflect.ValueOf(arg)
-			seenStrings++
-		case "lazyaction.ResponseWriter":
-			ins[i] = reflect.ValueOf(ResponseWriter{w})
-		case "*lazyaction.Request":
-			ins[i] = reflect.ValueOf(&Request{r})
-		case "lazyaction.Request":
-			panic("Should use *http.Request")
+func (a *Routes) getInputs(route *router.Route, w http.ResponseWriter, r *http.Request) []reflect.Value {
+	ins := make([]reflect.Value, len(route.Args))
+	for i, arg := range route.Args {
+		switch arg {
 		case "http.ResponseWriter":
 			ins[i] = reflect.ValueOf(w)
 		case "*http.Request":
 			ins[i] = reflect.ValueOf(r)
-		case "http.Request":
-			panic("Should use *http.Request")
 		default:
-			panic(fmt.Sprintf("Can't fill the argument of type %s for %s", inType, ""))
+			ins[i] = reflect.ValueOf(ExtractParam2(r.URL.Path, i+1))
 		}
 	}
-
-	outs := val.Call(ins)
-	for i := 0; i < mType.NumOut(); i++ {
-		switch mType.Out(i).String() {
-		case "error":
-			if !outs[i].IsNil() {
-				panic(val.Interface().(error))
-			}
-		case "string":
-			w.Write([]byte(outs[i].String()))
-		case "[]byte":
-			w.Write(outs[i].Bytes())
-		}
-	}
+	return ins
 }
 
 func ExtractParam2(url string, paramPosition int) string {

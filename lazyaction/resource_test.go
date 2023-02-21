@@ -1,22 +1,19 @@
 package lazyaction
 
 import (
-	"errors"
-	"fmt"
 	"testing"
 
 	"golazy.dev/lazyaction/internal/router"
+	"golazy.dev/lazyaction/internal/router/routertest"
 )
 
-func TestResourceRoutes(t *testing.T) {
-
-	controller := &PostsController{}
-	resource, err := newResource(controller, &ResourceOptions{})
+func NewResourceTester(t *testing.T, controller interface{}, options *ResourceOptions) (func(name string, expected *router.Route), []*router.Route) {
+	t.Helper()
+	resource, err := newResource(controller, options)
 	if err != nil {
 		t.Fatal(err)
 	}
 	routes := resource.Routes()
-
 	expect := func(name string, expected *router.Route) {
 		t.Helper()
 		t.Run(name, func(t *testing.T) {
@@ -25,16 +22,24 @@ func TestResourceRoutes(t *testing.T) {
 			if expected.Verb == "" {
 				expected.Verb = "GET"
 			}
-			r := findRoute(routes, expected)
-			if r == nil {
-				t.Error("Route not found: " + expected.Verb + " " + expected.Path)
-				return
-			}
-			if err := compareRoute(r, expected); err != nil {
-				t.Error(err, fmt.Sprintf("%+v", *r))
+			err := routertest.ExpectRoute(routes, expected)
+			if err != nil {
+				t.Error(err)
 			}
 		})
 	}
+	t.Log("routes: ")
+	for _, route := range routes {
+		t.Log(route.String())
+	}
+
+	return expect, routes
+}
+
+func TestResourceRoutes(t *testing.T) {
+
+	controller := &PostsController{}
+	expect, _ := NewResourceTester(t, controller, &ResourceOptions{})
 
 	expect("route.ControllerName",
 		&router.Route{Path: "/posts", Verb: "GET", ControllerName: "PostsController"})
@@ -61,110 +66,58 @@ func TestResourceRoutes(t *testing.T) {
 
 	expect("Member", &router.Route{Path: "/posts/:post_id/activate_later", Verb: "PUT", Name: "posts#activate_later"})
 
-	for _, route := range routes {
-		t.Log(route.String())
-	}
-
+	expect("Plain action", &router.Route{Path: "/posts/about", Verb: "GET", Name: "posts#about"})
 }
 
-func compareRoute(original, expected *router.Route) error {
-	var errs []error
-	if original == nil || expected == nil {
-		return fmt.Errorf("Missing routes to compare")
-	}
+func TestResourceRoutes_PathNames(t *testing.T) {
+	controller := &PostsController{}
+	expect, _ := NewResourceTester(t, controller, &ResourceOptions{PathNames: struct{ New, Edit string }{"nuevo", "editar"}})
 
-	if expected.Verb != "" {
-		if original.Verb != expected.Verb {
-			errs = append(errs, fmt.Errorf("Expected verb %s, got %s", expected.Verb, original.Verb))
-		}
-	} else {
-		if original.Verb != "GET" {
-			errs = append(errs, fmt.Errorf("Expected empty verb to generate GET, got %s", original.Verb))
-		}
-	}
-
-	if expected.Path != "" {
-		if original.Path != expected.Path {
-			errs = append(errs, fmt.Errorf("Expected path %s, got %s", expected.Path, original.Path))
-		}
-	}
-
-	if expected.Name != "" {
-		if original.Name != expected.Name {
-			errs = append(errs, fmt.Errorf("Expected name %s, got %s", expected.Name, original.Name))
-		}
-	}
-
-	if expected.Target != nil {
-		if original.Target != expected.Target {
-			errs = append(errs, fmt.Errorf("Expected target %s, got %s", expected.Target, original.Target))
-		}
-	}
-
-	if expected.Args != nil {
-		if len(original.Args) != len(expected.Args) {
-			errs = append(errs, fmt.Errorf("Expected %v arguments, got %v", expected.Args, original.Args))
-		}
-
-		for i, arg := range expected.Args {
-			if original.Args[i] != arg {
-				errs = append(errs, fmt.Errorf("Expected argument %s, got %s", arg, original.Args[i]))
-			}
-		}
-	}
-
-	if expected.Rets != nil {
-		if len(original.Rets) != len(expected.Rets) {
-			errs = append(errs, fmt.Errorf("Expected %d return values, got %d", len(expected.Rets), len(original.Rets)))
-		}
-
-		for i, ret := range expected.Rets {
-			if original.Rets[i] != ret {
-				errs = append(errs, fmt.Errorf("Expected return value %s, got %s", ret, original.Rets[i]))
-			}
-		}
-	}
-
-	if expected.Controller != nil {
-		if original.Controller != expected.Controller {
-			errs = append(errs, fmt.Errorf("Expected controller %s, got %s", expected.Controller, original.Controller))
-		}
-	}
-
-	if expected.ControllerName != "" {
-		if original.ControllerName != expected.ControllerName {
-			errs = append(errs, fmt.Errorf("Expected controller name %s, got %s", expected.ControllerName, original.ControllerName))
-		}
-	}
-
-	if expected.Plural != "" {
-		if original.Plural != expected.Plural {
-			errs = append(errs, fmt.Errorf("Expected plural %s, got %s", expected.Plural, original.Plural))
-		}
-	}
-
-	if expected.Singular != "" {
-		if original.Singular != expected.Singular {
-			errs = append(errs, fmt.Errorf("Expected singular %s, got %s", expected.Singular, original.Singular))
-		}
-	}
-
-	if expected.ParamName != "" {
-		if original.ParamName != expected.ParamName {
-			errs = append(errs, fmt.Errorf("Expected param name %s, got %s", expected.ParamName, original.ParamName))
-		}
-	}
-
-	return errors.Join(errs...)
+	expect("New route", &router.Route{Path: "/posts/nuevo", Verb: "GET", Name: "posts#new"})
+	expect("Edit route", &router.Route{Path: "/posts/:post_id/editar", Verb: "GET", Name: "posts#edit"})
 }
 
-func findRoute(routes []*router.Route, expected *router.Route) *router.Route {
-	for _, route := range routes {
-		if route.Path == expected.Path && route.Verb == expected.Verb {
-			return route
-		}
-	}
-	return nil
+func TestResourceRoutes_Path(t *testing.T) {
+	controller := &PostsController{}
+	expect, _ := NewResourceTester(t, controller, &ResourceOptions{Path: "/articles"})
+
+	expect("About route", &router.Route{Path: "/articles/about", Verb: "GET", Name: "posts#about"})
+	expect("Edit route", &router.Route{Path: "/articles/:post_id/edit", Verb: "GET", Name: "posts#edit"})
+}
+
+func TestResourceRoutes_Path_Root(t *testing.T) {
+	controller := &PostsController{}
+	expect, _ := NewResourceTester(t, controller, &ResourceOptions{Path: "/"})
+
+	expect("About route", &router.Route{Path: "/about", Verb: "GET", Name: "posts#about"})
+	expect("Edit route", &router.Route{Path: "/:post_id/edit", Verb: "GET", Name: "posts#edit"})
+}
+
+func TestResourceRoutes_Names(t *testing.T) {
+	controller := &PostsController{}
+	expect, _ := NewResourceTester(t, controller, &ResourceOptions{Name: "Articles"})
+
+	expect("Index route", &router.Route{
+		Path: "/articles/:article_id", Verb: "GET",
+		Name: "articles#show", Singular: "article", Plural: "articles", ParamName: ":article_id"})
+}
+
+func TestResourceRoutes_Plural(t *testing.T) {
+	controller := &PostsController{}
+	expect, _ := NewResourceTester(t, controller, &ResourceOptions{Plural: "articles"})
+
+	expect("Index route", &router.Route{
+		Path: "/articles/:post_id", Verb: "GET",
+		Name: "posts#show", Singular: "post", Plural: "articles", ParamName: ":post_id"})
+}
+func TestResourceRoutes_Singular(t *testing.T) {
+	controller := &PostsController{}
+	expect, _ := NewResourceTester(t, controller, &ResourceOptions{Singular: "article"})
+
+	expect("Index route", &router.Route{
+		Path: "/posts/:article_id", Verb: "GET",
+		Name: "posts#show", Singular: "article", Plural: "posts", ParamName: ":article_id"})
+
 }
 
 /*
@@ -212,62 +165,7 @@ func TestResourceRoutes_Basic(t *testing.T) {
 	)
 }
 
-func TestResourceRoutes_PathNames(t *testing.T) {
 
-	testResourceExpectations(
-		t,
-		&lazyaction.Resource{Controller: new(PostsController), PathNames: struct{ New, Edit string }{"nuevo", "editar"}},
-		[]string{
-			"posts POST /posts PostsController#Create",
-			"post DELETE /posts/:post_id PostsController#Destroy",
-			"edit_post GET /posts/:post_id/editar PostsController#Edit",
-			"posts GET /posts PostsController#Index",
-			"new_post GET /posts/nuevo PostsController#New",
-			"activate_later_post PUT /posts/:post_id/activate_later PostsController#MemberPutActivateLater",
-			"create_super_post POST /posts/create_super PostsController#PostCreateSuper",
-			"post GET /posts/:post_id PostsController#Show",
-			"post PUT|PATCH /posts/:post_id PostsController#Update",
-		},
-	)
-}
-
-func TestResourceRoutes_Path(t *testing.T) {
-
-	testResourceExpectations(
-		t,
-		&lazyaction.Resource{Controller: new(PostsController), Path: "/articles"},
-		[]string{
-			"posts POST /articles PostsController#Create",
-			"post DELETE /articles/:post_id PostsController#Destroy",
-			"edit_post GET /articles/:post_id/edit PostsController#Edit",
-			"posts GET /articles PostsController#Index",
-			"new_post GET /articles/new PostsController#New",
-			"activate_later_post PUT /articles/:post_id/activate_later PostsController#MemberPutActivateLater",
-			"create_super_post POST /articles/create_super PostsController#PostCreateSuper",
-			"post GET /articles/:post_id PostsController#Show",
-			"post PUT|PATCH /articles/:post_id PostsController#Update",
-		},
-	)
-}
-
-func TestResourceRoutes_Path_TopLevel(t *testing.T) {
-
-	testResourceExpectations(
-		t,
-		&lazyaction.Resource{Controller: new(PostsController), Path: "/"},
-		[]string{
-			"posts POST / PostsController#Create",
-			"post DELETE /:post_id PostsController#Destroy",
-			"edit_post GET /:post_id/edit PostsController#Edit",
-			"posts GET / PostsController#Index",
-			"new_post GET /new PostsController#New",
-			"activate_later_post PUT /:post_id/activate_later PostsController#MemberPutActivateLater",
-			"create_super_post POST /create_super PostsController#PostCreateSuper",
-			"post GET /:post_id PostsController#Show",
-			"post PUT|PATCH /:post_id PostsController#Update",
-		},
-	)
-}
 
 func TestResourceRoutes_Path_NameAndSingular(t *testing.T) {
 

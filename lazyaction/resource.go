@@ -17,6 +17,7 @@ type ResourceOptions struct {
 	PathNames      struct{ New, Edit string }
 	Path           string // "" means default, "/" means empty
 	ParamName      string
+	Name           string
 }
 
 type Resource struct {
@@ -51,12 +52,17 @@ func newResource(controller any, opts *ResourceOptions) (*Resource, error) {
 		n := path.Base(cType.Elem().PkgPath())
 		r.ControllerName = lazysupport.Camelize(n) + "Controller"
 	}
+
+	if r.Name == "" {
+		r.Name = strings.TrimSuffix(r.ControllerName, "Controller") // "Posts"
+	}
+
 	if r.Plural == "" {
-		r.Plural = strings.TrimSuffix(lazysupport.Underscorize(r.ControllerName), "_controller") // "posts"
+		r.Plural = lazysupport.Underscorize(r.Name) // "posts"
 	}
 
 	if r.Singular == "" {
-		r.Singular = lazysupport.Singularize(r.Plural)
+		r.Singular = lazysupport.Singularize(lazysupport.Underscorize(r.Name))
 	}
 
 	if r.Path == "" {
@@ -101,18 +107,20 @@ func newResource(controller any, opts *ResourceOptions) (*Resource, error) {
 //	}
 func (r *Resource) Routes() []*router.Route {
 	routes := []*router.Route{}
+	val := reflect.ValueOf(r.Controller)
 	cType := reflect.TypeOf(r.Controller)
 	for i := 0; i < cType.NumMethod(); i++ {
-		method := cType.Method(i)
-		name := method.Name
+		method := val.Method(i)
+		methodT := cType.Method(i)
+		name := methodT.Name
 
-		ins, outs, err := args.ExtractArgs(method)
+		ins, outs, err := args.ExtractArgs(method.Type())
 		if err != nil {
 			panic(err)
 		}
 
-		verb, path, methodName := r.analyzeName(name)
-		routeName := r.Plural + "#" + lazysupport.Underscorize(methodName)
+		verb, path, methodName, paramName := r.analyzeName(name)
+		routeName := lazysupport.Underscorize(r.Name) + "#" + lazysupport.Underscorize(methodName)
 
 		verbs := strings.Split(verb, "|")
 		for _, v := range verbs {
@@ -121,13 +129,13 @@ func (r *Resource) Routes() []*router.Route {
 				Verb:           v,
 				Path:           path,
 				Name:           routeName,
-				Target:         method.Func,
+				Target:         method,
 				Args:           ins,
 				Rets:           outs,
 				ControllerName: r.ControllerName,
 				Plural:         r.Plural,
 				Singular:       r.Singular,
-				ParamName:      r.ParamName,
+				ParamName:      paramName,
 				Controller:     r.Controller,
 			}
 
@@ -138,42 +146,46 @@ func (r *Resource) Routes() []*router.Route {
 	return routes
 }
 
-func (r *Resource) analyzeName(method string) (verb, path, methodName string) {
+func (r *Resource) analyzeName(method string) (verb, path, methodName, paramName string) {
 	pathSegments := make([]string, len(r.Prefix))
 	copy(pathSegments, r.Prefix)
 
 	switch method {
 	case "Index":
-		return "GET", "/" + strings.Join(pathSegments, "/"), method
+		return "GET", "/" + strings.Join(pathSegments, "/"), method, ""
 	case "Create":
-		return "POST", "/" + strings.Join(pathSegments, "/"), method
+		return "POST", "/" + strings.Join(pathSegments, "/"), method, ""
 	case "New":
 		pathSegments = append(pathSegments, r.PathNames.New)
-		return "GET", "/" + strings.Join(pathSegments, "/"), method
+		return "GET", "/" + strings.Join(pathSegments, "/"), method, ""
 	case "Show":
 		pathSegments = append(pathSegments, r.ParamName)
-		return "GET", "/" + strings.Join(pathSegments, "/"), method
+		return "GET", "/" + strings.Join(pathSegments, "/"), method, r.ParamName
 	case "Edit":
 		pathSegments = append(pathSegments, r.ParamName)
 		pathSegments = append(pathSegments, r.PathNames.Edit)
-		return "GET", "/" + strings.Join(pathSegments, "/"), method
+		return "GET", "/" + strings.Join(pathSegments, "/"), method, r.ParamName
 	case "Update":
 		pathSegments = append(pathSegments, r.ParamName)
-		return "PUT|PATCH", "/" + strings.Join(pathSegments, "/"), method
+		return "PUT|PATCH", "/" + strings.Join(pathSegments, "/"), method, r.ParamName
 	case "Destroy":
 		pathSegments = append(pathSegments, r.ParamName)
-		return "DELETE", "/" + strings.Join(pathSegments, "/"), "destroy"
+		return "DELETE", "/" + strings.Join(pathSegments, "/"), "destroy", r.ParamName
 	}
 	// Add param if it is a member function
 	if strings.HasPrefix(method, Member) {
 		pathSegments = append(pathSegments, r.ParamName)
 		method = strings.TrimPrefix(method, Member)
+		paramName = r.ParamName
 	}
 	verb, method = prefixes.TrimPrefix(method)
 	if method != "" {
 		pathSegments = append(pathSegments, lazysupport.Underscorize(method))
 	}
-	return strings.ToUpper(verb), "/" + strings.Join(pathSegments, "/"), method
+	if verb == "" {
+		verb = "GET"
+	}
+	return strings.ToUpper(verb), "/" + strings.Join(pathSegments, "/"), method, paramName
 }
 
 var prefixes = lazysupport.NewStringSet("Get", "Post", "Delete", "Patch", "Put", "Options")

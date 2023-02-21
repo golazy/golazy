@@ -1,25 +1,14 @@
-package lazyaction_test
+package lazyaction
 
 import (
-	"context"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
-
-	"golazy.dev/lazyaction"
 )
-
-type StringHandler string
-
-func (h StringHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte(h))
-}
 
 func TestRouterRoute(t *testing.T) {
 
-	router := lazyaction.Routes{}
+	router := Routes{}
 
 	expect := func(path, expected string) {
 		req, err := http.NewRequest("GET", path, nil)
@@ -36,15 +25,15 @@ func TestRouterRoute(t *testing.T) {
 	router.Route("/", StringHandler("root"))
 	router.Route("/hi", StringHandler("hi"))
 	expect("/", "root")
-	expect("/", "hi")
+	expect("/hi", "hi")
 
-	t.Error(router.String())
+	t.Log(router.String())
 
 }
 
 func TestRouterResource(t *testing.T) {
 
-	router := lazyaction.Routes{}
+	router := Routes{}
 
 	expect := func(path, expected string) {
 		req, err := http.NewRequest("GET", path, nil)
@@ -58,78 +47,23 @@ func TestRouterResource(t *testing.T) {
 		}
 	}
 
-	router.Resource(&TestController{})
-	expect("/", "root")
-	expect("/", "hi")
+	router.Resource(&PostsController{})
+	expect("/posts", "Index")
 
 	t.Error(router.String())
 
 }
 
-type EmptyController struct{}
+func TestRouterDispatch(t *testing.T) {
+	router := Routes{}
+	router.Route("/", StringHandler("root"))
 
-// TestController ActionHandlerController
-type TestController struct{}
+	req := httptest.NewRequest("GET", "/", nil)
+	rr := httptest.NewRecorder()
 
-func (TestController) GetInHttpResponseWriter(w http.ResponseWriter) {
-	w.Write([]byte("InHttpResponseWriter"))
-}
+	router.ServeHTTP(rr, req)
 
-func (TestController) GetInResponseWriter(w http.ResponseWriter) {
-	w.Write([]byte("InResponseWriter"))
-}
-
-func (TestController) GetOutString() string {
-	return "OutString"
-}
-
-func (TestController) MemberGetInString(s string) string {
-	return s
-}
-func (TestController) MemberGetInStringString(s1, s2 string) string {
-	return strings.Join([]string{s1, s2}, ",")
-}
-
-func (TestController) GetOutBytes() []byte {
-	return []byte("OutBytes")
-}
-
-func (TestController) GetOutError() error {
-	return fmt.Errorf("OutError")
-}
-
-func (TestController) GetOutInt() (string, int) {
-	return "OutInt", 204
-}
-
-func (TestController) Show(id string) string {
-	return id
-}
-
-func (TestController) GetRedirect(ctx *context.Context) {
-	//ctx.Redirect("http://google.com", 301)
-}
-
-type Session struct{}
-
-func (TestController) MemberGetSetSession(id string, s *Session) {
-	//s.Set("id", id)
-}
-
-func (TestController) GetSession(s *Session) string {
-	//id := s.Get("id")
-	//fmt.Println(id)
-	return "asdf"
-}
-
-func (TestController) SetError(s *Session) {
-	//s.SetError(fmt.Errorf("error"))
-}
-
-func (TestController) GetGetError(s *Session) string {
-	return "asdf"
-}
-
-func (TestController) Delete() string {
-	return "Delete"
+	if rr.Body.String() != "root" {
+		t.Errorf("expected root got %q", rr.Body.String())
+	}
 }

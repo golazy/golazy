@@ -16,7 +16,7 @@ type TestRoute struct {
 func TestRouter(t *testing.T) {
 	router := NewRouter[TestRoute]()
 
-	route := &Route[TestRoute]{
+	route := &Route{
 		Verb:   "GET",
 		Path:   "/posts",
 		Name:   "test_route",
@@ -36,7 +36,7 @@ func TestRouter(t *testing.T) {
 func TestRouter(t *testing.T) {
 
 	router := NewRouter()
-	router.AddResourceDefinition(&ResourceDefinition{Controller: new(ArticlesController)})
+	router.AddResource(&Resource{Controller: new(ArticlesController)})
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/posts", nil)
@@ -68,7 +68,7 @@ func init() {
 		if len(parts) != 2 {
 			panic(fmt.Sprintf("%q", line))
 		}
-		if methodIndex(parts[0]) < 0 {
+		if IsMethod(parts[0]) < 0 {
 			panic(parts[0] + parts[1])
 		}
 		routes = append(routes, []string{parts[0], parts[1]})

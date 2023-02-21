@@ -22,7 +22,7 @@ import (
 
 type App struct {
 	Name        string
-	Router      lazyaction.Router
+	Router      lazyaction.Routes
 	Server      http.Server
 	MiddleWares []lazyaction.Middleware
 }

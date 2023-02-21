@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	portal "golazy.dev/lazydev/portal/apps"
 	"golazy.dev/lazydev/server"
 )
 
@@ -29,19 +30,21 @@ func init() {
 			s := &server.Server{
 				BuildDir:        args[0],
 				BuildArgs:       strings.Split("-buildvcs=false", " "),
-				HttpHandler:     StringHandler("http"),
-				PrefixHandler:   StringHandler("golazy"),
-				FallbackHandler: StringHandler("fallback"),
+				HttpHandler:     portal.Http.Router,
+				PrefixHandler:   portal.Golazy.Router,
+				FallbackHandler: portal.Fallback.Router,
 			}
 
 			err = s.ListenAndServe()
+			fmt.Println("Stoping...", err)
+
+			fmt.Println("Listening on", s.Addr, err)
 			if err == nil || err == http.ErrServerClosed {
 				return
 			}
 
 		},
 		Args: cobra.MatchAll(cobra.ExactArgs(1), cobra.OnlyValidArgs),
-
 		ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 			return mainPackages(), cobra.ShellCompDirectiveNoFileComp
 		},
@@ -78,6 +81,9 @@ func mainPackages() []string {
 		if pack.Name != "main" {
 			return nil
 		}
+		if !includes(pack.Imports, "golazy.dev/lazyapp") {
+			return nil
+		}
 
 		rel, err := filepath.Rel(wd, path)
 		if err != nil {
@@ -88,6 +94,14 @@ func mainPackages() []string {
 	})
 	return mains
 
+}
+func includes(list []string, item string) bool {
+	for _, i := range list {
+		if i == item {
+			return true
+		}
+	}
+	return false
 }
 
 func findRoot(wd string) string {

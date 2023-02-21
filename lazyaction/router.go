@@ -10,72 +10,111 @@ import (
 	"golazy.dev/lazydev"
 )
 
-type Router struct {
+type Routes struct {
 	router *router.Router[any]
 }
 
-func (r *Router) String() string {
+func (r *Routes) String() string {
 	return r.router.String()
 }
 
-func (r *Router) Route(args ...any) {
+type Router interface {
+	Route(args ...any)
+	Resource(controller any, opts ...ResourceOptions)
+}
+
+/*
+Route adds routes to the router
+
+	Router.Route("/", func()string{return "Hello"}) // If verb is omited it is assumed is a GET
+	Router.Route("POST", "/users", func() string{ return "User created!"})  // Verb can be added as a string
+*/
+func (r *Routes) Route(arguments ...any) {
 	if r.router == nil {
 		r.router = router.NewRouter[any]()
 	}
 	var verb string
 	var path string
 	var target any
+	var ins []string
+	var outs []string
 
-	for i, arg := range args {
-		k := reflect.ValueOf(arg).Kind()
-		if k == reflect.Ptr {
-			k = reflect.ValueOf(arg).Elem().Kind()
-		}
-		switch k {
-		case reflect.String:
-			for _, m := range router.Methods {
-				if strings.ToUpper(arg.(string)) == m {
-					verb = m
-					continue
-				}
-				if strings.HasPrefix(arg.(string), "/") {
-					path = arg.(string)
-					continue
-				}
-				panic(fmt.Sprintf("Invalid path: %q", arg.(string)))
+	for _, arg := range arguments {
+		switch tArg := arg.(type) {
+		case http.Handler:
+			target = tArg.ServeHTTP
+		case http.HandlerFunc:
+			target = tArg
+		case string:
+			if router.IsMethod(tArg) != -1 {
+				verb = tArg
+				continue
 			}
-		case reflect.Func:
-			target = arg
-		case reflect.Struct:
-			// create a slice with all the elements of args minus the current element
-			// and pass it to routeResource
-
-			r.routeResource(arg, append(args[:i], args[i+1:]...))
-			return
-
-		default:
-			panic(fmt.Sprintf("Invalid argument type: %s", k))
+			if strings.HasPrefix(tArg, "/") {
+				path = tArg
+				continue
+			}
+			panic(fmt.Sprintf("invalid path: %q", arg.(string)))
 		}
 	}
 	if verb == "" {
 		verb = "GET"
 	}
 
-	route := &router.Route[any]{
+	route := &router.Route{
 		Verb:   verb,
 		Path:   path,
 		Target: target,
+		Args:   ins,
+		Rets:   outs,
+		Name:   "Annonymous",
 	}
 
 	r.router.Add(route)
+}
+
+/*
+	Resource adds a resource to the router
+
+The resource name is extracted from the struct name minus the Controller suffix.
+If the struct is called Controller it will use the package name.
+
+Given a struct called UserController, the follwing methods will generate the following routes:
+
+- Index()   => GET    /users
+- New()     => GET    /users/new
+- Create()  => POST   /users
+- Show()    => GET    /users/:id
+- Edit()    => GET    /users/:id/edit
+- Update()  => PUT    /users/:id
+- Destroy() => DELETE /users/:id
+
+Custom actions can be added to the resource by combining the verb and if it belongs to a Member.
+
+- Popular() => GET /users/popular
+- MemberComments() => GET /users/:id/comments
+- PutMemberSuspend() => PUT /users/:id/suspend
+
+Resource internally calls Route to add the routes to the router.
+*/
+func (r *Routes) Resource(target any, options ...*ResourceOptions) {
+	if r.router == nil {
+		r.router = router.NewRouter[any]()
+	}
+	if len(options) == 0 {
+		options = append(options, &ResourceOptions{})
+	}
+	resource, err := newResource(target, options[0])
+	if err != nil {
+		panic(err)
+	}
+	for _, route := range resource.Routes() {
+		r.router.Add(route)
+	}
 
 }
 
-func (r *Router) routeResource(resource any, options ...any) {
-
-}
-
-func (a *Router) ListenAndServe() error {
+func (a *Routes) ListenAndServe() error {
 	server := &lazydev.Server{
 		BootMode:  lazydev.ParentMode,
 		HTTPAddr:  ":3000",
@@ -85,7 +124,7 @@ func (a *Router) ListenAndServe() error {
 	return server.ListenAndServe()
 }
 
-func (a *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (a Routes) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if a.router == nil {
 		panic("No routes defined")
 	}
@@ -93,7 +132,7 @@ func (a *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	a.Dispatch(route, w, r)
 }
 
-func (a *Router) Dispatch(route *router.Route[any], w http.ResponseWriter, r *http.Request) {
+func (a *Routes) Dispatch(route *router.Route, w http.ResponseWriter, r *http.Request) {
 	val := reflect.ValueOf(route.Target)
 	if val.Kind() == reflect.Ptr {
 		val = val.Elem()

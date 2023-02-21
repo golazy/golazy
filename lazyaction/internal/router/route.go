@@ -1,19 +1,43 @@
 package router
 
-import "fmt"
+import (
+	"fmt"
+	"net/http"
+	"strings"
+)
 
-type Route[T any] struct {
-	Verb           string
-	Path           string
-	Name           string
-	Target         T
-	ResourceName   string // comment or comments or post_comments
-	ResourceMember bool   // true if it adds a member path
-	ResourceAction string // "new" or "edit" or custom
-	ParamsPosition []int
-	Member         bool
+type Route struct {
+	Verb   string
+	Path   string
+	Name   string
+	Fn     http.HandlerFunc // If Fn is defined, Target is ignored (for generated code)
+	Target any
+	Args   []string
+	Rets   []string
+
+	Controller     any
+	ControllerName string // PostsController
+	Plural         string // posts
+	Singular       string // post
+	ParamName      string
 }
 
-func (rd *Route[T]) String() string {
-	return fmt.Sprintf("%s %s %s %v", rd.Name, rd.Verb, rd.Path, rd.Target)
+func (r *Route) String() string {
+	base := fmt.Sprintf("%9s %s %s", r.Verb, r.Path, r.Name)
+	opts := []string{}
+
+	if r.ControllerName != "" {
+		opts = append(opts, r.ControllerName)
+	}
+	if r.Plural != "" {
+		opts = append(opts, r.Plural)
+	}
+	if r.Singular != "" {
+		opts = append(opts, r.Singular)
+	}
+	if r.ParamName != "" {
+		opts = append(opts, r.ParamName)
+	}
+
+	return base + " " + strings.Join(opts, " ")
 }

@@ -88,15 +88,15 @@ var Store = sessions.NewCookieStore([]byte("//TODO: make this random and persist
 
 #### func [NewResource](/resource.go#L28)
 
-`func NewResource(rd *ResourceDefinition) *Resource`
+`func NewResource(rd *Resource) *Resource`
 
 #### func (*Resource) [Routes](/resource.go#L207)
 
 `func (r *Resource) Routes() string`
 
-### type [ResourceDefinition](/resource.go#L17)
+### type [Resource](/resource.go#L17)
 
-`type ResourceDefinition struct { ... }`
+`type Resource struct { ... }`
 
 ### type [ResponseWriter](/response_writer.go#L5)
 
@@ -162,9 +162,9 @@ var Store = sessions.NewCookieStore([]byte("//TODO: make this random and persist
 
 `func (router *Router) AddResource(resource *Resource)`
 
-#### func (*Router) [AddResourceDefinition](/router.go#L74)
+#### func (*Router) [AddResource](/router.go#L74)
 
-`func (router *Router) AddResourceDefinition(r *ResourceDefinition)`
+`func (router *Router) AddResource(r *Resource)`
 
 #### func (*Router) [LinkTo](/router.go#L116)
 

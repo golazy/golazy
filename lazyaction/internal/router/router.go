@@ -8,8 +8,8 @@ import (
 )
 
 type Router[T any] struct {
-	Routes       []*Route[T]
-	treeByMethod map[int]*routeTree[Route[T]]
+	Routes       []*Route
+	treeByMethod map[int]*routeTree[Route]
 }
 
 func (r *Router[T]) String() string {
@@ -27,20 +27,20 @@ func (r *Router[T]) String() string {
 func NewRouter[T any]() *Router[T] {
 
 	r := &Router[T]{
-		Routes:       []*Route[T]{},
-		treeByMethod: make(map[int]*routeTree[Route[T]], len(Methods)),
+		Routes:       []*Route{},
+		treeByMethod: make(map[int]*routeTree[Route], len(Methods)),
 	}
 	for i := range Methods {
-		r.treeByMethod[i] = &routeTree[Route[T]]{}
+		r.treeByMethod[i] = &routeTree[Route]{}
 	}
 	return r
 }
 
-func (r *Router[T]) Add(route *Route[T]) {
+func (r *Router[T]) Add(route *Route) {
 	r.Routes = append(r.Routes, route)
 
 	for _, verb := range strings.Split(route.Verb, "|") {
-		i := methodIndex(verb)
+		i := IsMethod(verb)
 		if i < 0 {
 			panic("Invalid verb: " + verb)
 		}
@@ -49,8 +49,8 @@ func (r *Router[T]) Add(route *Route[T]) {
 	}
 }
 
-func (r *Router[T]) Find(req *http.Request) *Route[T] {
-	i := methodIndex(req.Method)
+func (r *Router[T]) Find(req *http.Request) *Route {
+	i := IsMethod(req.Method)
 	if i < 0 {
 		panic("Invalid verb: " + req.Method)
 	}
@@ -134,7 +134,7 @@ func getFunctionName(i interface{}) string {
 }
 
 /*
-func (r *Router[T]) AddResourceDefinition(resource *ResourceDefinition) {
+func (r *Router[T]) AddResource(resource *Resource) {
 	r.AddResource(NewResource(resource))
 }
 

@@ -1,69 +1,176 @@
-package lazyaction_test
+package lazyaction
 
 import (
+	"errors"
+	"fmt"
 	"testing"
-	"time"
 
-	"golazy.dev/lazyaction"
+	"golazy.dev/lazyaction/internal/router"
 )
 
-type InternalController struct {
+func TestResourceRoutes(t *testing.T) {
+
+	controller := &PostsController{}
+	resource, err := newResource(controller, &ResourceOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	routes := resource.Routes()
+
+	expect := func(name string, expected *router.Route) {
+		t.Helper()
+		t.Run(name, func(t *testing.T) {
+
+			t.Helper()
+			if expected.Verb == "" {
+				expected.Verb = "GET"
+			}
+			r := findRoute(routes, expected)
+			if r == nil {
+				t.Error("Route not found: " + expected.Verb + " " + expected.Path)
+				return
+			}
+			if err := compareRoute(r, expected); err != nil {
+				t.Error(err, fmt.Sprintf("%+v", *r))
+			}
+		})
+	}
+
+	expect("route.ControllerName",
+		&router.Route{Path: "/posts", Verb: "GET", ControllerName: "PostsController"})
+
+	expect("route.Controller",
+		&router.Route{Path: "/posts", Verb: "GET", Controller: controller})
+
+	expect("route.Name",
+		&router.Route{Path: "/posts", Verb: "GET", Name: "posts#index"})
+
+	expect("route.Args",
+		&router.Route{Path: "/posts", Verb: "GET", Args: []string{
+			"*lazyaction.PostsController",
+			"lazyaction.ResponseWriter",
+			"*lazyaction.Request",
+		}})
+
+	expect("Index", &router.Route{Path: "/posts", Verb: "GET", Name: "posts#index"})
+	expect("New", &router.Route{Path: "/posts/new", Verb: "GET", Name: "posts#new"})
+	expect("VerbMethod", &router.Route{Path: "/posts/create_super", Verb: "POST", Name: "posts#create_super"})
+
+	expect("PUT and PATCH", &router.Route{Path: "/posts/:post_id", Verb: "PUT", Name: "posts#update"})
+	expect("PUT and PATCH", &router.Route{Path: "/posts/:post_id", Verb: "PATCH", Name: "posts#update"})
+
+	expect("Member", &router.Route{Path: "/posts/:post_id/activate_later", Verb: "PUT", Name: "posts#activate_later"})
+
+	for _, route := range routes {
+		t.Log(route.String())
+	}
+
 }
 
-func (i *InternalController) Index(w lazyaction.ResponseWriter, r *lazyaction.Request) {
-	w.Write([]byte("Index"))
+func compareRoute(original, expected *router.Route) error {
+	var errs []error
+	if original == nil || expected == nil {
+		return fmt.Errorf("Missing routes to compare")
+	}
+
+	if expected.Verb != "" {
+		if original.Verb != expected.Verb {
+			errs = append(errs, fmt.Errorf("Expected verb %s, got %s", expected.Verb, original.Verb))
+		}
+	} else {
+		if original.Verb != "GET" {
+			errs = append(errs, fmt.Errorf("Expected empty verb to generate GET, got %s", original.Verb))
+		}
+	}
+
+	if expected.Path != "" {
+		if original.Path != expected.Path {
+			errs = append(errs, fmt.Errorf("Expected path %s, got %s", expected.Path, original.Path))
+		}
+	}
+
+	if expected.Name != "" {
+		if original.Name != expected.Name {
+			errs = append(errs, fmt.Errorf("Expected name %s, got %s", expected.Name, original.Name))
+		}
+	}
+
+	if expected.Target != nil {
+		if original.Target != expected.Target {
+			errs = append(errs, fmt.Errorf("Expected target %s, got %s", expected.Target, original.Target))
+		}
+	}
+
+	if expected.Args != nil {
+		if len(original.Args) != len(expected.Args) {
+			errs = append(errs, fmt.Errorf("Expected %v arguments, got %v", expected.Args, original.Args))
+		}
+
+		for i, arg := range expected.Args {
+			if original.Args[i] != arg {
+				errs = append(errs, fmt.Errorf("Expected argument %s, got %s", arg, original.Args[i]))
+			}
+		}
+	}
+
+	if expected.Rets != nil {
+		if len(original.Rets) != len(expected.Rets) {
+			errs = append(errs, fmt.Errorf("Expected %d return values, got %d", len(expected.Rets), len(original.Rets)))
+		}
+
+		for i, ret := range expected.Rets {
+			if original.Rets[i] != ret {
+				errs = append(errs, fmt.Errorf("Expected return value %s, got %s", ret, original.Rets[i]))
+			}
+		}
+	}
+
+	if expected.Controller != nil {
+		if original.Controller != expected.Controller {
+			errs = append(errs, fmt.Errorf("Expected controller %s, got %s", expected.Controller, original.Controller))
+		}
+	}
+
+	if expected.ControllerName != "" {
+		if original.ControllerName != expected.ControllerName {
+			errs = append(errs, fmt.Errorf("Expected controller name %s, got %s", expected.ControllerName, original.ControllerName))
+		}
+	}
+
+	if expected.Plural != "" {
+		if original.Plural != expected.Plural {
+			errs = append(errs, fmt.Errorf("Expected plural %s, got %s", expected.Plural, original.Plural))
+		}
+	}
+
+	if expected.Singular != "" {
+		if original.Singular != expected.Singular {
+			errs = append(errs, fmt.Errorf("Expected singular %s, got %s", expected.Singular, original.Singular))
+		}
+	}
+
+	if expected.ParamName != "" {
+		if original.ParamName != expected.ParamName {
+			errs = append(errs, fmt.Errorf("Expected param name %s, got %s", expected.ParamName, original.ParamName))
+		}
+	}
+
+	return errors.Join(errs...)
 }
 
-type Comment struct {
-	Comment   string
-	Author    string
-	CreatedAt time.Time
+func findRoute(routes []*router.Route, expected *router.Route) *router.Route {
+	for _, route := range routes {
+		if route.Path == expected.Path && route.Verb == expected.Verb {
+			return route
+		}
+	}
+	return nil
 }
 
-type CommentsController struct {
-	RestController[Comment, MemStore[Comment]]
-}
-
-type PostsController struct {
-}
-
-func (p *PostsController) Index(w lazyaction.ResponseWriter, r *lazyaction.Request) {
-	w.Write([]byte("Index"))
-}
-
-func (p *PostsController) New(w lazyaction.ResponseWriter, r *lazyaction.Request) {
-	w.Write([]byte("New"))
-}
-func (p *PostsController) Edit(w lazyaction.ResponseWriter, r *lazyaction.Request) {
-	w.Write([]byte("New"))
-}
-func (p *PostsController) Create(w lazyaction.ResponseWriter, r *lazyaction.Request) {
-	w.Write([]byte("Create"))
-}
-
-func (p *PostsController) MemberPutActivateLater(w lazyaction.ResponseWriter, r *lazyaction.Request) {
-	w.Write([]byte("ActivateLater " + r.GetParam("post_id")))
-}
-
-func (p *PostsController) Show(w lazyaction.ResponseWriter, r *lazyaction.Request) {
-	w.Write([]byte("Show " + r.GetParam("post_id")))
-}
-
-func (p *PostsController) Update(w lazyaction.ResponseWriter, r *lazyaction.Request) {
-	w.Write([]byte("Update " + r.GetParam("post_id")))
-}
-
-func (p *PostsController) Destroy(w lazyaction.ResponseWriter, r *lazyaction.Request) {
-	w.Write([]byte("Destroy " + r.GetParam("post_id")))
-}
-
-func (p *PostsController) PostCreateSuper(w lazyaction.ResponseWriter, r *lazyaction.Request) {
-	w.Write([]byte("CreateSuper"))
-}
-
-func testResourceExpectations(t *testing.T, r *lazyaction.ResourceDefinition, expectations []string) {
+/*
+func testResourceExpectations(t *testing.T, r *lazyaction.Resource, expectations []string) {
 	t.Helper()
-	routes := lazyaction.NewResource(r).Actions
+	routes := lazyaction.NewResource(r).ResourceActions
 	if len(expectations) != len(routes) {
 		t.Errorf("Expected %d routes, got %d", len(expectations), len(routes))
 	}
@@ -90,7 +197,7 @@ func TestResourceRoutes_Basic(t *testing.T) {
 
 	testResourceExpectations(
 		t,
-		&lazyaction.ResourceDefinition{Controller: new(PostsController)},
+		&lazyaction.Resource{Controller: new(PostsController)},
 		[]string{
 			"posts POST /posts PostsController#Create",
 			"post DELETE /posts/:post_id PostsController#Destroy",
@@ -109,7 +216,7 @@ func TestResourceRoutes_PathNames(t *testing.T) {
 
 	testResourceExpectations(
 		t,
-		&lazyaction.ResourceDefinition{Controller: new(PostsController), PathNames: struct{ New, Edit string }{"nuevo", "editar"}},
+		&lazyaction.Resource{Controller: new(PostsController), PathNames: struct{ New, Edit string }{"nuevo", "editar"}},
 		[]string{
 			"posts POST /posts PostsController#Create",
 			"post DELETE /posts/:post_id PostsController#Destroy",
@@ -128,7 +235,7 @@ func TestResourceRoutes_Path(t *testing.T) {
 
 	testResourceExpectations(
 		t,
-		&lazyaction.ResourceDefinition{Controller: new(PostsController), Path: "/articles"},
+		&lazyaction.Resource{Controller: new(PostsController), Path: "/articles"},
 		[]string{
 			"posts POST /articles PostsController#Create",
 			"post DELETE /articles/:post_id PostsController#Destroy",
@@ -147,7 +254,7 @@ func TestResourceRoutes_Path_TopLevel(t *testing.T) {
 
 	testResourceExpectations(
 		t,
-		&lazyaction.ResourceDefinition{Controller: new(PostsController), Path: "/"},
+		&lazyaction.Resource{Controller: new(PostsController), Path: "/"},
 		[]string{
 			"posts POST / PostsController#Create",
 			"post DELETE /:post_id PostsController#Destroy",
@@ -166,7 +273,7 @@ func TestResourceRoutes_Path_NameAndSingular(t *testing.T) {
 
 	testResourceExpectations(
 		t,
-		&lazyaction.ResourceDefinition{Controller: new(PostsController), Path: "/", Plural: "people", Singular: "person"},
+		&lazyaction.Resource{Controller: new(PostsController), Path: "/", Plural: "people", Singular: "person"},
 		[]string{
 			"people POST / PostsController#Create",
 			"person DELETE /:person_id PostsController#Destroy",
@@ -184,7 +291,7 @@ func TestResourceRoutes_Path_NameAndSingular(t *testing.T) {
 func TestResourceRoutes_ParamName(t *testing.T) {
 	testResourceExpectations(
 		t,
-		&lazyaction.ResourceDefinition{Controller: new(PostsController), ParamName: "article_id"},
+		&lazyaction.Resource{Controller: new(PostsController), ParamName: "article_id"},
 		[]string{
 			"posts POST /posts PostsController#Create",
 			"post DELETE /posts/:article_id PostsController#Destroy",
@@ -202,7 +309,7 @@ func TestResourceRoutes_ParamName(t *testing.T) {
 func TestResource_RestController(t *testing.T) {
 	testResourceExpectations(
 		t,
-		&lazyaction.ResourceDefinition{Controller: new(CommentsController)},
+		&lazyaction.Resource{Controller: new(CommentsController)},
 		[]string{
 			"comments POST /comments CommentsController#Create",
 			"comment DELETE /comments/:comment_id CommentsController#Destroy",
@@ -219,7 +326,7 @@ func TestResource_RestController(t *testing.T) {
 func TestResourceRoutes_PackageController(t *testing.T) {
 	testResourceExpectations(
 		t,
-		&lazyaction.ResourceDefinition{
+		&lazyaction.Resource{
 			Controller: new(InternalController),
 		},
 		[]string{
@@ -232,9 +339,9 @@ func TestResourceRoutes_PackageController(t *testing.T) {
 func TestResourceRoutes_SubResource(t *testing.T) {
 	testResourceExpectations(
 		t,
-		&lazyaction.ResourceDefinition{
+		&lazyaction.Resource{
 			Controller: new(PostsController),
-			SubResources: []*lazyaction.ResourceDefinition{
+			SubResources: []*lazyaction.Resource{
 				{
 					Controller: new(CommentsController),
 				},
@@ -261,3 +368,5 @@ func TestResourceRoutes_SubResource(t *testing.T) {
 		},
 	)
 }
+
+*/

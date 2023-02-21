@@ -1,70 +1,40 @@
 package lazyaction
 
 import (
-	"fmt"
 	"path"
 	"reflect"
 	"strings"
 
+	"golazy.dev/lazyaction/internal/args"
+	"golazy.dev/lazyaction/internal/router"
 	"golazy.dev/lazysupport"
 )
 
-func NewResource(rd *ResourceDefinition) *Resource {
-	r := &Resource{
-		ResourceDefinition: *rd,
-		Actions:            []*Action{},
-	}
-
-	r.setDefaults()
-	r.analyzeMethods()
-	r.addSubResources()
-	return r
+type ResourceOptions struct {
+	ControllerName string // PostsController
+	Plural         string // posts
+	Singular       string // post
+	PathNames      struct{ New, Edit string }
+	Path           string // "" means default, "/" means empty
+	ParamName      string
 }
 
 type Resource struct {
-	ResourceDefinition
-	Prefix  []string
-	Actions []*Action
+	ResourceOptions
+	Controller any
+	Prefix     []string
 }
 
-func (r *Resource) addSubResources() {
-	for _, sr := range r.SubResources {
-		resource := NewResource(sr)
-		for _, action := range resource.Actions {
-			a := *action
-			segments := make([]string, len(r.Prefix))
-			copy(segments, r.Prefix)
-			segments = append(segments, r.ParamName)
+func newResource(controller any, opts *ResourceOptions) (*Resource, error) {
 
-			a.Path = "/" + strings.Join(segments, "/") + a.Path
-			a.RouteName = r.Singular + "_" + a.ResourceName
-			if a.ActionName != "" {
-				a.RouteName = a.ActionName + "_" + a.RouteName
-			}
-
-			for i := range a.ParamsPosition {
-				a.ParamsPosition[i] += len(segments)
-			}
-
-			a.ParamsPosition = append([]int{len(segments) - 1}, a.ParamsPosition...)
-
-			r.Actions = append(r.Actions, &a)
-		}
+	r := &Resource{
+		Controller: controller,
 	}
-}
 
-func (r *Resource) analyzeMethods() {
-	cType := reflect.TypeOf(r.Controller)
-	for i := 0; i < cType.NumMethod(); i++ {
-		method := cType.Method(i)
-		switch {
-		case IsRouterMethod(method.Name):
-			r.Actions = append(r.Actions, NewAction(method.Name, r))
-		}
+	if opts != nil {
+		r.ResourceOptions = *opts
 	}
-}
 
-func (r *Resource) setDefaults() {
 	if r.PathNames.New == "" {
 		r.PathNames.New = "new"
 	}
@@ -101,120 +71,112 @@ func (r *Resource) setDefaults() {
 		r.ParamName = ":" + strings.TrimPrefix(r.ParamName, ":")
 	}
 
+	return r, nil
 }
 
-func (r *Resource) pathForMethod(method string) (string, []int) {
-	argsPos := []int{}
+//	func (r *Resource) addSubResources() {
+//		for _, sr := range r.SubResources {
+//			resource := NewResource(sr)
+//			for _, action := range resource.ResourceActions {
+//				a := *action
+//				segments := make([]string, len(r.Prefix))
+//				copy(segments, r.Prefix)
+//				segments = append(segments, r.ParamName)
+//
+//				a.Path = "/" + strings.Join(segments, "/") + a.Path
+//				a.RouteName = r.Singular + "_" + a.ResourceName
+//				if a.ActionName != "" {
+//					a.RouteName = a.ActionName + "_" + a.RouteName
+//				}
+//
+//				for i := range a.ParamsPosition {
+//					a.ParamsPosition[i] += len(segments)
+//				}
+//
+//				a.ParamsPosition = append([]int{len(segments) - 1}, a.ParamsPosition...)
+//
+//				r.ResourceActions = append(r.ResourceActions, &a)
+//			}
+//		}
+//	}
+func (r *Resource) Routes() []*router.Route {
+	routes := []*router.Route{}
+	cType := reflect.TypeOf(r.Controller)
+	for i := 0; i < cType.NumMethod(); i++ {
+		method := cType.Method(i)
+		name := method.Name
 
+		ins, outs, err := args.ExtractArgs(method)
+		if err != nil {
+			panic(err)
+		}
+
+		verb, path, methodName := r.analyzeName(name)
+		routeName := r.Plural + "#" + lazysupport.Underscorize(methodName)
+
+		verbs := strings.Split(verb, "|")
+		for _, v := range verbs {
+
+			route := &router.Route{
+				Verb:           v,
+				Path:           path,
+				Name:           routeName,
+				Target:         method.Func,
+				Args:           ins,
+				Rets:           outs,
+				ControllerName: r.ControllerName,
+				Plural:         r.Plural,
+				Singular:       r.Singular,
+				ParamName:      r.ParamName,
+				Controller:     r.Controller,
+			}
+
+			routes = append(routes, route)
+		}
+
+	}
+	return routes
+}
+
+func (r *Resource) analyzeName(method string) (verb, path, methodName string) {
 	pathSegments := make([]string, len(r.Prefix))
 	copy(pathSegments, r.Prefix)
 
 	switch method {
 	case "Index":
+		return "GET", "/" + strings.Join(pathSegments, "/"), method
 	case "Create":
+		return "POST", "/" + strings.Join(pathSegments, "/"), method
 	case "New":
 		pathSegments = append(pathSegments, r.PathNames.New)
+		return "GET", "/" + strings.Join(pathSegments, "/"), method
 	case "Show":
-		argsPos = append(argsPos, len(pathSegments))
 		pathSegments = append(pathSegments, r.ParamName)
+		return "GET", "/" + strings.Join(pathSegments, "/"), method
 	case "Edit":
-		argsPos = append(argsPos, len(pathSegments))
 		pathSegments = append(pathSegments, r.ParamName)
 		pathSegments = append(pathSegments, r.PathNames.Edit)
+		return "GET", "/" + strings.Join(pathSegments, "/"), method
 	case "Update":
-		argsPos = append(argsPos, len(pathSegments))
 		pathSegments = append(pathSegments, r.ParamName)
+		return "PUT|PATCH", "/" + strings.Join(pathSegments, "/"), method
 	case "Destroy":
-		argsPos = append(argsPos, len(pathSegments))
 		pathSegments = append(pathSegments, r.ParamName)
-	default:
-		// Handle prefixes like Get, Post, Delete, Patch, Put, Options alone
-		if strings.HasPrefix(method, Member) {
-			argsPos = append(argsPos, len(pathSegments))
-			pathSegments = append(pathSegments, r.ParamName)
-			method = strings.TrimPrefix(method, Member)
-		}
-		_, method := prefixes.TrimPrefix(method)
-		if method != "" {
-			pathSegments = append(pathSegments, lazysupport.Underscorize(method))
-		}
-
+		return "DELETE", "/" + strings.Join(pathSegments, "/"), "destroy"
 	}
-
-	return "/" + strings.Join(pathSegments, "/"), argsPos
-}
-
-func (r *Resource) verbForMethod(method string) string {
-	verb := "GET"
-	switch method {
-	case "Index", "Edit", "New", "Show":
-	case "Create":
-		verb = "POST"
-	case "Update":
-		verb = "PUT|PATCH"
-	case "Destroy":
-		verb = "DELETE"
-	default:
+	// Add param if it is a member function
+	if strings.HasPrefix(method, Member) {
+		pathSegments = append(pathSegments, r.ParamName)
 		method = strings.TrimPrefix(method, Member)
-		verb, _ = prefixes.TrimPrefix(method)
-		if verb != "" {
-			verb = strings.ToUpper(verb)
-		}
 	}
-
-	return verb
-}
-
-func (r *Resource) nameForMethod(method string) (resourceName, action string) {
-	resourceName = r.Singular
-	switch method {
-	case "Index", "Create":
-		resourceName = r.Plural
-	case "Destroy", "Update", "Show":
-	case "New":
-		action = "new"
-	case "Edit":
-		action = "edit"
-	default:
-		method = strings.TrimPrefix(method, Member)
-		_, name := prefixes.TrimPrefix(method)
-		action = lazysupport.Underscorize(name)
+	verb, method = prefixes.TrimPrefix(method)
+	if method != "" {
+		pathSegments = append(pathSegments, lazysupport.Underscorize(method))
 	}
-	return
-}
-
-func (r *Resource) Routes() string {
-	t := lazysupport.Table{
-		Header: []string{"Verb", "Name", "Path", "Destination"},
-		Values: [][]string{},
-	}
-	for _, r := range r.Actions {
-		t.Values = append(t.Values, []string{
-			r.RouteName,
-			r.Verb,
-			r.Path,
-			r.Destination,
-			fmt.Sprintf("%+v", r.ParamsPosition),
-		})
-	}
-
-	return t.String()
+	return strings.ToUpper(verb), "/" + strings.Join(pathSegments, "/"), method
 }
 
 var prefixes = lazysupport.NewStringSet("Get", "Post", "Delete", "Patch", "Put", "Options")
 var Actions = lazysupport.NewStringSet("Index", "Show", "Create", "Update", "Destroy", "New", "Edit")
 
 const Member = "Member"
-
-func IsRouterMethod(method string) bool {
-	if Actions.Has(method) {
-		return true
-	}
-	if prefixes.HasPrefix(method) {
-		return true
-	}
-	if strings.HasPrefix(method, Member) {
-		return IsRouterMethod(strings.TrimPrefix(method, Member))
-	}
-	return false
-}

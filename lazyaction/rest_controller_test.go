@@ -1,4 +1,4 @@
-package lazyaction_test
+package lazyaction
 
 import (
 	"encoding/json"

@@ -80,7 +80,7 @@ func NewRouteTable[T any]() *routeTree[T] {
 // Paths not starting with / or ending with slash results in panic
 func (rt *routeTree[T]) Add(path string, dest *T) {
 	if len(path) == 0 || path[0] != '/' {
-		panic("Path should start with /")
+		panic("err: while trying to add route " + path + " to route table. Path should start with /")
 	}
 	if len(path) > 1 && path[len(path)-1] == '/' {
 		panic("Path can't end with /. Got " + path)

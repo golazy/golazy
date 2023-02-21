@@ -42,7 +42,7 @@ Resource
 * Create the routes
 * Takes care of the params and filters
 * Create the actions from the controller
-* Conf is in ResourceDefinition
+* Conf is in Resource
 
 
 Action

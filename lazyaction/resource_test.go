@@ -3,18 +3,17 @@ package lazyaction
 import (
 	"testing"
 
-	"golazy.dev/lazyaction/internal/router"
-	"golazy.dev/lazyaction/internal/router/routertest"
+	"golazy.dev/lazyaction/internal/args"
 )
 
-func NewResourceTester(t *testing.T, controller interface{}, options *ResourceOptions) (func(name string, expected *router.Route), []*router.Route) {
+func NewResourceTester(t *testing.T, controller interface{}, options *ResourceOptions) (func(name string, expected *Action), []*Action) {
 	t.Helper()
 	resource, err := newResource(controller, options)
 	if err != nil {
 		t.Fatal(err)
 	}
-	routes := resource.Routes()
-	expect := func(name string, expected *router.Route) {
+	routes := resource.Actions()
+	expect := func(name string, expected *Action) {
 		t.Helper()
 		t.Run(name, func(t *testing.T) {
 
@@ -22,7 +21,7 @@ func NewResourceTester(t *testing.T, controller interface{}, options *ResourceOp
 			if expected.Verb == "" {
 				expected.Verb = "GET"
 			}
-			err := routertest.ExpectRoute(routes, expected)
+			err := ExpectAction(routes, expected)
 			if err != nil {
 				t.Error(err)
 			}
@@ -36,85 +35,86 @@ func NewResourceTester(t *testing.T, controller interface{}, options *ResourceOp
 	return expect, routes
 }
 
-func TestResourceRoutes(t *testing.T) {
+func TestResourceActions(t *testing.T) {
 
 	controller := &PostsController{}
 	expect, _ := NewResourceTester(t, controller, &ResourceOptions{})
 
 	expect("route.ControllerName",
-		&router.Route{Path: "/posts", Verb: "GET", ControllerName: "PostsController"})
+		&Action{Path: "/posts", Verb: "GET", ControllerName: "PostsController"})
 
 	expect("route.Controller",
-		&router.Route{Path: "/posts", Verb: "GET", Controller: controller})
+		&Action{Path: "/posts", Verb: "GET", Controller: controller})
 
 	expect("route.Name",
-		&router.Route{Path: "/posts", Verb: "GET", Name: "posts#index"})
+		&Action{Path: "/posts", Verb: "GET", Name: "posts#index"})
 
 	expect("route.Args",
-		&router.Route{Path: "/posts", Verb: "GET", Args: []string{
-			"*lazyaction.PostsController",
-			"lazyaction.ResponseWriter",
-			"*lazyaction.Request",
-		}})
+		&Action{
+			Path: "/posts",
+			Verb: "GET",
+			Fn:   &args.Fn{Ins: []string{"http.ResponseWriter", "*http.Request"}},
+		},
+	)
 
-	expect("Index", &router.Route{Path: "/posts", Verb: "GET", Name: "posts#index"})
-	expect("New", &router.Route{Path: "/posts/new", Verb: "GET", Name: "posts#new"})
-	expect("VerbMethod", &router.Route{Path: "/posts/create_super", Verb: "POST", Name: "posts#create_super"})
+	expect("Index", &Action{Path: "/posts", Verb: "GET", Name: "posts#index"})
+	expect("New", &Action{Path: "/posts/new", Verb: "GET", Name: "posts#new"})
+	expect("VerbMethod", &Action{Path: "/posts/create_super", Verb: "POST", Name: "posts#create_super"})
 
-	expect("PUT and PATCH", &router.Route{Path: "/posts/:post_id", Verb: "PUT", Name: "posts#update"})
-	expect("PUT and PATCH", &router.Route{Path: "/posts/:post_id", Verb: "PATCH", Name: "posts#update"})
+	expect("PUT and PATCH", &Action{Path: "/posts/:post_id", Verb: "PUT", Name: "posts#update"})
+	expect("PUT and PATCH", &Action{Path: "/posts/:post_id", Verb: "PATCH", Name: "posts#update"})
 
-	expect("Member", &router.Route{Path: "/posts/:post_id/activate_later", Verb: "PUT", Name: "posts#activate_later"})
+	expect("Member", &Action{Path: "/posts/:post_id/activate_later", Verb: "PUT", Name: "posts#activate_later"})
 
-	expect("Plain action", &router.Route{Path: "/posts/about", Verb: "GET", Name: "posts#about"})
+	expect("Plain action", &Action{Path: "/posts/about", Verb: "GET", Name: "posts#about"})
 }
 
-func TestResourceRoutes_PathNames(t *testing.T) {
+func TestResourceActions_PathNames(t *testing.T) {
 	controller := &PostsController{}
 	expect, _ := NewResourceTester(t, controller, &ResourceOptions{PathNames: struct{ New, Edit string }{"nuevo", "editar"}})
 
-	expect("New route", &router.Route{Path: "/posts/nuevo", Verb: "GET", Name: "posts#new"})
-	expect("Edit route", &router.Route{Path: "/posts/:post_id/editar", Verb: "GET", Name: "posts#edit"})
+	expect("New route", &Action{Path: "/posts/nuevo", Verb: "GET", Name: "posts#new"})
+	expect("Edit route", &Action{Path: "/posts/:post_id/editar", Verb: "GET", Name: "posts#edit"})
 }
 
-func TestResourceRoutes_Path(t *testing.T) {
+func TestResourceActions_Path(t *testing.T) {
 	controller := &PostsController{}
 	expect, _ := NewResourceTester(t, controller, &ResourceOptions{Path: "/articles"})
 
-	expect("About route", &router.Route{Path: "/articles/about", Verb: "GET", Name: "posts#about"})
-	expect("Edit route", &router.Route{Path: "/articles/:post_id/edit", Verb: "GET", Name: "posts#edit"})
+	expect("About route", &Action{Path: "/articles/about", Verb: "GET", Name: "posts#about"})
+	expect("Edit route", &Action{Path: "/articles/:post_id/edit", Verb: "GET", Name: "posts#edit"})
 }
 
-func TestResourceRoutes_Path_Root(t *testing.T) {
+func TestResourceActions_Path_Root(t *testing.T) {
 	controller := &PostsController{}
 	expect, _ := NewResourceTester(t, controller, &ResourceOptions{Path: "/"})
 
-	expect("About route", &router.Route{Path: "/about", Verb: "GET", Name: "posts#about"})
-	expect("Edit route", &router.Route{Path: "/:post_id/edit", Verb: "GET", Name: "posts#edit"})
+	expect("About route", &Action{Path: "/about", Verb: "GET", Name: "posts#about"})
+	expect("Edit route", &Action{Path: "/:post_id/edit", Verb: "GET", Name: "posts#edit"})
 }
 
-func TestResourceRoutes_Names(t *testing.T) {
+func TestResourceActions_Names(t *testing.T) {
 	controller := &PostsController{}
 	expect, _ := NewResourceTester(t, controller, &ResourceOptions{Name: "Articles"})
 
-	expect("Index route", &router.Route{
+	expect("Index route", &Action{
 		Path: "/articles/:article_id", Verb: "GET",
 		Name: "articles#show", Singular: "article", Plural: "articles", ParamName: ":article_id"})
 }
 
-func TestResourceRoutes_Plural(t *testing.T) {
+func TestResourceActions_Plural(t *testing.T) {
 	controller := &PostsController{}
 	expect, _ := NewResourceTester(t, controller, &ResourceOptions{Plural: "articles"})
 
-	expect("Index route", &router.Route{
+	expect("Index route", &Action{
 		Path: "/articles/:post_id", Verb: "GET",
 		Name: "posts#show", Singular: "post", Plural: "articles", ParamName: ":post_id"})
 }
-func TestResourceRoutes_Singular(t *testing.T) {
+func TestResourceActions_Singular(t *testing.T) {
 	controller := &PostsController{}
 	expect, _ := NewResourceTester(t, controller, &ResourceOptions{Singular: "article"})
 
-	expect("Index route", &router.Route{
+	expect("Index route", &Action{
 		Path: "/posts/:article_id", Verb: "GET",
 		Name: "posts#show", Singular: "article", Plural: "posts", ParamName: ":article_id"})
 

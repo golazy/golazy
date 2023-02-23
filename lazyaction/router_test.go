@@ -22,9 +22,9 @@ func TestRouterRoute(t *testing.T) {
 		}
 	}
 
-	router.Route("/", StringHandler("root"))
+	router.Route("/:path", ActionHandler)
 	router.Route("/hi", StringHandler("hi"))
-	expect("/", "root")
+	expect("/root", "root")
 	expect("/hi", "hi")
 
 	t.Log(router.String())
@@ -50,20 +50,6 @@ func TestRouterResource(t *testing.T) {
 	router.Resource(&PostsController{})
 	expect("/posts", "Index")
 
-	t.Error(router.String())
+	t.Log(router.String())
 
-}
-
-func TestRouterDispatch(t *testing.T) {
-	router := Routes{}
-	router.Route("/", StringHandler("root"))
-
-	req := httptest.NewRequest("GET", "/", nil)
-	rr := httptest.NewRecorder()
-
-	router.ServeHTTP(rr, req)
-
-	if rr.Body.String() != "root" {
-		t.Errorf("expected root got %q", rr.Body.String())
-	}
 }

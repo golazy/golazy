@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"golazy.dev/lazyaction/internal/args"
-	"golazy.dev/lazyaction/internal/router"
 	"golazy.dev/lazysupport"
 )
 
@@ -21,6 +20,7 @@ type ResourceOptions struct {
 }
 
 type Resource struct {
+	Layout *args.Fn
 	ResourceOptions
 	Controller any
 	Prefix     []string
@@ -105,45 +105,84 @@ func newResource(controller any, opts *ResourceOptions) (*Resource, error) {
 //			}
 //		}
 //	}
-func (r *Resource) Routes() []*router.Route {
-	routes := []*router.Route{}
-	val := reflect.ValueOf(r.Controller)
+func (r *Resource) Actions() []*Action {
+	actions := []*Action{}
 	cType := reflect.TypeOf(r.Controller)
+	cVal := reflect.ValueOf(r.Controller)
+	generators := make(map[string][]args.Gen)
+
 	for i := 0; i < cType.NumMethod(); i++ {
-		method := val.Method(i)
 		methodT := cType.Method(i)
+		methodV := cVal.Method(i)
 		name := methodT.Name
-
-		ins, outs, err := args.ExtractArgs(method.Type())
-		if err != nil {
-			panic(err)
+		switch {
+		case isAction(name):
+			actions = append(actions, r.genRoutesForActionN(cVal, i)...)
+		case strings.HasPrefix(name, "Gen"):
+			fn := args.NewGen((cVal.Method(i)))
+			t := fn.Outs[0]
+			generators[t] = append(generators[t], fn)
+		case name == "RenderLayout":
+			r.Layout = args.NewFn(methodV)
 		}
-
-		verb, path, methodName, paramName := r.analyzeName(name)
-		routeName := lazysupport.Underscorize(r.Name) + "#" + lazysupport.Underscorize(methodName)
-
-		verbs := strings.Split(verb, "|")
-		for _, v := range verbs {
-
-			route := &router.Route{
-				Verb:           v,
-				Path:           path,
-				Name:           routeName,
-				Target:         method,
-				Args:           ins,
-				Rets:           outs,
-				ControllerName: r.ControllerName,
-				Plural:         r.Plural,
-				Singular:       r.Singular,
-				ParamName:      paramName,
-				Controller:     r.Controller,
-			}
-
-			routes = append(routes, route)
-		}
-
 	}
+
+	// fill actions with the generator
+	for _, action := range actions {
+		action.Generators = &generators
+		action.Layout = r.Layout
+	}
+
+	return actions
+}
+
+func (r *Resource) genRoutesForActionN(val reflect.Value, i int) []*Action {
+	routes := []*Action{}
+	method := val.Method(i)
+	cType := reflect.TypeOf(r.Controller)
+	methodT := cType.Method(i)
+
+	name := methodT.Name
+
+	verb, path, methodName, paramName := r.analyzeName(name)
+
+	routeName := lazysupport.Underscorize(r.Name) + "#" + lazysupport.Underscorize(methodName)
+
+	verbs := strings.Split(verb, "|")
+	for _, v := range verbs {
+
+		route := &Action{
+			Verb: v,
+			Path: path,
+			Name: routeName,
+			Fn:   args.NewFn(method),
+
+			ControllerName: r.ControllerName,
+			Plural:         r.Plural,
+			Singular:       r.Singular,
+			ParamName:      paramName,
+			Controller:     r.Controller,
+		}
+
+		routes = append(routes, route)
+	}
+
 	return routes
+
+}
+
+func isAction(name string) bool {
+	switch name {
+	case "Index", "Create", "New", "Show", "Edit", "Update", "Destroy":
+		return true
+	}
+	if strings.HasPrefix(name, Member) {
+		name = strings.TrimPrefix(name, Member)
+	}
+	if prefixes.HasPrefix(name) {
+		return true
+	}
+	return false
 }
 
 func (r *Resource) analyzeName(method string) (verb, path, methodName, paramName string) {

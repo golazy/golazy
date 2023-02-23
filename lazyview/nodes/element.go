@@ -44,6 +44,8 @@ func (r *Element) add(something interface{}) {
 		r.children = append(r.children, Text(fmt.Sprintf("%d", v)))
 	case uint64, uint32, uint16, uint8, uint:
 		r.children = append(r.children, Text(fmt.Sprintf("%d", v)))
+	case []byte:
+		r.children = append(r.children, Raw(v))
 	case nil:
 
 	default:

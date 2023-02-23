@@ -98,6 +98,15 @@ func (rt *routeTree[T]) Add(path string, dest *T) {
 func (rt *routeTree[T]) Routes() []routeInfo[T] {
 	return rt.node.Routes()
 }
+
+func (rt *routeTree[T]) All() []*T {
+	var all []*T
+	for _, r := range rt.Routes() {
+		all = append(all, r.t)
+	}
+	return all
+}
+
 func (n *routeTree[T]) Find(path string) *T {
 	if len(path) < 1 || path[0] != '/' {
 		panic("path should start with /")

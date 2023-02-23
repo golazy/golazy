@@ -1,12 +1,18 @@
 package lazyaction
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
 )
+
+func ActionHandler(id string) string {
+	return id
+}
 
 type StringHandler string
 
@@ -68,7 +74,7 @@ func (p *PostsController) PostCreateSuper(w ResponseWriter, r *Request) {
 	w.Write([]byte("CreateSuper"))
 }
 
-func (p *PostsController) About() string {
+func (p *PostsController) GetAbout() string {
 	return "about"
 }
 
@@ -256,4 +262,48 @@ func (TestController) GetGetError(s *Session) string {
 
 func (TestController) Delete() string {
 	return "Delete"
+}
+
+type TestUser string
+
+type UserProvider struct {
+}
+
+func (u *UserProvider) GenUser(r *http.Request) *TestUser {
+	user := TestUser("user")
+	return &user
+}
+
+type GeneratorController struct {
+	UserProvider
+}
+
+func (g *GeneratorController) Index(u *TestUser) string {
+	return string(*u)
+}
+
+type LayoutController struct {
+}
+
+func (g *LayoutController) RenderLayout(content []byte) io.WriterTo {
+	return bytes.NewBufferString("--" + string(content) + "--")
+}
+
+func (g *LayoutController) Index() string {
+	return "index"
+}
+
+type BasicLayout struct {
+}
+
+func (g *BasicLayout) RenderLayout(content []byte) string {
+	return "--" + string(content) + "--"
+}
+
+type PagesWithLayout struct {
+	BasicLayout
+}
+
+func (g *PagesWithLayout) Index() string {
+	return "embebed index"
 }

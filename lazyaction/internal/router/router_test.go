@@ -2,7 +2,6 @@ package router
 
 import (
 	"fmt"
-	"net/http/httptest"
 	"os"
 	"regexp"
 	"strings"
@@ -16,17 +15,9 @@ type TestRoute struct {
 func TestRouter(t *testing.T) {
 	router := NewRouter[TestRoute]()
 
-	route := &Route{
-		Verb: "GET",
-		Path: "/posts",
-		Name: "test_route",
-	}
+	router.Add("GET", "/posts", &TestRoute{Name: "test_route"})
 
-	router.Add(route)
-
-	req := httptest.NewRequest("GET", "/posts", nil)
-
-	if r := router.Find(req); r == nil || r.Name != "test_route" {
+	if r := router.Find("GET", "/posts"); r == nil || r.Name != "test_route" {
 		t.Error("Missing route", r.Name)
 	}
 }

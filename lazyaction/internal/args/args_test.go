@@ -1,6 +1,8 @@
 package args
 
 import (
+	"errors"
+	"fmt"
 	"reflect"
 	"testing"
 )
@@ -47,4 +49,75 @@ func TestExtractArgs(t *testing.T) {
 	cPtr := &controller{}
 	expect(cPtr.Index, []string{}, []string{"string"}, nil)
 	expect(cPtr.Show, []string{"int", "*args.myData"}, []string{"int", "error"}, nil)
+}
+
+func TestFn(t *testing.T) {
+	sampleFn := func(name string, age int) (string, error) {
+		return fmt.Sprintf("Hola %s, tienes %d años", name, age), nil
+	}
+	fn := NewFn(sampleFn)
+
+	// Check errors
+	_, err := fn.Call(InputSet{})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	// Prepare InputSet
+	stringGenerator := func(age int) (string, error) {
+		return fmt.Sprintf("Juan(%d)", age), nil
+	}
+	stringGenFn := NewGen(stringGenerator)
+
+	is := InputSet{
+		Generators: map[string][]Gen{"string": {stringGenFn}},
+		Values:     map[string][]any{"int": {10}},
+	}
+
+	outs, err := fn.Call(is)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s := outs[0].String()
+
+	if s != "Hola Juan(10), tienes 10 años" {
+		t.Errorf("expected %s, got %s", "", s)
+	}
+
+	if !outs[1].IsNil() {
+		t.Error("expected nil, got error")
+	}
+
+}
+
+func TestFn_SameArg(t *testing.T) {
+	sampleFn := func(id, age int) (string, error) {
+		return fmt.Sprintf("%d=>%d", id, age), nil
+	}
+	fn := NewFn(sampleFn)
+
+	_, err := fn.Call(InputSet{})
+	if errors.Is(err, new(ErrArgumentNotFound)) {
+		t.Fatal(err)
+	}
+
+	is := InputSet{
+		Values: map[string][]any{"int": {10, 7}},
+	}
+
+	outs, err := fn.Call(is)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := outs[0].String()
+
+	if s != "10=>7" {
+		t.Errorf("expected %s, got %s", "", s)
+	}
+
+	if !outs[1].IsNil() {
+		t.Error("expected nil, got error")
+	}
+
 }

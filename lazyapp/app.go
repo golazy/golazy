@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"golazy.dev/lazyaction"
+	"golazy.dev/lazyview/asset_manager"
 )
 
 // type App struct {
@@ -21,16 +22,26 @@ import (
 // }
 
 type App struct {
-	Name        string
-	Router      lazyaction.Routes
-	Server      http.Server
-	MiddleWares []lazyaction.Middleware
+	Name         string
+	Router       lazyaction.Routes
+	Server       http.Server
+	AssetManager *asset_manager.AssetManager
+	MiddleWares  []Middleware
 }
 
 func (a *App) Shutdown(ctx context.Context) error {
 	return a.Server.Shutdown(ctx)
 }
+
+func (a *App) initialize() {
+	if a.AssetManager == nil {
+		a.Router = lazyaction.Routes{}
+	}
+
+}
+
 func (a *App) Boot() {
+	a.initialize()
 
 	viper.SetConfigFile(".env")
 	viper.ReadInConfig()

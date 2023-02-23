@@ -1,39 +1,38 @@
-package routertest
+package lazyaction
 
 import (
 	"errors"
 	"fmt"
-
-	"golazy.dev/lazyaction/internal/router"
+	"reflect"
 )
 
-func ExpectRoute(routes []*router.Route, expected *router.Route) error {
+func ExpectAction(actions []*Action, expected *Action) error {
 	if expected.Verb == "" {
 		expected.Verb = "GET"
 	}
-	r := FindRoute(routes, expected)
+	r := FindAction(actions, expected)
 	if r == nil {
-		return errors.New("Route not found: " + expected.Verb + " " + expected.Path)
+		return errors.New("Action not found: " + expected.Verb + " " + expected.Path)
 	}
-	if err := CompareRoute(r, expected); err != nil {
+	if err := CompareAction(r, expected); err != nil {
 		return err
 	}
 	return nil
 }
 
-func FindRoute(routes []*router.Route, expected *router.Route) *router.Route {
-	for _, route := range routes {
-		if route.Path == expected.Path && route.Verb == expected.Verb {
-			return route
+func FindAction(actions []*Action, expected *Action) *Action {
+	for _, action := range actions {
+		if action.Path == expected.Path && action.Verb == expected.Verb {
+			return action
 		}
 	}
 	return nil
 }
 
-func CompareRoute(original, expected *router.Route) error {
+func CompareAction(original, expected *Action) error {
 	var errs []error
 	if original == nil || expected == nil {
-		return fmt.Errorf("missing routes to compare")
+		return fmt.Errorf("missing actions to compare")
 	}
 
 	if expected.Verb != "" {
@@ -57,27 +56,25 @@ func CompareRoute(original, expected *router.Route) error {
 			errs = append(errs, fmt.Errorf("expected name %s, got %s", expected.Name, original.Name))
 		}
 	}
-
-	if expected.Args != nil {
-		if len(original.Args) != len(expected.Args) {
-			errs = append(errs, fmt.Errorf("expected %v arguments, got %v", expected.Args, original.Args))
-		}
-
-		for i, arg := range expected.Args {
-			if original.Args[i] != arg {
-				errs = append(errs, fmt.Errorf("expected argument %s, got %s", arg, original.Args[i]))
+	if expected.Fn != nil {
+		if original.Fn == nil {
+			errs = append(errs, fmt.Errorf("expected function %s, got nil", expected.Fn))
+		} else {
+			if expected.Fn.Ins != nil {
+				if !reflect.DeepEqual(original.Fn.Ins, expected.Fn.Ins) {
+					errs = append(errs, fmt.Errorf("expected argument %s, got %s", expected.Fn.Ins, original.Fn.Ins))
+				}
 			}
-		}
-	}
+			if expected.Fn.Outs != nil {
+				if len(original.Fn.Outs) != len(expected.Fn.Outs) {
+					errs = append(errs, fmt.Errorf("expected %d return values, got %d", len(expected.Fn.Outs), len(original.Fn.Outs)))
+				}
 
-	if expected.Rets != nil {
-		if len(original.Rets) != len(expected.Rets) {
-			errs = append(errs, fmt.Errorf("expected %d return values, got %d", len(expected.Rets), len(original.Rets)))
-		}
-
-		for i, ret := range expected.Rets {
-			if original.Rets[i] != ret {
-				errs = append(errs, fmt.Errorf("expected return value %s, got %s", ret, original.Rets[i]))
+				for i, ret := range expected.Fn.Outs {
+					if original.Fn.Outs[i] != ret {
+						errs = append(errs, fmt.Errorf("expected return value %s, got %s", ret, original.Fn.Outs[i]))
+					}
+				}
 			}
 		}
 	}

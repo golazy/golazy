@@ -1,61 +1,69 @@
 package router
 
 import (
-	"net/http"
 	"strings"
-
-	"golazy.dev/lazysupport"
 )
 
 type Router[T any] struct {
-	Routes       []*Route
-	treeByMethod map[int]*routeTree[Route]
+	treeByMethod map[int]*routeTree[T]
 }
 
+/*
 func (r *Router[T]) String() string {
 	t := lazysupport.Table{
 		Header: []string{"Name", "Verb", "Path"},
 		Values: [][]string{},
 	}
+	for _, rt := range r.treeByMethod {
+		t.Values = append(t.Values, rt.String())
+	}
+	treeByMethod := r.treeByMethod
 	for _, route := range r.Routes {
 		t.Values = append(t.Values, []string{route.Name, route.Verb, route.Path})
 	}
 
 	return t.String()
 }
+*/
 
 func NewRouter[T any]() *Router[T] {
 
 	r := &Router[T]{
-		Routes:       []*Route{},
-		treeByMethod: make(map[int]*routeTree[Route], len(Methods)),
+		treeByMethod: make(map[int]*routeTree[T], len(Methods)),
 	}
 	for i := range Methods {
-		r.treeByMethod[i] = &routeTree[Route]{}
+		r.treeByMethod[i] = &routeTree[T]{}
 	}
 	return r
 }
 
-func (r *Router[T]) Add(route *Route) {
-	r.Routes = append(r.Routes, route)
+func (r *Router[T]) All() []*T {
+	var routes []*T
+	for _, rt := range r.treeByMethod {
+		routes = append(routes, rt.All()...)
+	}
+	return routes
+}
 
-	for _, verb := range strings.Split(route.Verb, "|") {
+func (r *Router[T]) Add(verb, path string, thing *T) {
+
+	for _, verb := range strings.Split(verb, "|") {
 		i := IsMethod(verb)
 		if i < 0 {
 			panic("Invalid verb: " + verb)
 		}
 		rt := r.treeByMethod[i]
-		rt.Add(route.Path, route)
+		rt.Add(path, thing)
 	}
 }
 
-func (r *Router[T]) Find(req *http.Request) *Route {
-	i := IsMethod(req.Method)
+func (r *Router[T]) Find(verb, path string) *T {
+	i := IsMethod(verb)
 	if i < 0 {
-		panic("Invalid verb: " + req.Method)
+		panic("Invalid verb: " + verb)
 	}
 	rt := r.treeByMethod[i]
-	return rt.Find(req.URL.Path)
+	return rt.Find(path)
 }
 
 /*

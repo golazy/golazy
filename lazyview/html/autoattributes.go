@@ -77,6 +77,11 @@ func Border(value ...string) nodes.Attr {
   return nodes.NewAttr("border", value...)
 }
 
+// Blocking sets blocking attribute
+func Blocking(value ...string) nodes.Attr {
+  return nodes.NewAttr("blocking", value...)
+}
+
 // Buffered sets buffered attribute
 func Buffered(value ...string) nodes.Attr {
   return nodes.NewAttr("buffered", value...)
@@ -435,6 +440,16 @@ func Muted(value ...string) nodes.Attr {
 // Name sets name attribute
 func Name(value ...string) nodes.Attr {
   return nodes.NewAttr("name", value...)
+}
+
+// Nomodule sets nomodule attribute
+func Nomodule(value ...string) nodes.Attr {
+  return nodes.NewAttr("nomodule", value...)
+}
+
+// Nonce sets nonce attribute
+func Nonce(value ...string) nodes.Attr {
+  return nodes.NewAttr("nonce", value...)
 }
 
 // Novalidate sets novalidate attribute

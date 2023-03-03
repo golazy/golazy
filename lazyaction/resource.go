@@ -1,6 +1,7 @@
 package lazyaction
 
 import (
+	"net/url"
 	"path"
 	"reflect"
 	"strings"
@@ -15,12 +16,16 @@ type ResourceOptions struct {
 	Singular       string // post
 	PathNames      struct{ New, Edit string }
 	Path           string // "" means default, "/" means empty
+	Scheme         string
+	Domain         string
+	Port           string
 	ParamName      string
 	Name           string
 }
 
 type Resource struct {
-	Layout *args.Fn
+	BaseUrl url.URL
+	Layout  *args.Fn
 	ResourceOptions
 	Controller any
 	Prefix     []string
@@ -66,6 +71,7 @@ func newResource(controller any, opts *ResourceOptions) (*Resource, error) {
 	}
 
 	if r.Path == "" {
+		r.Path = "/"
 		r.Prefix = []string{r.Plural}
 	} else if r.Path != "/" {
 		r.Prefix = strings.Split(strings.TrimPrefix(r.Path, "/"), "/")
@@ -151,9 +157,19 @@ func (r *Resource) genRoutesForActionN(val reflect.Value, i int) []*Action {
 	verbs := strings.Split(verb, "|")
 	for _, v := range verbs {
 
+		u, err := url.Parse(path)
+		if err != nil {
+			panic(err)
+		}
+		u.Scheme = r.Scheme
+		u.Host = r.Domain
+		if r.Port != "" {
+			u.Host = u.Host + ":" + r.Port
+		}
+
 		route := &Action{
 			Verb: v,
-			Path: path,
+			URL:  *u,
 			Name: routeName,
 			Fn:   args.NewFn(method),
 
@@ -228,6 +244,6 @@ func (r *Resource) analyzeName(method string) (verb, path, methodName, paramName
 }
 
 var prefixes = lazysupport.NewStringSet("Get", "Post", "Delete", "Patch", "Put", "Options")
-var Actions = lazysupport.NewStringSet("Index", "Show", "Create", "Update", "Destroy", "New", "Edit")
+var DefaultActions = lazysupport.NewStringSet("Index", "Show", "Create", "Update", "Destroy", "New", "Edit")
 
 const Member = "Member"

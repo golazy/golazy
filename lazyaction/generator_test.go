@@ -7,7 +7,7 @@ import (
 
 func TestGenerator(t *testing.T) {
 
-	r := &Routes{}
+	r := &Dispatcher{}
 
 	r.Resource(&GeneratorController{})
 

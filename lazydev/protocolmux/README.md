@@ -52,11 +52,15 @@ var (
 
 `type Mux struct { ... }`
 
-#### func (*Mux) [Listen](/protocolmux.go#L66)
+#### func (*Mux) [Close](/protocolmux.go#L67)
+
+`func (m *Mux) Close()`
+
+#### func (*Mux) [Listen](/protocolmux.go#L75)
 
 `func (m *Mux) Listen() error`
 
-#### func (*Mux) [ListenTo](/protocolmux.go#L51)
+#### func (*Mux) [ListenTo](/protocolmux.go#L52)
 
 `func (m *Mux) ListenTo(prefixes [][]byte) net.Listener`
 

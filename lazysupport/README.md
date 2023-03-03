@@ -2,6 +2,10 @@
 
 ## Variables
 
+```golang
+var DefaultCache = MemCache{}
+```
+
 ShouldCache set if the inflector should (or not) cache the inflections
 
 ```golang
@@ -9,6 +13,10 @@ var ShouldCache = false
 ```
 
 ## Functions
+
+### func [Cache](/cache.go#L21)
+
+`func Cache(fn func() ([]byte, error), key ...any) ([]byte, error)`
 
 ### func [Camelize](/inflector.go#L147)
 
@@ -240,6 +248,14 @@ multiple_http_calls
 
 ## Types
 
+### type [MemCache](/cache.go#L3)
+
+`type MemCache map[any][]byte`
+
+#### func (MemCache) [Cache](/cache.go#L5)
+
+`func (c MemCache) Cache(fn func() ([]byte, error), key ...any) ([]byte, error)`
+
 ### type [Set](/set.go#L5)
 
 `type Set[T comparable] map[T]Void`
@@ -256,9 +272,9 @@ multiple_http_calls
 
 `type Strings Set[string]`
 
-#### func [NewStrings](/strings.go#L30)
+#### func [NewStringSet](/strings.go#L30)
 
-`func NewStrings(s ...string) Strings`
+`func NewStringSet(s ...string) Strings`
 
 #### func (Strings) [Has](/strings.go#L25)
 
@@ -311,6 +327,8 @@ Other Filem          123123
 ## Sub Packages
 
 * [log](./log)
+
+* [reflect](./reflect)
 
 ---
 Readme created from Go doc with [goreadme](https://github.com/posener/goreadme)

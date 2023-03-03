@@ -1,0 +1,80 @@
+package router
+
+import "net/http"
+
+type MethodMatcher[T any] struct {
+	get     Matcher[T]
+	post    Matcher[T]
+	put     Matcher[T]
+	delete  Matcher[T]
+	patch   Matcher[T]
+	options Matcher[T]
+}
+
+func NewMethodMatcher[T any]() Matcher[T] {
+	return &MethodMatcher[T]{
+		get:     NewSchemeMatcher[T](),
+		post:    NewSchemeMatcher[T](),
+		put:     NewSchemeMatcher[T](),
+		delete:  NewSchemeMatcher[T](),
+		patch:   NewSchemeMatcher[T](),
+		options: NewSchemeMatcher[T](),
+	}
+}
+
+func (vm *MethodMatcher[T]) All() []Route[T] {
+	all := []Route[T]{}
+
+	fill := func(method string, m Matcher[T]) {
+		for _, r := range m.All() {
+			r.Req.Method = method
+			all = append(all, r)
+		}
+	}
+
+	fill(http.MethodGet, vm.get)
+	fill(http.MethodPost, vm.post)
+	fill(http.MethodPut, vm.put)
+	fill(http.MethodDelete, vm.delete)
+	fill(http.MethodPatch, vm.patch)
+	fill(http.MethodOptions, vm.options)
+
+	return all
+}
+func (vm *MethodMatcher[T]) Add(req *http.Request, t *T) {
+	switch req.Method {
+	case http.MethodGet:
+		vm.get.Add(req, t)
+	case http.MethodPost:
+		vm.post.Add(req, t)
+	case http.MethodPut:
+		vm.put.Add(req, t)
+	case http.MethodDelete:
+		vm.delete.Add(req, t)
+	case http.MethodPatch:
+		vm.patch.Add(req, t)
+	case http.MethodOptions:
+		vm.options.Add(req, t)
+	default:
+		panic("Unknown method " + req.Method)
+	}
+}
+
+func (vm *MethodMatcher[T]) Find(req *http.Request) *T {
+	switch req.Method {
+	case http.MethodGet:
+		return vm.get.Find(req)
+	case http.MethodPost:
+		return vm.post.Find(req)
+	case http.MethodPut:
+		return vm.put.Find(req)
+	case http.MethodDelete:
+		return vm.delete.Find(req)
+	case http.MethodPatch:
+		return vm.patch.Find(req)
+	case http.MethodOptions:
+		return vm.options.Find(req)
+	default:
+		panic("Unknown method " + req.Method)
+	}
+}

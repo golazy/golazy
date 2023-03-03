@@ -1,2 +1,0 @@
-// Package wsclients
-package wsclients

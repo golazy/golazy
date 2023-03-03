@@ -3,6 +3,7 @@ package lazyaction
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"golazy.dev/lazyaction/internal/args"
@@ -10,7 +11,7 @@ import (
 
 type Action struct {
 	Verb       string
-	Path       string
+	URL        url.URL
 	Name       string
 	Handler    http.HandlerFunc // If Fn is defined, Target is ignored (for generated code)
 	Fn         *args.Fn
@@ -25,7 +26,7 @@ type Action struct {
 }
 
 func (r *Action) String() string {
-	base := fmt.Sprintf("%9s %s %s", r.Verb, r.Path, r.Name)
+	base := fmt.Sprintf("%9s %s %s", r.Verb, r.URL.String(), r.Name)
 	opts := []string{}
 
 	if r.ControllerName != "" {

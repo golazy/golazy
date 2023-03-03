@@ -12,8 +12,8 @@ import (
 
 func TestProtocolMux(t *testing.T) {
 	rand.Seed(time.Now().UnixNano())
-	d := func(s string, args ...interface{}) { t.Logf("T: "+s, args...) }
-	//e := func(s string, args ...interface{}) { t.Errorf("T: "+s, args...) }
+	d := func(s string, args ...any) { t.Logf("T: "+s, args...) }
+	//e := func(s string, args ...any) { t.Errorf("T: "+s, args...) }
 
 	var wg sync.WaitGroup
 
@@ -50,8 +50,8 @@ func TestProtocolMux(t *testing.T) {
 	wg.Add(1)
 	// A client that writes "hola mundo" and expects "adios". Then clsoes
 	go func() {
-		d := func(s string, args ...interface{}) { t.Logf("C: "+s, args...) }
-		e := func(s string, args ...interface{}) { t.Errorf("C: "+s, args...) }
+		d := func(s string, args ...any) { t.Logf("C: "+s, args...) }
+		e := func(s string, args ...any) { t.Errorf("C: "+s, args...) }
 		defer wg.Done()
 		d("Dialing")
 		conn, err := net.Dial("tcp", addr)

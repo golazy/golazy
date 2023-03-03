@@ -12,7 +12,7 @@ func ExpectAction(actions []*Action, expected *Action) error {
 	}
 	r := FindAction(actions, expected)
 	if r == nil {
-		return errors.New("Action not found: " + expected.Verb + " " + expected.Path)
+		return errors.New("Action not found: " + expected.Verb + " " + expected.URL.String())
 	}
 	if err := CompareAction(r, expected); err != nil {
 		return err
@@ -22,7 +22,7 @@ func ExpectAction(actions []*Action, expected *Action) error {
 
 func FindAction(actions []*Action, expected *Action) *Action {
 	for _, action := range actions {
-		if action.Path == expected.Path && action.Verb == expected.Verb {
+		if action.URL == expected.URL && action.Verb == expected.Verb {
 			return action
 		}
 	}
@@ -45,9 +45,9 @@ func CompareAction(original, expected *Action) error {
 		}
 	}
 
-	if expected.Path != "" {
-		if original.Path != expected.Path {
-			errs = append(errs, fmt.Errorf("expected path %s, got %s", expected.Path, original.Path))
+	if expected.URL.String() != "" {
+		if original.URL != expected.URL {
+			errs = append(errs, fmt.Errorf("expected path %s, got %s", expected.URL.String(), original.URL.String()))
 		}
 	}
 

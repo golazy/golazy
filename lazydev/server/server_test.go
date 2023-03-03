@@ -7,51 +7,61 @@ import (
 	"os"
 	"strings"
 	"testing"
-	"time"
 
 	"golazy.dev/lazydev/server"
 )
 
 func TestServer(t *testing.T) {
+
 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 
-	s := server.Server{
-		BuildDir:      "test_server",
-		BuildArgs:     strings.Split("-buildvcs=false", " "), // Required while https://go-review.googlesource.com/c/go/+/463849 is solved
-		HttpHandler:   StringHandler("http"),
-		PrefixHandler: StringHandler("golazy"),
-		FallbackHandler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Refresh", "1")
-			w.Write([]byte("fallback"))
-		}),
-		Addr: "127.0.0.1:34412",
+	app := &TestDevApp{
+		E: make(chan server.Event, 10000),
 	}
+	s := server.New(server.Options{
+		App:       app,
+		BuildDir:  "test_server",
+		BuildArgs: strings.Split("-buildvcs=false", " "), // Required while https://go-review.googlesource.com/c/go/+/463849 is solved
+		Addr:      "127.0.0.1:34412",
+	})
+	defer func() {
+		types := make([]string, 0)
+		for _, e := range app.events {
+			types = append(types, e.Type())
+		}
+
+		t.Log(types)
+	}()
+
+	// Ensure we have clean state
+	os.Remove("test_server/main.go")
 
 	go s.ListenAndServe()
 
-	expect(t, "http://localhost:34412", "http")
-	expect(t, "https://localhost:34412", "backend")
-	expect(t, "https://localhost:34412/golazy", "golazy")
+	app.waitFor("app_start")
+	expect(t, "http://localhost:34412", "proxy")
+	expect(t, "https://localhost:34412", "proxy")
 
+	// Fail a build
 	os.Create("test_server/main.go")
 	defer os.Remove("test_server/main.go")
 
-	time.Sleep(1 * time.Second)
-	expect(t, "https://localhost:34412", "fallback")
+	app.waitFor("app_stop")
+
+	expect(t, "http://localhost:34412", "portal")
+	expect(t, "https://localhost:34412", "portal")
 
 	os.Remove("test_server/main.go")
-	time.Sleep(1 * time.Second)
-	expect(t, "https://localhost:34412", "backend")
 
-}
+	app.waitFor("build_success")
+	app.waitFor("app_start")
 
-type StringHandler string
+	expect(t, "https://localhost:34412", "proxy")
 
-func (h StringHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte(h))
 }
 
 func expect(t *testing.T, url, expectation string) {
+	t.Helper()
 	res, err := http.Get(url)
 	if err != nil {
 		t.Fatal(err)

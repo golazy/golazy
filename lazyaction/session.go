@@ -59,7 +59,7 @@ func (s *Session) Set(key string, val any) {
 	s.s.Values[key] = val
 }
 
-func (s *Session) Flashes(vars ...string) []interface{} {
+func (s *Session) Flashes(vars ...string) []any {
 	ret := s.s.Flashes(vars...)
 	s.modified = true
 	return ret

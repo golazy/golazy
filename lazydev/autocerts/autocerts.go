@@ -286,3 +286,22 @@ func (ac *Autocerts) generateCertFor(domain string) (*tls.Certificate, error) {
 	return &cert, err
 
 }
+
+// TLSConfigFile is a helper that returns a tls config with the certificate from the file
+// If the file does not exists, a new certificate is created
+func TLSConfigFile(path string) (*tls.Config, error) {
+
+	ac, err := LoadOrCreate(path, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	certPool := x509.NewCertPool()
+	certPool.AddCert(ac.CACert())
+
+	return &tls.Config{
+		GetCertificate: ac.CertificateFromHello,
+		RootCAs:        certPool,
+	}, nil
+
+}

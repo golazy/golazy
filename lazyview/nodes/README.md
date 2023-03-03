@@ -49,9 +49,9 @@ WriteTo writes the current string to the writer w
 
 `type Element struct { ... }`
 
-#### func [NewElement](/element.go#L289)
+#### func [NewElement](/element.go#L295)
 
-`func NewElement(tagname string, options ...interface{ ... }) Element`
+`func NewElement(tagname string, options ...any) Element`
 
 NewElement creates a new element with the provided tagname and the provided options
 The options can be:
@@ -81,11 +81,11 @@ content.WriteTo(os.Stdout)
 <!DOCTYPE html><html lang=en><head><title>Mi pagina</title><body><h1>This is my page</h1>
 ```
 
-#### func (Element) [String](/element.go#L274)
+#### func (Element) [String](/element.go#L280)
 
 `func (r Element) String() string`
 
-#### func (Element) [WriteTo](/element.go#L226)
+#### func (Element) [WriteTo](/element.go#L232)
 
 `func (r Element) WriteTo(w io.Writer) (n64 int64, err error)`
 

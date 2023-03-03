@@ -7,7 +7,7 @@ import (
 
 func TestLayout(t *testing.T) {
 
-	r := &Routes{}
+	r := &Dispatcher{}
 
 	r.Resource(&LayoutController{})
 
@@ -26,7 +26,7 @@ func TestLayout(t *testing.T) {
 
 func TestLayout_Embebed(t *testing.T) {
 
-	r := &Routes{}
+	r := &Dispatcher{}
 
 	r.Resource(&PagesWithLayout{}, &ResourceOptions{Path: "layout"})
 

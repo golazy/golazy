@@ -1,5 +1,10 @@
 
 
+install:
+  set -eux
+  cd cmd/lazy
+  go install -buildvcs=false
+
 docs: # Generates the README.md for all directories
 	dirs=$(find -type d | grep -v ".git" | grep -v "vscode" | grep -v "examples" | grep -v "^\.$" | grep -v "_dirty")
 	for dir in $dirs; do

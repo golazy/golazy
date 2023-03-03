@@ -2,46 +2,20 @@ package protocolmux
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
-	"io"
-	"log"
 	"net"
+	"net/http"
+	"sync"
+
+	"golang.org/x/exp/slog"
 )
 
-type handler struct {
-	prefixes [][]byte
-	conns    chan (*conn)
-	mux      *Mux
-}
-
-func (h *handler) Accept() (net.Conn, error) {
-	c, ok := <-h.conns
-	if !ok {
-		return nil, io.EOF
-	}
-	return c, nil
-}
-
-func (h *handler) Addr() net.Addr {
-	return h.mux.L.Addr()
-}
-
-func (h *handler) Close() error {
-	for i, handler := range h.mux.handlers {
-		if handler == h {
-			h.mux.handlers = append(h.mux.handlers[:i], h.mux.handlers[i+1:]...)
-		}
-	}
-
-	close(h.conns)
-
-	return nil
-}
-
 type Mux struct {
-	L        net.Listener
-	handlers []*handler
-	closed   bool
+	L         net.Listener
+	listeners []*listener
+	closed    bool
+	lock      sync.Mutex
 }
 
 type conn struct {
@@ -49,47 +23,76 @@ type conn struct {
 	prefix []byte
 }
 
+var log = func() *slog.Logger {
+	return slog.Default().WithGroup("protocolmux")
+}
+
 func (m *Mux) ListenTo(prefixes [][]byte) net.Listener {
-	h := &handler{
+	h := &listener{
 		prefixes: prefixes,
 		conns:    make(chan (*conn)),
 		mux:      m,
 	}
-	m.handlers = append(m.handlers, h)
+	m.listeners = append(m.listeners, h)
 
 	return h
 }
 
-func (m *Mux) l(v ...interface{}) {
-	fmt.Println(append([]interface{}{"MUX:"}, v...)...)
-}
+// Close closes all the listeners, and the underlying listener
+//
+// # For a graceful shutdown, call Close() on all the listeners first and then call Close() on the muxer
+//
+// For example:
+//
+//	httpServer.Close()  // This will close the http listener
+//	httpsServer.Close() // Close the https listener
+//	muxer.Close()       // Close the underlying listener
+//
+// If you call Close() on the muxer first, its likely that the listeners will return an error
+func (m *Mux) Close() error {
+	m.lock.Lock()
+	defer m.lock.Unlock()
 
-func (m *Mux) Close() {
-	m.closed = true
-	m.L.Close()
-	for _, h := range m.handlers {
+	// Close all the listeners
+	for _, h := range m.listeners {
 		h.Close()
 	}
+	// Mark as closed
+	m.closed = true
+	// Close the underlying listener
+	return m.L.Close()
 }
 
+// Listen starts listening for connections in the underlying Listener
+// and dispatches them to the correct handler
+// It returns an error if the underlying listener returns an error
+// It returns net.ErrClosed if the muxer is closed
 func (m *Mux) Listen() error {
-	m.l("starting listener")
+	log().Info("starting listener", "addr", m.L.Addr())
 	if m.L == nil {
 		return fmt.Errorf("listener not defined")
 	}
 
 	for {
-		m.l("Waiting for connection")
+		log().Debug("waiting for connection")
 		conn, err := m.L.Accept()
-		fmt.Println()
-		if err != nil {
-			if m.closed {
-				return nil
+		m.lock.Lock()
+		var netErr *net.OpError
+		if errors.As(err, &netErr) {
+			return http.ErrServerClosed
+		}
+		if m.closed {
+			if err == nil {
+				conn.Close()
 			}
-			m.l("Got error", err)
+			return net.ErrClosed
+		}
+		m.lock.Unlock()
+		if err != nil {
+			log().Error("error while accepting connection", err)
 			return err
 		}
-		m.l("Got new Connection", conn.RemoteAddr())
+		log().Debug("got new connection", "addr", conn.RemoteAddr())
 		go m.handleConn(conn)
 	}
 }
@@ -107,10 +110,10 @@ func (m *Mux) handleConn(c net.Conn) {
 	buf := make([]byte, 1024)
 	n, err := c.Read(buf)
 	if err != nil {
-		log.Println("erro while handling a connection:", err)
+		log().Debug("error while reading from connection", "err", err, "addr", c.RemoteAddr())
 	}
 
-	for _, handler := range m.handlers {
+	for _, handler := range m.listeners {
 		for _, prefix := range handler.prefixes {
 			if bytes.HasPrefix(buf[:n], prefix) {
 				c := &conn{Conn: c, prefix: buf[:n]}
@@ -119,6 +122,6 @@ func (m *Mux) handleConn(c net.Conn) {
 			}
 		}
 	}
-	log.Println("no protocol for connection")
+	log().Debug("no handler found for connection", "addr", c.RemoteAddr())
 	c.Close()
 }

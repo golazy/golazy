@@ -4,19 +4,23 @@ import (
 	_ "embed"
 	"io"
 
-	"golazy.dev/lazyview/document"
 	. "golazy.dev/lazyview/html"
+	"golazy.dev/lazyview/page"
+	"golazy.dev/lazyview/script"
+	"golazy.dev/lazyview/style"
 )
 
 //go:embed style.css
-var style string
+var css string
 
-var Layout = &document.Document{
+var Layout = &page.Page{
 	Lang:     "en",
 	Title:    "golazy",
 	Viewport: "width=device-width",
-	Styles:   []string{style},
-	Head:     []interface{}{Script(Type("module"), Src("https://cdn.skypack.dev/@hotwired/turbo"))},
+	Styles:   []style.Style{{Content: css}},
+	Scripts: []script.Script{
+		{Src: "https://cdn.skypack.dev/@hotwired/turbo"},
+	},
 }
 
 func PageHeader() io.WriterTo {

@@ -23,7 +23,7 @@ func (h StringHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 type InternalController struct {
 }
 
-func (i *InternalController) Index(w ResponseWriter, r *Request) {
+func (i *InternalController) Index(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("Index"))
 }
 
@@ -44,33 +44,33 @@ func (p *PostsController) Index(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("Index"))
 }
 
-func (p *PostsController) New(w ResponseWriter, r *Request) {
+func (p *PostsController) New(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("New"))
 }
-func (p *PostsController) Edit(w ResponseWriter, r *Request) {
+func (p *PostsController) Edit(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("New"))
 }
-func (p *PostsController) Create(w ResponseWriter, r *Request) {
+func (p *PostsController) Create(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("Create"))
 }
 
-func (p *PostsController) MemberPutActivateLater(w ResponseWriter, r *Request) {
-	w.Write([]byte("ActivateLater " + r.GetParam("post_id")))
+func (p *PostsController) MemberPutActivateLater(id string) string {
+	return "ActivateLater " + id
 }
 
-func (p *PostsController) Show(w ResponseWriter, r *Request) {
-	w.Write([]byte("Show " + r.GetParam("post_id")))
+func (p *PostsController) Show(id string) string {
+	return "Show " + id
 }
 
-func (p *PostsController) Update(w ResponseWriter, r *Request) {
-	w.Write([]byte("Update " + r.GetParam("post_id")))
+func (p *PostsController) Update(id string) string {
+	return "Update " + id
 }
 
-func (p *PostsController) Destroy(w ResponseWriter, r *Request) {
-	w.Write([]byte("Destroy " + r.GetParam("post_id")))
+func (p *PostsController) Destroy(id string) string {
+	return "Destroy " + id
 }
 
-func (p *PostsController) PostCreateSuper(w ResponseWriter, r *Request) {
+func (p *PostsController) PostCreateSuper(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("CreateSuper"))
 }
 
@@ -84,7 +84,7 @@ type User struct {
 	Name string
 }
 
-func (mac *MultiArgsController) Show(string, ResponseWriter, *http.Request) interface{} {
+func (mac *MultiArgsController) Show(string, http.ResponseWriter, *http.Request) any {
 
 	return "hello"
 }
@@ -92,15 +92,15 @@ func (mac *MultiArgsController) Show(string, ResponseWriter, *http.Request) inte
 type UsersController struct {
 }
 
-func (uc *UsersController) Show(w ResponseWriter, r *Request) {
-	w.Write([]byte("Showing user " + r.GetParam("user_id")))
+func (uc *UsersController) Show(id string) string {
+	return "Showing user " + id
 }
 
 type DevicesController struct {
 }
 
-func (dc *DevicesController) Show(w ResponseWriter, r *Request) {
-	w.Write([]byte("Showing device " + r.GetParam("device_id")))
+func (dc *DevicesController) Show(id string) string {
+	return "Showing device " + id
 }
 
 type Post struct {
@@ -115,75 +115,67 @@ type Post struct {
 type ArticlesController struct {
 }
 
-func (p *ArticlesController) PostCreateSuper(w ResponseWriter, r *Request) {
+func (p *ArticlesController) PostCreateSuper(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("CreateSuper"))
 }
 
-func (p *ArticlesController) Index(w ResponseWriter, r *Request) error {
+func (p *ArticlesController) Index(w http.ResponseWriter, r *http.Request) error {
 	w.Write([]byte("Index"))
 	return nil
 }
 
-func (p *ArticlesController) New(w ResponseWriter, r *Request) error {
+func (p *ArticlesController) New(w http.ResponseWriter, r *http.Request) error {
 	w.Write([]byte("New"))
 	return nil
 
 }
-func (p *ArticlesController) Create(w ResponseWriter, r *Request) error {
+func (p *ArticlesController) Create(w http.ResponseWriter, r *http.Request) error {
 	w.Write([]byte("Create"))
 	return nil
 }
 
-func (p *ArticlesController) MemberPutActivateLater(w ResponseWriter, r *Request) error {
-	w.Write([]byte("ActivateLater " + r.GetParam("post_id")))
-	return nil
+func (p *ArticlesController) MemberPutActivateLater(id string) (string, error) {
+	return "ActivateLater " + id, nil
 }
 
-func (p *ArticlesController) Show(w ResponseWriter, r *Request) error {
-	w.Write([]byte("Show " + r.GetParam("post_id")))
-	return nil
+func (p *ArticlesController) Show(id string) (string, error) {
+	return "Show " + id, nil
 }
 
-func (p *ArticlesController) Update(w ResponseWriter, r *Request) error {
-	w.Write([]byte("Update " + r.GetParam("post_id")))
-	return nil
+func (p *ArticlesController) Update(id string) (string, error) {
+	return "Update " + id, nil
 }
 
-func (p *ArticlesController) Destroy(w ResponseWriter, r *Request) error {
-	w.Write([]byte("Destroy " + r.GetParam("post_id")))
-	return nil
+func (p *ArticlesController) Destroy(id string) (string, error) {
+	return "Destroy " + id, nil
 }
 
 type OpinionsController struct {
 }
 
-func (c *OpinionsController) Index(w ResponseWriter, r *Request) error {
-	w.Write([]byte("Index"))
-	return nil
+func (c *OpinionsController) Index(id string) (string, error) {
+	return "Index", nil
 }
 
-func (c *OpinionsController) New(w ResponseWriter, r *Request) error {
-	w.Write([]byte("New"))
-	return nil
+func (c *OpinionsController) New(id string) (string, error) {
+	return "New", nil
 
 }
 
-func (c *OpinionsController) Show(w ResponseWriter, r *Request) error {
-	w.Write([]byte("Show " + r.GetParam("comment_id")))
-	return nil
+func (c *OpinionsController) Show(id string) (string, error) {
+	return "Show " + id, nil
 }
 
 type ReviewsController struct {
 }
 
-func (c *ReviewsController) Index(w ResponseWriter, r *Request) error {
+func (c *ReviewsController) Index(w http.ResponseWriter, r *http.Request) error {
 	w.Write([]byte("Index"))
 	return nil
 }
 
-func (c *ReviewsController) Show(w ResponseWriter, r *Request) error {
-	w.Write([]byte("Show " + r.GetParam("review_id")))
-	return nil
+func (c *ReviewsController) Show(id string) (string, error) {
+	return "Show " + id, nil
 }
 
 type Page struct {
@@ -193,9 +185,8 @@ type Page struct {
 type PagesController struct {
 }
 
-func (c *PagesController) Show(w ResponseWriter, r *Request) error {
-	w.Write([]byte("Show " + r.GetParam("page_id")))
-	return nil
+func (c *PagesController) Show(id string) (string, error) {
+	return "Show " + id, nil
 }
 
 type EmptyController struct{}

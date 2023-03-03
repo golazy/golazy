@@ -43,6 +43,29 @@ type InputSet struct {
 	Values     map[string][]any
 }
 
+// InputSetMerge merges two input sets and returns a new one.
+func InputSetMerge(a, b InputSet) InputSet {
+	is := InputSet{
+		Generators: make(map[string][]Gen),
+		Values:     make(map[string][]any),
+	}
+	// Merge generators
+	for k, v := range a.Generators {
+		is.Generators[k] = v
+	}
+	for k, v := range b.Generators {
+		is.Generators[k] = v
+	}
+	// Merge values
+	for k, v := range a.Values {
+		is.Values[k] = v
+	}
+	for k, v := range b.Values {
+		is.Values[k] = v
+	}
+	return is
+}
+
 type Gen Fn
 
 func (g Gen) Call(inputs InputSet) (o []reflect.Value, err error) {

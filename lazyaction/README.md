@@ -3,76 +3,57 @@
 ## Variables
 
 ```golang
-var Actions = lazysupport.NewStrings("Index", "Show", "Create", "Update", "Destroy", "New", "Edit")
+var (
+    ErrNotFound      = errors.New("not found")
+    ErrNotAuthorized = errors.New("not authorized")
+)
+```
+
+```golang
+var Actions = lazysupport.NewStringSet("Index", "Show", "Create", "Update", "Destroy", "New", "Edit")
 ```
 
 ```golang
 var Store = sessions.NewCookieStore([]byte("//TODO: make this random and persistant"))
 ```
 
-## Functions
-
-### func [IsRouterMethod](/resource.go#L117)
-
-`func IsRouterMethod(method string) bool`
-
-### func [NewRouteTable](/route_tree.go#L75)
-
-`func NewRouteTable[T any]() *routeTree[T]`
-
 ## Types
 
-### type [Action](/action.go#L74)
+### type [Action](/action.go#L11)
 
 `type Action struct { ... }`
 
-#### func [NewAction](/action.go#L12)
+#### func (*Action) [String](/action.go#L27)
 
-`func NewAction(method string, r *Resource) *Action`
+`func (r *Action) String() string`
 
-#### func (*Action) [NewContext](/action.go#L131)
-
-`func (a *Action) NewContext(w http.ResponseWriter, r *http.Request) (*Context, error)`
-
-#### func (*Action) [ServeHTTP](/action.go#L141)
-
-`func (a *Action) ServeHTTP(w http.ResponseWriter, r *http.Request)`
-
-#### func (*Action) [String](/action.go#L90)
-
-`func (a *Action) String() string`
-
-### type [Context](/context.go#L8)
+### type [Context](/context.go#L10)
 
 `type Context struct { ... }`
 
-#### func (*Context) [Redirect](/context.go#L17)
+#### func (*Context) [GetHeader](/context.go#L23)
+
+`func (c *Context) GetHeader(h string) string`
+
+#### func (*Context) [Redirect](/context.go#L31)
 
 `func (c *Context) Redirect(url string, status int)`
 
-### type [MemStore](/rest_controller.go#L8)
+#### func (*Context) [Render](/context.go#L45)
 
-`type MemStore[T any] map[string]*T`
+`func (c *Context) Render(data ...any)`
 
-#### func (MemStore[T]) [Destroy](/rest_controller.go#L30)
+#### func (*Context) [Write](/context.go#L56)
 
-`func (m MemStore[T]) Destroy(key string) error`
+`func (c *Context) Write(data []byte)`
 
-#### func (MemStore[T]) [List](/rest_controller.go#L18)
+#### func (*Context) [WriteString](/context.go#L52)
 
-`func (m MemStore[T]) List(params ...any) ([]*T, error)`
+`func (c *Context) WriteString(data string)`
 
-#### func (MemStore[T]) [New](/rest_controller.go#L14)
+### type [Middleware](/middleware.go#L5)
 
-`func (m MemStore[T]) New() *T`
-
-#### func (MemStore[T]) [Read](/rest_controller.go#L26)
-
-`func (m MemStore[T]) Read(key string) (*T, error)`
-
-#### func (MemStore[T]) [Write](/rest_controller.go#L34)
-
-`func (m MemStore[T]) Write(key string, v *T) error`
+`type Middleware interface { ... }`
 
 ### type [Request](/request.go#L7)
 
@@ -82,21 +63,47 @@ var Store = sessions.NewCookieStore([]byte("//TODO: make this random and persist
 
 `func (r *Request) GetParam(name string) string`
 
-### type [Resource](/resource.go#L11)
+### type [Resource](/resource.go#L22)
 
 `type Resource struct { ... }`
 
-#### func [NewResource](/resource.go#L28)
+#### func (*Resource) [Actions](/resource.go#L108)
 
-`func NewResource(rd *Resource) *Resource`
+`func (r *Resource) Actions() []*Action`
 
-#### func (*Resource) [Routes](/resource.go#L207)
+func (r *Resource) addSubResources() {
 
-`func (r *Resource) Routes() string`
+```go
+for _, sr := range r.SubResources {
+	resource := NewResource(sr)
+	for _, action := range resource.ResourceActions {
+		a := *action
+		segments := make([]string, len(r.Prefix))
+		copy(segments, r.Prefix)
+		segments = append(segments, r.ParamName)
 
-### type [Resource](/resource.go#L17)
+		a.Path = "/" + strings.Join(segments, "/") + a.Path
+		a.RouteName = r.Singular + "_" + a.ResourceName
+		if a.ActionName != "" {
+			a.RouteName = a.ActionName + "_" + a.RouteName
+		}
 
-`type Resource struct { ... }`
+		for i := range a.ParamsPosition {
+			a.ParamsPosition[i] += len(segments)
+		}
+
+		a.ParamsPosition = append([]int{len(segments) - 1}, a.ParamsPosition...)
+
+		r.ResourceActions = append(r.ResourceActions, &a)
+	}
+}
+```
+
+}
+
+### type [ResourceOptions](/resource.go#L12)
+
+`type ResourceOptions struct { ... }`
 
 ### type [ResponseWriter](/response_writer.go#L5)
 
@@ -106,146 +113,117 @@ var Store = sessions.NewCookieStore([]byte("//TODO: make this random and persist
 
 `func (w ResponseWriter) WriteString(s string) (int, error)`
 
-### type [RestController](/rest_controller.go#L47)
+### type [Router](/router.go#L22)
 
-`type RestController[T any, J Storage[T]] struct { ... }`
+`type Router interface { ... }`
 
-#### func (*RestController[T, J]) [Create](/rest_controller.go#L69)
+### type [Routes](/router.go#L13)
 
-`func (rc *RestController[T, J]) Create()`
+`type Routes struct { ... }`
 
-#### func (*RestController[T, J]) [Destroy](/rest_controller.go#L76)
+#### func (*Routes) [Resource](/router.go#L106)
 
-`func (rc *RestController[T, J]) Destroy()`
+`func (r *Routes) Resource(target any, options ...*ResourceOptions)`
 
-#### func (*RestController[T, J]) [Edit](/rest_controller.go#L83)
+```go
+Resource adds a resource to the router
+```
 
-`func (rc *RestController[T, J]) Edit()`
+The resource name is extracted from the struct name minus the Controller suffix.
+If the struct is called Controller it will use the package name.
 
-#### func (*RestController[T, J]) [Index](/rest_controller.go#L51)
+Given a struct called UserController, the follwing methods will generate the following routes:
 
-`func (rc *RestController[T, J]) Index(w http.ResponseWriter, r *http.Request) error`
+- Index()   => GET    /users
+- New()     => GET    /users/new
+- Create()  => POST   /users
+- Show()    => GET    /users/:id
+- Edit()    => GET    /users/:id/edit
+- Update()  => PUT    /users/:id
+- Destroy() => DELETE /users/:id
 
-#### func (*RestController[T, J]) [New](/rest_controller.go#L80)
+Custom actions can be added to the resource by combining the verb and if it belongs to a Member.
 
-`func (rc *RestController[T, J]) New()`
+- Popular() => GET /users/popular
+- MemberComments() => GET /users/:id/comments
+- PutMemberSuspend() => PUT /users/:id/suspend
 
-#### func (*RestController[T, J]) [Show](/rest_controller.go#L60)
+Resource internally calls Route to add the routes to the router.
 
-`func (rc *RestController[T, J]) Show(w http.ResponseWriter, id string) error`
+#### func (*Routes) [Route](/router.go#L33)
 
-#### func (*RestController[T, J]) [Update](/rest_controller.go#L72)
+`func (r *Routes) Route(arguments ...any)`
 
-`func (rc *RestController[T, J]) Update()`
+Route adds routes to the router
 
-### type [RouteDefinition](/router.go#L9)
+```go
+Router.Route("/", func()string{return "Hello"}) // If verb is omited it is assumed is a GET
+Router.Route("POST", "/users", func() string{ return "User created!"})  // Verb can be added as a string
+```
 
-`type RouteDefinition struct { ... }`
+#### func (*Routes) [ServeHTTP](/router.go#L123)
 
-#### func (*RouteDefinition) [String](/router.go#L22)
+`func (r *Routes) ServeHTTP(w http.ResponseWriter, req *http.Request)`
 
-`func (rd *RouteDefinition) String() string`
+#### func (*Routes) [String](/router.go#L17)
 
-### type [Router](/router.go#L26)
-
-`type Router struct { ... }`
-
-#### func [NewRouter](/router.go#L43)
-
-`func NewRouter() *Router`
-
-#### func (*Router) [Add](/router.go#L54)
-
-`func (r *Router) Add(verb, path, name, destination string, h http.Handler)`
-
-#### func (*Router) [AddResource](/router.go#L78)
-
-`func (router *Router) AddResource(resource *Resource)`
-
-#### func (*Router) [AddResource](/router.go#L74)
-
-`func (router *Router) AddResource(r *Resource)`
-
-#### func (*Router) [LinkTo](/router.go#L116)
-
-`func (r *Router) LinkTo(name string, params ...any) string`
-
-LinkTo(user1, "posts", "new") => "/users/1/posts/new"
-LinkTo(post1, comment1, "edit") => "/posts/1/comments/1/edit"
-LinkTo("posts", "new") => "/posts/new"
-LinkTo("posts", "publish") => "/posts/publish"
-
-#### func (*Router) [ServeHTTP](/router.go#L84)
-
-`func (router *Router) ServeHTTP(w http.ResponseWriter, r *http.Request)`
+`func (r *Routes) String() string`
 
 ### type [Session](/session.go#L10)
 
 `type Session struct { ... }`
 
-#### func (*Session) [AddFlash](/session.go#L60)
+#### func (*Session) [AddFlash](/session.go#L68)
 
 `func (s *Session) AddFlash(val any, vars ...string)`
 
-#### func (*Session) [Flashes](/session.go#L54)
+#### func (*Session) [Delete](/session.go#L32)
 
-`func (s *Session) Flashes(vars ...string) []interface{ ... }`
+`func (s *Session) Delete(key string)`
+
+#### func (*Session) [Flashes](/session.go#L62)
+
+`func (s *Session) Flashes(vars ...string) []any`
 
 #### func (*Session) [Get](/session.go#L27)
 
 `func (s *Session) Get(key string) any`
 
-#### func (*Session) [GetError](/session.go#L85)
+#### func (*Session) [GetError](/session.go#L94)
 
 `func (s *Session) GetError() string`
 
-#### func (*Session) [GetFlash](/session.go#L70)
+#### func (*Session) [GetFlash](/session.go#L78)
 
 `func (s *Session) GetFlash(key string) string`
 
-#### func (*Session) [GetNotice](/session.go#L93)
+#### func (*Session) [GetNotice](/session.go#L102)
 
 `func (s *Session) GetNotice() string`
 
-#### func (*Session) [GetString](/session.go#L32)
+#### func (*Session) [GetString](/session.go#L40)
 
 `func (s *Session) GetString(key string) string`
 
-#### func (*Session) [Set](/session.go#L49)
+#### func (*Session) [Set](/session.go#L57)
 
 `func (s *Session) Set(key string, val any)`
 
-#### func (*Session) [SetError](/session.go#L81)
+#### func (*Session) [SetError](/session.go#L90)
 
 `func (s *Session) SetError(err error)`
 
-#### func (*Session) [SetFlash](/session.go#L65)
+#### func (*Session) [SetFlash](/session.go#L73)
 
 `func (s *Session) SetFlash(key string, val string)`
 
-#### func (*Session) [SetNotice](/session.go#L89)
+#### func (*Session) [SetNotice](/session.go#L98)
 
 `func (s *Session) SetNotice(notice string)`
 
-#### func (*Session) [SetString](/session.go#L45)
+#### func (*Session) [SetString](/session.go#L53)
 
 `func (s *Session) SetString(key, val string)`
-
-### type [Storage](/rest_controller.go#L39)
-
-`type Storage[K any] interface { ... }`
-
-#### func [NewMemStore](/rest_controller.go#L10)
-
-`func NewMemStore[T any]() Storage[T]`
-
-### type [UrlExtractor](/action.go#L200)
-
-`type UrlExtractor string`
-
-#### func (UrlExtractor) [Extract](/action.go#L202)
-
-`func (u UrlExtractor) Extract(stringArg int, paramsPosition []int) string`
 
 ---
 Readme created from Go doc with [goreadme](https://github.com/posener/goreadme)

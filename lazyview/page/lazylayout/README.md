@@ -8,7 +8,7 @@ var Layout = &document.Document{
     Title:    "golazy",
     Viewport: "width=device-width",
     Styles:   []string{style},
-    Head:     []interface{}{Script(Type("module"), Src("https://cdn.skypack.dev/@hotwired/turbo"))},
+    Head:     []any{Script(Type("module"), Src("https://cdn.skypack.dev/@hotwired/turbo"))},
 }
 ```
 

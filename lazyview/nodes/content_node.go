@@ -15,3 +15,7 @@ func (c ContentNode) WriteTo(w io.Writer) (n64 int64, err error) {
 
 	return
 }
+
+func NewContentNode(nodes ...io.WriterTo) ContentNode {
+	return nodes
+}

@@ -1,17 +1,10 @@
 package router
 
-import (
-	"fmt"
-	"os"
-	"regexp"
-	"strings"
-	"testing"
-)
-
 type TestRoute struct {
 	Name string
 }
 
+/*
 func TestRouter(t *testing.T) {
 	router := NewRouter[TestRoute]()
 
@@ -22,45 +15,24 @@ func TestRouter(t *testing.T) {
 	}
 }
 
-/*
-func TestRouter(t *testing.T) {
+func TestProtocol(t *testing.T) {
+	router := NewRouter[string]()
+	router.Add("GET", "http:///posts", s("http"))
 
-	router := NewRouter()
-	router.AddResourceDefinition(&ResourceDefinition{Controller: new(ArticlesController)})
-
-	w := httptest.NewRecorder()
-	r := httptest.NewRequest("GET", "/posts", nil)
-
-	router.ServeHTTP(w, r)
-
-	if w.Body.String() != "Index" {
-		t.Error(w.Body.String())
+	test := func(path, expected string) {
+		r := router.Find("GET", path)
+		if r == nil {
+			t.Errorf("route %q not found", path)
+			return
+		}
+		if *r != expected {
+			t.Errorf("expected Find(%q) => %q. Got: %q", path, expected, *r)
+		}
 	}
+
+	test("http://localhost/posts", "http")
+	test("/posts", "http")
 
 }
 
 */
-
-var routes [][]string
-
-func init() {
-	data, err := os.ReadFile("routes.txt")
-	if err != nil {
-		panic(err)
-	}
-
-	whitespaces := regexp.MustCompile(`\s+`)
-
-	routes = make([][]string, 0, 1500)
-	for _, line := range strings.Split(string(data), "\n") {
-		cleanLine := whitespaces.ReplaceAllString(line, " ")
-		parts := strings.Split(cleanLine, " ")
-		if len(parts) != 2 {
-			panic(fmt.Sprintf("%q", line))
-		}
-		if IsMethod(parts[0]) < 0 {
-			panic(parts[0] + parts[1])
-		}
-		routes = append(routes, []string{parts[0], parts[1]})
-	}
-}

@@ -97,3 +97,9 @@ func TestAdd(t *testing.T) {
 	testElement(t, "escapes string", `<div>&lt;b&gt;hola&lt;/b&gt;</div>`, NewElement("div", "<b>hola</b>"))
 	testElement(t, "have raw content", `<div><b>hola</b></div>`, NewElement("div", Raw(`<b>hola</b>`)))
 }
+
+func TestElementScript(t *testing.T) {
+	Beautify = false
+	testElement(t, "script", `<script>console.Log("hola");</script>`, NewElement("script", Raw("console.Log(\"hola\");")))
+	testElement(t, "script with type", `<script type=text/javascript>var a = 1;</script>`, NewElement("script", NewAttr("type", "text/javascript"), "var a = 1;"))
+}

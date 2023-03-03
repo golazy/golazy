@@ -1,16 +1,18 @@
 package lazyapp_test
 
 import (
-	"context"
-	"io"
+	"embed"
 	"net/http"
-	"runtime"
+	"net/http/httptest"
 	"testing"
 
 	"golazy.dev/lazyaction"
 	"golazy.dev/lazyapp"
-	"golazy.dev/lazydev"
+	"golazy.dev/lazyview/static_files"
 )
+
+//go:embed test_assets/*
+var FS embed.FS
 
 type PagesController struct {
 }
@@ -19,38 +21,76 @@ func (c *PagesController) Index(ctx lazyaction.Context) {
 	ctx.WriteString("Hello")
 }
 
-func TestLazyApp(t *testing.T) {
+func TestLazyApp_Assets(t *testing.T) {
 
 	app := lazyapp.App{
-		Server: &lazydev.Server{
-			HTTPAddr: ":2000",
+		Files: static_files.NewManager(FS, "test_assets"),
+	}
+	app.Init()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/TEST.md", nil)
+
+	app.ServeHTTP(rec, req)
+
+	if rec.Code != 200 {
+		t.Errorf("Expected 200. Got %d", rec.Code)
+	}
+	if rec.Body.String() != "Hola" {
+		t.Errorf("Expected Hello World. Got: %q", rec.Body.String())
+	}
+
+}
+
+func TestLazyApp_Mount(t *testing.T) {
+
+	app := lazyapp.App{}
+
+	app.Mount("/asdf", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("Hello"))
+	}))
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/asdf", nil)
+	app.ServeHTTP(rec, req)
+
+	if rec.Code != 200 {
+		t.Errorf("Expected 200. Got %d", rec.Code)
+	}
+	if rec.Body.String() != "Hello" {
+		t.Errorf("Expected Hello World. Got: %q", rec.Body.String())
+	}
+
+}
+
+func TestLazyApp_Middleware(t *testing.T) {
+	app := lazyapp.App{
+		MiddleWares: []lazyapp.Middleware{
+			func(h http.Handler) http.Handler {
+				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					rec := httptest.NewRecorder()
+					h.ServeHTTP(rec, r)
+					w.Write([]byte("I am the middleware over: " + rec.Body.String() + "!"))
+				})
+			},
 		},
 	}
 
-	running := make(chan (struct{}))
-	go func() {
-		err := app.ListenAndServe()
-		if err != nil && err != http.ErrServerClosed {
-			t.Error(err)
-		}
-		close(running)
+	app.Router.Route("/", func() string {
+		return "me"
+	})
 
-	}()
-	runtime.Gosched()
+	app.Init()
 
-	res, err := http.Get("http://localhost:8080/")
-	if err != nil {
-		t.Fatal(err)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/", nil)
+	app.ServeHTTP(rec, req)
+
+	if rec.Code != 200 {
+		t.Errorf("Expected 200. Got %d", rec.Code)
+	}
+	if rec.Body.String() != "I am the middleware over: me!" {
+		t.Errorf("Expected Hello World. Got: %q", rec.Body.String())
 	}
 
-	data, err := io.ReadAll(res.Body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(data) != "" {
-		t.Error(string(data))
-	}
-
-	app.Shutdown(context.Background())
-	<-running
 }

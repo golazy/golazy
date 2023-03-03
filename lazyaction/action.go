@@ -10,7 +10,7 @@ import (
 )
 
 type Action struct {
-	Verb       string
+	Method     string
 	URL        url.URL
 	Name       string
 	Handler    http.HandlerFunc // If Fn is defined, Target is ignored (for generated code)
@@ -26,7 +26,7 @@ type Action struct {
 }
 
 func (r *Action) String() string {
-	base := fmt.Sprintf("%9s %s %s", r.Verb, r.URL.String(), r.Name)
+	base := fmt.Sprintf("%9s %s %s", r.Method, r.URL.String(), r.Name)
 	opts := []string{}
 
 	if r.ControllerName != "" {

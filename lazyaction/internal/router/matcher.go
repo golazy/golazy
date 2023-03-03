@@ -15,7 +15,7 @@ func (r Route[T]) String() string {
 }
 
 type Matcher[T any] interface {
-	Add(r *http.Request, t *T)
+	Add(r *RouteDefinition, t *T)
 	Find(*http.Request) *T
 	All() []Route[T]
 }

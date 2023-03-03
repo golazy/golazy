@@ -12,19 +12,19 @@ func TestSchemeMatcher(t *testing.T) {
 	expect("http://", "")
 	expect("https://", "")
 
-	sm.Add(u("//"), s("root"))
+	sm.Add(def("//"), s("root"))
 
 	expect("/", "root")
 	expect("http://", "root")
 	expect("https://", "root")
 
-	sm.Add(u("http://"), s("http"))
+	sm.Add(def("http://"), s("http"))
 
 	expect("/", "root")
 	expect("http://", "http")
 	expect("https://", "root")
 
-	sm.Add(u("https://"), s("https"))
+	sm.Add(def("https://"), s("https"))
 
 	expect("/", "root")
 	expect("http://", "http")
@@ -35,9 +35,9 @@ func TestSchemeMatcher_All(t *testing.T) {
 
 	sm := NewSchemeMatcher[string]()
 
-	sm.Add(u("/"), s("root"))
-	sm.Add(u("http://"), s("http"))
-	sm.Add(u("https://"), s("https"))
+	sm.Add(def("/"), s("root"))
+	sm.Add(def("http://"), s("http"))
+	sm.Add(def("https://"), s("https"))
 
 	has := NewExpectAll(t, sm)
 

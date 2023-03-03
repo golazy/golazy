@@ -38,8 +38,8 @@ func (r *PortMatcher[T]) All() []Route[T] {
 	}
 	return all
 }
-func (r *PortMatcher[T]) Add(req *http.Request, t *T) {
-	port := req.URL.Port()
+func (r *PortMatcher[T]) Add(req *RouteDefinition, t *T) {
+	port := req.Port
 	portN, _ := strconv.Atoi(port)
 
 	paths := r.all

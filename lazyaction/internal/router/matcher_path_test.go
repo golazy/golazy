@@ -10,12 +10,12 @@ func TestRouteTable(t *testing.T) {
 
 	expect := NewExpect(t, rt)
 
-	rt.Add(u("/"), s("root"))
-	rt.Add(u("/:name"), s("name"))
-	rt.Add(u("/:name/edit"), s("name_edit"))
-	rt.Add(u("/posts/:id"), s("posts_show"))
-	rt.Add(u("/posts/new"), s("posts_new"))
-	rt.Add(u("/users/:id/censor"), s("users_censor"))
+	rt.Add(def("/"), s("root"))
+	rt.Add(def("/:name"), s("name"))
+	rt.Add(def("/:name/edit"), s("name_edit"))
+	rt.Add(def("/posts/:id"), s("posts_show"))
+	rt.Add(def("/posts/new"), s("posts_new"))
+	rt.Add(def("/users/:id/censor"), s("users_censor"))
 
 	expect("/", "root")
 	expect("/asdf", "name")
@@ -32,7 +32,7 @@ func TestPathMatcher_Wildcard(t *testing.T) {
 
 	expect := NewExpect(t, rt)
 
-	rt.Add(u("/api/*"), s("api"))
+	rt.Add(def("/api/*"), s("api"))
 
 	expect("/api", "api")
 	expect("/api/", "api")
@@ -43,7 +43,7 @@ func TestPathMatcher_Wildcard(t *testing.T) {
 
 func TestPathMatcher_All(t *testing.T) {
 	rt := NewPathMatcher[string]()
-	rt.Add(u("/path"), s("root"))
+	rt.Add(def("/path"), s("root"))
 
 	expectHas := NewExpectAll(t, rt)
 

@@ -17,8 +17,8 @@ func NewPathMatcher[T any]() Matcher[T] {
 }
 
 // Add a new route to the table
-func (rt *PathMatcher[T]) Add(req *http.Request, t *T) {
-	path := req.URL.Path
+func (rt *PathMatcher[T]) Add(req *RouteDefinition, t *T) {
+	path := req.Path
 	if len(path) == 0 {
 		path = "/"
 	}

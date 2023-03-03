@@ -73,8 +73,8 @@ func (r *DomainMatcher[T]) All() []Route[T] {
 	return all
 
 }
-func (r *DomainMatcher[T]) Add(req *http.Request, t *T) {
-	domain := req.URL.Hostname()
+func (r *DomainMatcher[T]) Add(req *RouteDefinition, t *T) {
+	domain := req.Domain
 
 	if domain == "*" {
 		domain = ""

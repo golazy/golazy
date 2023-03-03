@@ -7,12 +7,12 @@ import (
 )
 
 func ExpectAction(actions []*Action, expected *Action) error {
-	if expected.Verb == "" {
-		expected.Verb = "GET"
+	if expected.Method == "" {
+		expected.Method = "GET"
 	}
 	r := FindAction(actions, expected)
 	if r == nil {
-		return errors.New("Action not found: " + expected.Verb + " " + expected.URL.String())
+		return errors.New("Action not found: " + expected.Method + " " + expected.URL.String())
 	}
 	if err := CompareAction(r, expected); err != nil {
 		return err
@@ -22,7 +22,7 @@ func ExpectAction(actions []*Action, expected *Action) error {
 
 func FindAction(actions []*Action, expected *Action) *Action {
 	for _, action := range actions {
-		if action.URL == expected.URL && action.Verb == expected.Verb {
+		if action.URL == expected.URL && action.Method == expected.Method {
 			return action
 		}
 	}
@@ -35,13 +35,13 @@ func CompareAction(original, expected *Action) error {
 		return fmt.Errorf("missing actions to compare")
 	}
 
-	if expected.Verb != "" {
-		if original.Verb != expected.Verb {
-			errs = append(errs, fmt.Errorf("expected verb %s, got %s", expected.Verb, original.Verb))
+	if expected.Method != "" {
+		if original.Method != expected.Method {
+			errs = append(errs, fmt.Errorf("expected verb %s, got %s", expected.Method, original.Method))
 		}
 	} else {
-		if original.Verb != "GET" {
-			errs = append(errs, fmt.Errorf("expected empty verb to generate GET, got %s", original.Verb))
+		if original.Method != "GET" {
+			errs = append(errs, fmt.Errorf("expected empty verb to generate GET, got %s", original.Method))
 		}
 	}
 

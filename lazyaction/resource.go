@@ -154,34 +154,30 @@ func (r *Resource) genRoutesForActionN(val reflect.Value, i int) []*Action {
 
 	routeName := lazysupport.Underscorize(r.Name) + "#" + lazysupport.Underscorize(methodName)
 
-	verbs := strings.Split(verb, "|")
-	for _, v := range verbs {
-
-		u, err := url.Parse(path)
-		if err != nil {
-			panic(err)
-		}
-		u.Scheme = r.Scheme
-		u.Host = r.Domain
-		if r.Port != "" {
-			u.Host = u.Host + ":" + r.Port
-		}
-
-		route := &Action{
-			Verb: v,
-			URL:  *u,
-			Name: routeName,
-			Fn:   args.NewFn(method),
-
-			ControllerName: r.ControllerName,
-			Plural:         r.Plural,
-			Singular:       r.Singular,
-			ParamName:      paramName,
-			Controller:     r.Controller,
-		}
-
-		routes = append(routes, route)
+	u, err := url.Parse(path)
+	if err != nil {
+		panic(err)
 	}
+	u.Scheme = r.Scheme
+	u.Host = r.Domain
+	if r.Port != "" {
+		u.Host = u.Host + ":" + r.Port
+	}
+
+	route := &Action{
+		Method: verb,
+		URL:    *u,
+		Name:   routeName,
+		Fn:     args.NewFn(method),
+
+		ControllerName: r.ControllerName,
+		Plural:         r.Plural,
+		Singular:       r.Singular,
+		ParamName:      paramName,
+		Controller:     r.Controller,
+	}
+
+	routes = append(routes, route)
 
 	return routes
 
@@ -192,13 +188,8 @@ func isAction(name string) bool {
 	case "Index", "Create", "New", "Show", "Edit", "Update", "Destroy":
 		return true
 	}
-	if strings.HasPrefix(name, Member) {
-		name = strings.TrimPrefix(name, Member)
-	}
-	if prefixes.HasPrefix(name) {
-		return true
-	}
-	return false
+	name = strings.TrimPrefix(name, Member)
+	return prefixes.HasPrefix(name)
 }
 
 func (r *Resource) analyzeName(method string) (verb, path, methodName, paramName string) {
@@ -222,7 +213,7 @@ func (r *Resource) analyzeName(method string) (verb, path, methodName, paramName
 		return "GET", "/" + strings.Join(pathSegments, "/"), method, r.ParamName
 	case "Update":
 		pathSegments = append(pathSegments, r.ParamName)
-		return "PUT|PATCH", "/" + strings.Join(pathSegments, "/"), method, r.ParamName
+		return "PUT,PATCH", "/" + strings.Join(pathSegments, "/"), method, r.ParamName
 	case "Destroy":
 		pathSegments = append(pathSegments, r.ParamName)
 		return "DELETE", "/" + strings.Join(pathSegments, "/"), "destroy", r.ParamName

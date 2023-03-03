@@ -37,8 +37,8 @@ func (sm *SchemeMatcher[T]) All() []Route[T] {
 	return all
 
 }
-func (sm *SchemeMatcher[T]) Add(req *http.Request, t *T) {
-	switch req.URL.Scheme {
+func (sm *SchemeMatcher[T]) Add(req *RouteDefinition, t *T) {
+	switch req.Scheme {
 	case "http":
 
 		sm.http.Add(req, t)

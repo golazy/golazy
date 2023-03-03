@@ -13,7 +13,7 @@ import (
 )
 
 type Dispatcher struct {
-	router router.Matcher[Action]
+	router *router.Router[Action]
 	Files  *static_files.Manager
 }
 
@@ -28,41 +28,18 @@ Route adds routes to the router
 	Router.Route("/", func()string{return "Hello"}) // If verb is omited it is assumed is a GET
 	Router.Route("POST", "/users", func() string{ return "User created!"})  // Verb can be added as a string
 */
-func (d *Dispatcher) Route(arguments ...any) {
+func (d *Dispatcher) Route(def string, target any) {
 	if d.router == nil {
 		d.router = router.NewRouter[Action]()
 	}
-	var verb string
-	var path string
-	var target *args.Fn
-	var handler http.HandlerFunc
 
-	for _, arg := range arguments {
-		switch tArg := arg.(type) {
-		case http.HandlerFunc:
-			handler = tArg
-		case http.Handler:
-			handler = tArg.ServeHTTP
-		case string:
-			if router.IsMethod(tArg) != -1 {
-				verb = tArg
-				continue
-			}
-			if strings.HasPrefix(tArg, "/") {
-				path = tArg
-				continue
-			}
-			panic(fmt.Sprintf("invalid path: %q", arg.(string)))
-		default:
-			if reflect.ValueOf(arg).Kind() == reflect.Func {
-				target = args.NewFn(arg)
-				continue
-			}
-			panic(fmt.Sprintf("invalid argument type: %T", arg))
-		}
-	}
-	if verb == "" {
-		verb = "GET"
+	path := def
+	method := "GET"
+
+	if strings.Contains(def, " ") {
+		parts := strings.Split(def, " ")
+		method = parts[0]
+		path = parts[1]
 	}
 
 	u, err := url.Parse(path)
@@ -71,20 +48,26 @@ func (d *Dispatcher) Route(arguments ...any) {
 	}
 
 	action := &Action{
-		Verb:       verb,
+		Method:     method,
 		URL:        *u,
-		Handler:    handler,
-		Fn:         target,
 		Name:       "Annonymous",
 		Generators: &map[string][]args.Gen{},
 	}
 
-	req, err := http.NewRequest(verb, path, nil)
-	if err != nil {
-		panic(err)
+	switch t := target.(type) {
+	case http.HandlerFunc:
+		action.Handler = t
+	case http.Handler:
+		action.Handler = t.ServeHTTP
+	default:
+		if reflect.ValueOf(t).Kind() == reflect.Func {
+			action.Fn = args.NewFn(t)
+			break
+		}
+		panic(fmt.Sprintf("invalid argument type: %T", t))
 	}
 
-	d.router.Add(req, action)
+	d.router.Add(def, action)
 }
 
 /*
@@ -123,12 +106,7 @@ func (d *Dispatcher) Resource(target any, options ...*ResourceOptions) {
 		panic(err)
 	}
 	for _, action := range resource.Actions() {
-
-		req, err := http.NewRequest(action.Verb, action.URL.String(), nil)
-		if err != nil {
-			panic(err)
-		}
-		d.router.Add(req, action)
+		d.router.Add(action.Method+" "+action.URL.String(), action)
 	}
 
 }

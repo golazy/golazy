@@ -10,14 +10,14 @@ func TestDomainMatcher(t *testing.T) {
 
 	expect("/", "")
 
-	dm.Add(u("//localhost"), s("localhost"))
+	dm.Add(def("//localhost"), s("localhost"))
 	expect("/", "")
 
-	dm.Add(u("//*/"), s("root"))
+	dm.Add(def("//*/"), s("root"))
 
 	expect("//", "root")
 
-	dm.Add(u("//(api,www).google.(net,org)/"), s("complex"))
+	dm.Add(def("//(api,www).google.(net,org)/"), s("complex"))
 	expect("//api.google.net", "complex")
 	expect("//www.google.org", "complex")
 
@@ -26,9 +26,9 @@ func TestDomainMatcher(t *testing.T) {
 func TestDomainMatcher_All(t *testing.T) {
 	dm := NewDomainMatcher[string]()
 
-	dm.Add(u("//localhost"), s("localhost"))
-	dm.Add(u("//*/"), s("root"))
-	dm.Add(u("//(api,www).google.(net,org):443/"), s("complex"))
+	dm.Add(def("//localhost"), s("localhost"))
+	dm.Add(def("//*/"), s("root"))
+	dm.Add(def("//(api,www).google.(net,org):443/"), s("complex"))
 
 	has := NewExpectAll(t, dm)
 

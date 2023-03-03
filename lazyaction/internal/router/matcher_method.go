@@ -1,6 +1,9 @@
 package router
 
-import "net/http"
+import (
+	"net/http"
+	"strings"
+)
 
 type MethodMatcher[T any] struct {
 	get     Matcher[T]
@@ -41,22 +44,34 @@ func (vm *MethodMatcher[T]) All() []Route[T] {
 
 	return all
 }
-func (vm *MethodMatcher[T]) Add(req *http.Request, t *T) {
-	switch req.Method {
-	case http.MethodGet:
-		vm.get.Add(req, t)
-	case http.MethodPost:
-		vm.post.Add(req, t)
-	case http.MethodPut:
-		vm.put.Add(req, t)
-	case http.MethodDelete:
-		vm.delete.Add(req, t)
-	case http.MethodPatch:
-		vm.patch.Add(req, t)
-	case http.MethodOptions:
-		vm.options.Add(req, t)
-	default:
-		panic("Unknown method " + req.Method)
+func (vm *MethodMatcher[T]) Add(req *RouteDefinition, t *T) {
+	eachMethod(req.Method, func(method string) {
+		switch method {
+		case http.MethodGet:
+			vm.get.Add(req, t)
+		case http.MethodPost:
+			vm.post.Add(req, t)
+		case http.MethodPut:
+			vm.put.Add(req, t)
+		case http.MethodDelete:
+			vm.delete.Add(req, t)
+		case http.MethodPatch:
+			vm.patch.Add(req, t)
+		case http.MethodOptions:
+			vm.options.Add(req, t)
+		}
+	})
+}
+
+func eachMethod(s string, fn func(string)) {
+	if s == "*" {
+		for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodPatch, http.MethodOptions} {
+			fn(method)
+		}
+		return
+	}
+	for _, method := range strings.Split(s, ",") {
+		fn(method)
 	}
 }
 

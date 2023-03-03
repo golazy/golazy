@@ -8,11 +8,11 @@ func TestPortMatcher(t *testing.T) {
 
 	expect("//localhost:43", "")
 
-	pm.Add(u("//localhost:8080"), s("8080"))
+	pm.Add(def("//localhost:8080"), s("8080"))
 	expect("//localhost:43", "")
 
-	pm.Add(u("//localhost:8080/asdf"), s("8080"))
-	pm.Add(u("//localhost"), s("0"))
+	pm.Add(def("//localhost:8080/asdf"), s("8080"))
+	pm.Add(def("//localhost"), s("0"))
 
 	expect("//localhost:43", "0")
 
@@ -26,9 +26,9 @@ func TestPortMatcher(t *testing.T) {
 func TestPortMatcher_All(t *testing.T) {
 
 	pm := NewPortMatcher[string]()
-	pm.Add(u("//localhost:8080"), s("8080"))
-	pm.Add(u("//localhost:8080/asdf"), s("asdf"))
-	pm.Add(u("//localhost"), s("0"))
+	pm.Add(def("//localhost:8080"), s("8080"))
+	pm.Add(def("//localhost:8080/asdf"), s("asdf"))
+	pm.Add(def("//localhost"), s("0"))
 
 	has := NewExpectAll(t, pm)
 

@@ -27,6 +27,32 @@ func (n *Npm) String() string {
 	return name
 }
 
+func (n *Npm) Installed(opts InstallOptions) bool {
+	fmt.Println("Checking if npm package is installed: " + n.Name + " (" + n.Version + ")")
+
+	for _, impPath := range n.Imports {
+		path := n.installPath(opts, impPath)
+		if !fileExists(path) {
+			return false
+		}
+	}
+
+	// Copy all Files
+	for _, file := range n.Files {
+		path := n.installPath(opts, file)
+		if !fileExists(path) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
 func (n *Npm) Install(opts InstallOptions) error {
 	fmt.Println("installing npm package: " + n.Name + " (" + n.Version + ")")
 

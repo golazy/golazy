@@ -6,16 +6,16 @@ import (
 	"io"
 	"strings"
 
+	lazyassets "golazy.dev/lazyassets"
 	"golazy.dev/lazyview/component"
 	. "golazy.dev/lazyview/html"
 	"golazy.dev/lazyview/nodes"
 	"golazy.dev/lazyview/script"
-	"golazy.dev/lazyview/static_files"
 	"golazy.dev/lazyview/style"
 )
 
 type Page struct {
-	Files       *static_files.Manager
+	Files       *lazyassets.Manager
 	Styles      []style.Style
 	Scripts     []script.Script
 	Description string
@@ -157,7 +157,7 @@ func (p *Page) toPermalink(path string) string {
 	return link
 }
 
-func (p *Page) findAsset(asset_path string) *static_files.File {
+func (p *Page) findAsset(asset_path string) *lazyassets.File {
 	if p.Files == nil {
 		return nil
 	}

@@ -89,6 +89,37 @@ func TestNpm_Uninstall(t *testing.T) {
 	}
 }
 
+func TestNpm_Installed(t *testing.T) {
+	pathPrefix := "install_test"
+	defer os.RemoveAll(pathPrefix)
+	cachePrefix := "install_cache"
+	defer os.RemoveAll(cachePrefix)
+
+	source := &Npm{
+		Name:    "@hotwired/turbo",
+		Version: "7.2.5",
+		Imports: map[string]string{"turbo": "dist/turbo.es2017-esm.js"},
+	}
+
+	opts := InstallOptions{
+		Path:  pathPrefix,
+		Cache: cachePrefix,
+	}
+
+	if source.Installed(opts) {
+		t.Error("Should not be installed")
+	}
+
+	err := source.Install(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !source.Installed(opts) {
+		t.Error("Should be installed")
+	}
+}
+
 func TestNpm_ImportMap(t *testing.T) {
 	source := &Npm{
 		Name:    "@hotwired/turbo",

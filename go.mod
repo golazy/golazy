@@ -2,6 +2,8 @@ module golazy.dev
 
 go 1.19
 
+replace portal => ./lazydev/portal
+
 require (
 	github.com/adrg/xdg v0.4.0
 	github.com/dietsche/rfsnotify v0.0.0-20200716145600-b37be6e4177f
@@ -15,6 +17,7 @@ require (
 	github.com/timewasted/go-accept-headers v0.0.0-20130320203746-c78f304b1b09
 	golang.org/x/exp v0.0.0-20230224173230-c95f2b4c22f2
 	gopkg.in/fsnotify.v1 v1.4.7
+	portal v0.0.0-20200000000000-000000000000
 )
 
 require (

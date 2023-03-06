@@ -12,26 +12,21 @@ import (
 // LogReqInfo describes info about HTTP request
 type HTTPReqInfo struct {
 	// GET etc.
-	method  string
-	uri     string
-	referer string
-	ipaddr  string
+	method string
+	uri    string
 	// response code, like 200, 404
 	code int
 	// number of bytes of the response sent
 	size int64
 	// how long did it take to
-	duration  time.Duration
-	userAgent string
+	duration time.Duration
 }
 
 func loggerMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ri := &HTTPReqInfo{
-			method:    r.Method,
-			uri:       r.URL.String(),
-			referer:   r.Header.Get("Referer"),
-			userAgent: r.Header.Get("User-Agent"),
+			method: r.Method,
+			uri:    r.URL.String(),
 		}
 
 		m := httpsnoop.CaptureMetrics(next, w, r)

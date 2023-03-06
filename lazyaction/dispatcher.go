@@ -7,14 +7,15 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/felixge/httpsnoop"
 	"golazy.dev/lazyaction/internal/args"
-	"golazy.dev/lazyaction/internal/router"
-	"golazy.dev/lazyview/static_files"
+	"golazy.dev/lazyaction/router"
+	"golazy.dev/lazyassets"
 )
 
 type Dispatcher struct {
 	router *router.Router[Action]
-	Files  *static_files.Manager
+	Files  *lazyassets.Manager
 }
 
 func (r *Dispatcher) String() string {
@@ -122,5 +123,12 @@ func (d *Dispatcher) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	d.dispatch(action, w, req)
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		d.dispatch(action, w, req)
+	})
+
+	metrics := httpsnoop.CaptureMetrics(h, w, req)
+	fmt.Printf("action : %+v\n", action)
+	fmt.Printf("metrics: %+v\n", metrics)
+
 }

@@ -29,10 +29,11 @@ type ComponentWithMaps interface {
 }
 type ComponentWithInstall interface {
 	Install(opts InstallOptions) error
+	Uninstall(opts InstallOptions) error
+	Installed(opts InstallOptions) bool
 }
 
 type ComponentWithUninstall interface {
-	Uninstall(opts InstallOptions) error
 }
 
 type InstallOptions struct {
@@ -54,9 +55,11 @@ func InstallAll(opts InstallOptions) error {
 	fmt.Println("Installing components...", allComponents)
 	for _, c := range allComponents {
 		if c, ok := c.(ComponentWithInstall); ok {
-			err := c.Install(opts)
-			if err != nil {
-				return err
+			if !c.Installed(opts) {
+				err := c.Install(opts)
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}

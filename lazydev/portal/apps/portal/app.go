@@ -1,51 +1,27 @@
 package portal
 
 import (
-	"net/http"
-	"net/url"
+	"portal/assets"
+	"portal/resources/devapp"
 
 	"golazy.dev/lazyaction"
-	"golazy.dev/lazyapp"
-	rhttp "golazy.dev/lazydev/internal/portal/resources/http"
-	"golazy.dev/lazydev/server"
+	lazyassets "golazy.dev/lazyassets"
+	"golazy.dev/lazyview/component"
 )
 
-type PortalApp struct {
-	lazyapp.App
-	PortalDisabled bool
-}
-
-func (a *PortalApp) DisablePortal() {
-	a.PortalDisabled = true
-}
-
-func (a *PortalApp) Open(url *url.URL) {
-}
-func (a *PortalApp) Close() {
-
-}
-
-var Portal = &PortalApp{
-	App: lazyapp.App{
-		Name: "portal",
-	},
-}
-
-var App = &PortalApp{
-	App: lazyapp.App{
-		Name: "portal",
-	},
-}
+var App = &PortalApp{}
 
 func init() {
-	App.Router.Resource(&rhttp.HttpController{}, &lazyaction.ResourceOptions{Path: "http:///"})
-	App.Router.Resource(&rhttp.HttpController{}, &lazyaction.ResourceOptions{Path: "https:///"})
-}
 
-func (a *PortalApp) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	a.App.ServeHTTP(w, r)
-}
+	component.InstallAll(component.InstallOptions{
+		Path:  "../../assets/public",
+		Cache: "../../assets/cache",
+	})
 
-func (a *PortalApp) Event(e server.Event) {
+	//App.Router.Resource(&rhttp.HttpController{}, &lazyaction.ResourceOptions{Scheme: "http", Path: "/"})
+	//App.Router.Resource(&rhttp.HttpController{}, &lazyaction.ResourceOptions{Scheme: "https", Path: "/"})
+
+	App.Files = lazyassets.NewManager(assets.FS, "public")
+	App.Resource(&devapp.Controller{}, &lazyaction.ResourceOptions{Path: "/"})
 
 }

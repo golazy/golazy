@@ -3,15 +3,16 @@ package http
 import (
 	"io"
 
-	"golazy.dev/lazydev/internal/portal/layouts/golazy"
+	"portal/layouts/golazy"
+
 	"golazy.dev/lazyview/html"
 )
 
-type HttpController struct {
+type Controller struct {
 	golazy.Layout
 }
 
-func (h *HttpController) Index() io.WriterTo {
+func (h *Controller) Index() io.WriterTo {
 
 	return html.H1("pepe")
 

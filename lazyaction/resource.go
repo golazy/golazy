@@ -123,7 +123,7 @@ func (r *Resource) Actions() []*Action {
 		name := methodT.Name
 		switch {
 		case isAction(name):
-			actions = append(actions, r.genRoutesForActionN(cVal, i)...)
+			actions = append(actions, r.genActionsForMethodN(cVal, i)...)
 		case strings.HasPrefix(name, "Gen"):
 			fn := args.NewGen((cVal.Method(i)))
 			t := fn.Outs[0]
@@ -142,7 +142,7 @@ func (r *Resource) Actions() []*Action {
 	return actions
 }
 
-func (r *Resource) genRoutesForActionN(val reflect.Value, i int) []*Action {
+func (r *Resource) genActionsForMethodN(val reflect.Value, i int) []*Action {
 	routes := []*Action{}
 	method := val.Method(i)
 	cType := reflect.TypeOf(r.Controller)

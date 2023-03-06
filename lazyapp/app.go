@@ -12,16 +12,17 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"golazy.dev/lazyaction"
+	lazyassets "golazy.dev/lazyassets"
 	"golazy.dev/lazyview/component"
-	"golazy.dev/lazyview/static_files"
 )
+
+var Current *App
 
 type App struct {
 	Name        string
 	Router      lazyaction.Dispatcher
 	Server      http.Server
-	Files       *static_files.Manager
-	mounts      mounts
+	Files       *lazyassets.Manager
 	MiddleWares []Middleware
 	h           http.Handler
 }
@@ -30,8 +31,20 @@ func (a *App) Shutdown(ctx context.Context) error {
 	return a.Server.Shutdown(ctx)
 }
 
-func (a *App) Route(args ...any) {
-	a.Router.Route(args...)
+func (a *App) Route(route_def string, target any) {
+	a.Router.Route(route_def, target)
+}
+
+func (a *App) PermanentRedirect(route_def string, target string) {
+	a.Router.Route(route_def, func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target, http.StatusMovedPermanently)
+	})
+}
+
+func (a *App) Redirect(route_def string, target string) {
+	a.Router.Route(route_def, func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target, http.StatusFound)
+	})
 }
 
 func (a *App) Resource(resource any, opts ...*lazyaction.ResourceOptions) {
@@ -43,11 +56,6 @@ func (a *App) Init() {
 
 	a.h = &a.Router
 
-	// Add mounts
-	if a.mounts != nil {
-		a.h = a.mounts.Middleware(a.h)
-	}
-
 	// Add files
 	if a.Files != nil {
 		a.h = a.Files.NewMiddleware(a.h)
@@ -57,7 +65,7 @@ func (a *App) Init() {
 	a.h = loggerMiddleware(a.h)
 
 	// Add panic handler
-	a.h = panicMiddleware(a.h)
+	//a.h = panicMiddleware(a.h)
 
 	// Add middlewares
 	for _, m := range a.MiddleWares {
@@ -84,6 +92,7 @@ func (a *App) Boot() {
 			if err != nil {
 				panic(err)
 			}
+			Current = a
 			err = http.Serve(l, a)
 			if err != nil {
 				panic(err)
@@ -115,13 +124,6 @@ func (a *App) Boot() {
 	viper.BindEnv("port")
 
 	command.Execute()
-}
-
-func (a *App) Mount(path string, h http.Handler) {
-	if a.mounts == nil {
-		a.mounts = make(map[string]http.Handler)
-	}
-	a.mounts[path] = h
 }
 
 func getListener(addr string) (net.Listener, error) {

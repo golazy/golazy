@@ -8,7 +8,7 @@ import (
 
 	"golazy.dev/lazyaction"
 	"golazy.dev/lazyapp"
-	"golazy.dev/lazyview/static_files"
+	lazyassets "golazy.dev/lazyassets"
 )
 
 //go:embed test_assets/*
@@ -24,7 +24,7 @@ func (c *PagesController) Index(ctx lazyaction.Context) {
 func TestLazyApp_Assets(t *testing.T) {
 
 	app := lazyapp.App{
-		Files: static_files.NewManager(FS, "test_assets"),
+		Files: lazyassets.NewManager(FS, "test_assets"),
 	}
 	app.Init()
 
@@ -45,8 +45,9 @@ func TestLazyApp_Assets(t *testing.T) {
 func TestLazyApp_Mount(t *testing.T) {
 
 	app := lazyapp.App{}
+	app.Init()
 
-	app.Mount("/asdf", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	app.Route("* /asdf/*", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("Hello"))
 	}))
 

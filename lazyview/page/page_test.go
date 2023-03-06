@@ -5,12 +5,12 @@ import (
 	"io"
 	"testing"
 
+	lazyassets "golazy.dev/lazyassets"
 	"golazy.dev/lazyview/component"
 	"golazy.dev/lazyview/components/turbo"
 	"golazy.dev/lazyview/html"
 	"golazy.dev/lazyview/nodes"
 	"golazy.dev/lazyview/script"
-	"golazy.dev/lazyview/static_files"
 	"golazy.dev/lazyview/style"
 	"golazy.dev/lazyview/viewtest"
 )
@@ -89,7 +89,7 @@ func TestPage(t *testing.T) {
 
 	expect(&Page{ImportMap: component.ImportMap{"a": "b"}},
 		`<!DOCTYPE html><html><head><script type=importmap>{"imports":{"a":"b"}}</script><body>`)
-	p.Files = static_files.NewManager(FS, "test_assets")
+	p.Files = lazyassets.NewManager(FS, "test_assets")
 
 	expect(p,
 		`<!DOCTYPE html><html><head><script type=importmap>{"imports":{"@hotwired/turbo":"/@hotwired/turbo/dist/turbo.es2017-esm-38b060a751ac.js"}}</script><script type=module>import * as Turbo from "@hotwired/turbo"; Turbo.start(); </script><body>`)

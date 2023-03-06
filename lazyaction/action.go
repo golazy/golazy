@@ -17,6 +17,7 @@ type Action struct {
 	Fn         *args.Fn
 	Generators *map[string][]args.Gen
 	Layout     *args.Fn
+	DefinedIn  string
 
 	Controller     any
 	ControllerName string // PostsController

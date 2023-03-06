@@ -22,10 +22,10 @@ func (d *Dispatcher) dispatch(action *Action, w http.ResponseWriter, req *http.R
 
 	ins := args.InputSet{
 		Values: map[string][]any{
-			"http.ResponseWriter":   {w},
-			"*http.Request":         {req},
-			"string":                extractParam(req.URL.Path, action.URL.Path),
-			"*static_files.Manager": {d.Files},
+			"http.ResponseWriter": {w},
+			"*http.Request":       {req},
+			"string":              extractParam(req.URL.Path, action.URL.Path),
+			"*lazyassets.Manager": {d.Files},
 		},
 		Generators: *action.Generators,
 	}

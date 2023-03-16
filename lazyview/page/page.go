@@ -15,7 +15,7 @@ import (
 )
 
 type Page struct {
-	Files       *lazyassets.Manager
+	Assets      *lazyassets.Assets
 	Styles      []style.Style
 	Scripts     []script.Script
 	Description string
@@ -30,12 +30,27 @@ type Page struct {
 	Components  []component.Component
 }
 
-func (p *Page) AddScript(s script.Script) {
-	p.Scripts = append(p.Scripts, s)
+func (p *Page) AddScript(s any) {
+	p.Scripts = append(p.Scripts, script.New(s))
 }
 
 func (p *Page) Use(c component.Component) {
 	p.Components = append(p.Components, c)
+}
+
+func (p *Page) AddStyleLink(href string) {
+	if len(href) == 0 {
+		panic("href must not be empty")
+	}
+	if href[0] != '/' {
+		href = "/" + href
+	}
+
+	if p.Assets != nil {
+		href = p.Assets.Get(href)
+	}
+
+	p.Styles = append(p.Styles, style.Style{Href: href})
 }
 
 func (p *Page) AddStyle(s style.Style) {
@@ -78,10 +93,10 @@ func (p *Page) Element() *nodes.Element {
 			title,
 			description,
 			keywords,
+			p.head(),
 			p.styles(),
 			p.importMaps(),
 			p.scripts(),
-			p.head(),
 		),
 		Body(p.Content),
 	)
@@ -118,18 +133,26 @@ func (p *Page) scripts() []io.WriterTo {
 		if c, ok := (c).(component.ComponentWithScripts); ok {
 			for _, s := range c.PageScripts() {
 
-				if f := p.findAsset(s.Src); f != nil {
-					s.Src = f.Permalink
-					s.Integrity = f.Hash.Integrity()
+				if s.Src != "" {
+					p, f := p.Assets.Permalink(s.Src)
+					if f == nil {
+						panic("File not found: " + s.Src)
+					}
+					s.Src = p
+					s.Integrity = f.Integrity()
 				}
+
 				scripts = append(scripts, s.Element())
 			}
 		}
 	}
 	for _, s := range p.Scripts {
-		if f := p.findAsset(s.Src); f != nil {
-			s.Integrity = f.Hash.Integrity()
-			s.Src = f.Permalink
+		if p.Assets != nil {
+			path, f := p.Assets.Permalink(s.Src)
+			if f != nil {
+				s.Src = path
+				s.Integrity = f.Integrity()
+			}
 		}
 		scripts = append(scripts, s.Element())
 	}
@@ -139,29 +162,29 @@ func (p *Page) scripts() []io.WriterTo {
 }
 
 func (p *Page) toPermalink(path string) string {
-	if p.Files == nil {
+	if p.Assets == nil {
 		return path
 	}
-	if strings.Contains(path, "://") || p.Files == nil {
+	if strings.Contains(path, "://") || p.Assets == nil {
 		return path
 	}
 	if len(path) < 1 {
 		return path
 	}
 
-	link, err := p.Files.Permalink(path[1:])
-	if err != nil {
-		panic(err)
+	link, f := p.Assets.Permalink(path[1:])
+	if f == nil {
+		panic("File not found: " + path)
 	}
 
 	return link
 }
 
 func (p *Page) findAsset(asset_path string) *lazyassets.File {
-	if p.Files == nil {
+	if p.Assets == nil {
 		return nil
 	}
-	f, _ := p.Files.Find(asset_path)
+	f := p.Assets.Find(asset_path)
 	return f
 }
 
@@ -182,7 +205,7 @@ func (p *Page) importMaps() io.WriterTo {
 	}
 
 	// Use permalinks
-	if p.Files != nil {
+	if p.Assets != nil {
 		for k, v := range im {
 			im[k] = p.toPermalink(v)
 		}

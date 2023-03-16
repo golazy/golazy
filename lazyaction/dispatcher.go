@@ -1,26 +1,40 @@
 package lazyaction
 
 import (
-	"fmt"
 	"net/http"
-	"net/url"
-	"reflect"
-	"strings"
 
 	"github.com/felixge/httpsnoop"
-	"golazy.dev/lazyaction/internal/args"
 	"golazy.dev/lazyaction/router"
 	"golazy.dev/lazyassets"
 )
 
 type Dispatcher struct {
 	router *router.Router[Action]
-	Files  *lazyassets.Manager
+	Assets *lazyassets.Assets
 }
 
 func (r *Dispatcher) String() string {
 	//return r.router.String()
 	return ""
+}
+
+type Route struct {
+	Method string `json:"method"`
+	URL    string `json:"url"`
+	Name   string `json:"name"`
+}
+
+func (r *Dispatcher) Routes() []Route {
+	all := r.router.All()
+	routes := make([]Route, len(all))
+
+	for i, route := range r.router.All() {
+		routes[i].Method = route.Req.Method
+		routes[i].URL = route.Req.URL.String()
+		routes[i].Name = route.T.Name
+	}
+
+	return routes
 }
 
 /*
@@ -30,45 +44,8 @@ Route adds routes to the router
 	Router.Route("POST", "/users", func() string{ return "User created!"})  // Verb can be added as a string
 */
 func (d *Dispatcher) Route(def string, target any) {
-	if d.router == nil {
-		d.router = router.NewRouter[Action]()
-	}
-
-	path := def
-	method := "GET"
-
-	if strings.Contains(def, " ") {
-		parts := strings.Split(def, " ")
-		method = parts[0]
-		path = parts[1]
-	}
-
-	u, err := url.Parse(path)
-	if err != nil {
-		panic(err)
-	}
-
-	action := &Action{
-		Method:     method,
-		URL:        *u,
-		Name:       "Annonymous",
-		Generators: &map[string][]args.Gen{},
-	}
-
-	switch t := target.(type) {
-	case http.HandlerFunc:
-		action.Handler = t
-	case http.Handler:
-		action.Handler = t.ServeHTTP
-	default:
-		if reflect.ValueOf(t).Kind() == reflect.Func {
-			action.Fn = args.NewFn(t)
-			break
-		}
-		panic(fmt.Sprintf("invalid argument type: %T", t))
-	}
-
-	d.router.Add(def, action)
+	rc := &Constraints{d: d}
+	rc.Route(def, target)
 }
 
 /*
@@ -96,20 +73,14 @@ Custom actions can be added to the resource by combining the verb and if it belo
 Resource internally calls Route to add the routes to the router.
 */
 func (d *Dispatcher) Resource(target any, options ...*ResourceOptions) {
-	if d.router == nil {
-		d.router = router.NewRouter[Action]()
-	}
-	if len(options) == 0 {
-		options = append(options, &ResourceOptions{})
-	}
-	resource, err := newResource(target, options[0])
-	if err != nil {
-		panic(err)
-	}
-	for _, action := range resource.Actions() {
-		d.router.Add(action.Method+" "+action.URL.String(), action)
-	}
+	rc := &Constraints{d: d}
+	rc.Resource(target, options...)
+}
 
+func (d *Dispatcher) With(c Constraints) *Constraints {
+	c2 := c
+	c2.d = d
+	return &c2
 }
 
 func (d *Dispatcher) ServeHTTP(w http.ResponseWriter, req *http.Request) {
@@ -123,12 +94,9 @@ func (d *Dispatcher) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		d.dispatch(action, w, req)
-	})
-
-	metrics := httpsnoop.CaptureMetrics(h, w, req)
-	fmt.Printf("action : %+v\n", action)
-	fmt.Printf("metrics: %+v\n", metrics)
+	httpsnoop.CaptureMetrics(action, w, req)
+	//metrics := httpsnoop.CaptureMetrics(action, w, req)
+	//fmt.Printf("action : %+v\n", action)
+	//fmt.Printf("metrics: %+v\n", metrics)
 
 }

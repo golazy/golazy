@@ -6,13 +6,11 @@ import (
 	"golazy.dev/lazyassets"
 )
 
-//go:embed public/*
+//go:embed public
 var FS embed.FS
 
-var Mangaer *lazyassets.Manager
-
-func init() {
-
-	Mangaer = lazyassets.NewManager(FS, "public")
-
-}
+var (
+	Manager    = lazyassets.New()
+	Assets     = Manager.AddFS(FS, "public")
+	Stylesheet = Assets.NewStylesheet("app.css")
+)

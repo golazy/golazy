@@ -24,42 +24,42 @@ func newExpect(t *testing.T, r *Dispatcher) func(path, expected string) {
 
 func TestRouterRoute(t *testing.T) {
 
-	router := Dispatcher{}
+	dispatcher := Dispatcher{}
 
-	expect := newExpect(t, &router)
+	expect := newExpect(t, &dispatcher)
 
-	router.Route("/:path", ActionHandler)
-	router.Route("/hi", StringHandler("hi"))
+	dispatcher.Route("/:path", ActionHandler)
+	dispatcher.Route("/hi", StringHandler("hi"))
 	expect("/root", "root")
 	expect("/hi", "hi")
 
-	t.Log(router.String())
+	t.Log(dispatcher.String())
 
 }
 
 func TestRouterResource(t *testing.T) {
 
-	router := Dispatcher{}
+	dispatcher := Dispatcher{}
 
-	expect := newExpect(t, &router)
+	expect := newExpect(t, &dispatcher)
 
-	router.Resource(&PostsController{})
+	dispatcher.Resource(&PostsController{})
 	expect("/posts", "Index")
 
-	t.Log(router.String())
+	t.Log(dispatcher.String())
 
 }
 
 func TestRouterResources(t *testing.T) {
 
-	router := Dispatcher{}
+	dispatcher := Dispatcher{}
 
-	expect := newExpect(t, &router)
+	expect := newExpect(t, &dispatcher)
 
-	router.Resource(&InternalController{}, &ResourceOptions{Scheme: "http"})
-	router.Resource(&InternalController{}, &ResourceOptions{Scheme: "https"})
+	dispatcher.Resource(&InternalController{}, &ResourceOptions{Scheme: "http"})
+	dispatcher.Resource(&InternalController{}, &ResourceOptions{Scheme: "https"})
 	expect("/internal", "Index")
 
-	t.Log(router.String())
+	t.Log(dispatcher.String())
 
 }

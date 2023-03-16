@@ -1,40 +1,68 @@
 package golazy
 
 import (
+	"bytes"
 	"io"
+	"math/rand"
+	"net/http"
+	"net/url"
+	"portal/assets"
+	"portal/components/nav"
+	"strings"
 
+	_ "embed"
+
+	"golazy.dev/lazyaction"
 	lazyassets "golazy.dev/lazyassets"
+	"golazy.dev/lazyview/components/es_module_shims"
 	"golazy.dev/lazyview/components/turbo"
 	. "golazy.dev/lazyview/html"
-	"golazy.dev/lazyview/page"
-	"golazy.dev/lazyview/style"
 )
 
+//go:embed style.css
+var css []byte
+
+//go:embed slogans.txt
+var slogansC string
+
+var slogans = strings.Split(slogansC, "\n")
+
 func init() {
+	assets.Stylesheet.Add(css)
 }
 
 // Layout is the layout for the portal
 type Layout struct {
-	page.Page
+	lazyaction.Base
 }
 
-func (l *Layout) RenderLayout(a *lazyassets.Manager, content []byte) io.WriterTo {
+func cite() string {
+	return slogans[rand.Intn(len(slogans))]
+}
 
-	l.Files = a
+func (l *Layout) RenderLayout(w http.ResponseWriter, current *url.URL, assets *lazyassets.Assets, content []byte) io.WriterTo {
+	if l.SkipL {
+		return bytes.NewBuffer(content)
+	}
+	ct := w.Header().Get("Content-Type")
+	if ct != "" && ct != "text/html" {
+		return bytes.NewBuffer(content)
+	}
+	if assets == nil {
+		panic("What!")
+	}
+	l.Page.Assets = assets
+	l.Use(es_module_shims.Component)
+	l.Assets = assets
 	l.Charset = "utf-8"
-	l.Title = "GoLazy"
+	l.Title = "GoLazy" + " " + l.Title
 	l.Viewport = "width=device-width, initial-scale=1"
-	l.Styles = append(l.Styles, style.Style{
-		Content: `
-
-		`,
-	})
+	l.AddStyleLink("app.css")
 
 	l.Content = Body(
-		H1(
-			Img(Src(a.Get("img/logo.svg")), Alt("GoLazy")),
-		),
+		nav.Navigation(current),
 		Main(
+
 			content,
 		),
 	)

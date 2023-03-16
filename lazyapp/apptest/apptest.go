@@ -8,11 +8,10 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
-	"testing"
 )
 
 type Tester struct {
-	t   *testing.T
+	t   T
 	app http.Handler
 }
 
@@ -20,7 +19,14 @@ type app interface {
 	Init()
 }
 
-func New(t *testing.T, app http.Handler) *Tester {
+type T interface {
+	Helper()
+	Errorf(format string, args ...interface{})
+	Fatal(args ...interface{})
+	Fatalf(format string, args ...interface{})
+}
+
+func New(t T, app http.Handler) *Tester {
 	t.Helper()
 	return &Tester{
 		t:   t,
@@ -51,7 +57,7 @@ type Expectation struct {
 }
 
 type Result struct {
-	t   *testing.T
+	t   T
 	rec *httptest.ResponseRecorder
 }
 
@@ -66,7 +72,7 @@ func (r *Result) Body(in string) *Result {
 func (r *Result) Contains(in string) *Result {
 	r.t.Helper()
 	if !strings.Contains(r.rec.Body.String(), in) {
-		r.t.Errorf("Expected body to contain %q, got %q", in, r.rec.Body.String())
+		r.t.Errorf("Expected body to contain %q, got:\n%s\n", in, r.rec.Body.String())
 	}
 	return r
 }
@@ -104,7 +110,6 @@ func (t *Tester) Expect(ins ...any) *Result {
 	}
 
 	return result
-
 }
 
 func fillRequest(req *Request, in ...any) {

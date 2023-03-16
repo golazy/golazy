@@ -5,6 +5,7 @@ import (
 	"go/build"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 
 	"portal/apps/portal"
@@ -22,8 +23,13 @@ func init() {
 		Short: "Start development server",
 		Run: func(cmd *cobra.Command, args []string) {
 
+			mainDir, err := filepath.Abs(args[0])
+			if err != nil {
+				panic(err)
+			}
+
 			// Check the package is a main package
-			pkg, err := build.ImportDir(args[0], build.IgnoreVendor)
+			pkg, err := build.ImportDir(mainDir, build.IgnoreVendor)
 			if err != nil || pkg.Name != "main" {
 				fmt.Println("Error:", args[0], "is not a main package")
 				os.Exit(-1)
@@ -42,6 +48,7 @@ func init() {
 			if np {
 				srv := devserver.New(devserver.Options{
 					BuildDir:  args[0],
+					RootDir:   findFirstRoot(mainDir),
 					BuildArgs: strings.Split("-buildvcs=false", " "),
 					RunEnv:    []string{"PORT=2000"},
 					Events: func(e events.Event) {
@@ -53,6 +60,11 @@ func init() {
 
 						if e, ok := e.(events.Stderr); ok {
 							os.Stderr.Write([]byte(e))
+							return
+						}
+
+						if e, ok := e.(events.BuildError); ok {
+							fmt.Println(string(e.Out))
 							return
 						}
 

@@ -2,29 +2,31 @@ package lazyapp
 
 import (
 	"context"
-	"fmt"
-	"net"
 	"net/http"
-	"os"
-	"strconv"
-	"strings"
 
-	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"golazy.dev/lazyaction"
-	lazyassets "golazy.dev/lazyassets"
-	"golazy.dev/lazyview/component"
+	"golazy.dev/lazyassets"
 )
 
 var Current *App
 
 type App struct {
 	Name        string
-	Router      lazyaction.Dispatcher
+	Addr        string
+	Dispatcher  lazyaction.Dispatcher
 	Server      http.Server
-	Files       *lazyassets.Manager
+	Assets      *lazyassets.Assets
 	MiddleWares []Middleware
 	h           http.Handler
+}
+
+func (a *App) Routes() []lazyaction.Route {
+	return a.Dispatcher.Routes()
+}
+
+func (a *App) Middleware(f func(http.Handler) http.Handler) {
+	a.MiddleWares = append(a.MiddleWares, f)
 }
 
 func (a *App) Shutdown(ctx context.Context) error {
@@ -32,40 +34,46 @@ func (a *App) Shutdown(ctx context.Context) error {
 }
 
 func (a *App) Route(route_def string, target any) {
-	a.Router.Route(route_def, target)
+	a.Dispatcher.Assets = a.Assets
+	a.Dispatcher.Route(route_def, target)
+}
+func (a *App) With(c lazyaction.Constraints) *lazyaction.Constraints {
+	a.Dispatcher.Assets = a.Assets
+	return a.Dispatcher.With(c)
 }
 
 func (a *App) PermanentRedirect(route_def string, target string) {
-	a.Router.Route(route_def, func(w http.ResponseWriter, r *http.Request) {
+	a.Dispatcher.Route(route_def, func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, target, http.StatusMovedPermanently)
 	})
 }
 
 func (a *App) Redirect(route_def string, target string) {
-	a.Router.Route(route_def, func(w http.ResponseWriter, r *http.Request) {
+	a.Dispatcher.Route(route_def, func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, target, http.StatusFound)
 	})
 }
 
 func (a *App) Resource(resource any, opts ...*lazyaction.ResourceOptions) {
-	a.Router.Resource(resource, opts...)
+	a.Dispatcher.Assets = a.Assets
+	a.Dispatcher.Resource(resource, opts...)
 }
 
 func (a *App) Init() {
-	a.Router.Files = a.Files
+	a.Dispatcher.Assets = a.Assets
 
-	a.h = &a.Router
+	a.h = &a.Dispatcher
 
 	// Add files
-	if a.Files != nil {
-		a.h = a.Files.NewMiddleware(a.h)
+	if a.Assets != nil {
+		a.h = a.Assets.NewMiddleware(a.h)
 	}
 
 	// Add logger
 	a.h = loggerMiddleware(a.h)
 
 	// Add panic handler
-	//a.h = panicMiddleware(a.h)
+	a.h = panicMiddleware(a.h)
 
 	// Add middlewares
 	for _, m := range a.MiddleWares {
@@ -79,74 +87,9 @@ func (a *App) Boot() {
 	viper.SetConfigFile(".env")
 	viper.ReadInConfig()
 
-	command := &cobra.Command{
-		Use: a.Name,
-		Run: func(c *cobra.Command, args []string) {
-
-			addr := viper.GetString("port")
-			if !strings.Contains(addr, ":") {
-				addr = ":" + addr
-			}
-
-			l, err := getListener(addr)
-			if err != nil {
-				panic(err)
-			}
-			Current = a
-			err = http.Serve(l, a)
-			if err != nil {
-				panic(err)
-			}
-
-		},
-	}
-	command.AddCommand(&cobra.Command{
-		Use: "routes",
-		Run: func(c *cobra.Command, args []string) {
-			fmt.Println(a.Router)
-		},
-	})
-
-	command.AddCommand(&cobra.Command{
-		Use:   "assets",
-		Short: "Install all the assets",
-		Run: func(c *cobra.Command, args []string) {
-			component.InstallAll(component.InstallOptions{
-				Path:  "assets/public",
-				Cache: "assets/cache",
-			})
-
-		},
-	})
-
-	command.PersistentFlags().StringP("port", "p", "localhost:2000", "Listening port or address")
-	viper.BindPFlag("port", command.PersistentFlags().Lookup("port"))
-	viper.BindEnv("port")
-
-	command.Execute()
+	rootCmd(a).Execute()
 }
 
-func getListener(addr string) (net.Listener, error) {
-	if strings.HasPrefix(addr, "fd:") {
-		fd, err := strconv.Atoi(addr[3:])
-		if err != nil {
-			return nil, err
-		}
-		listenerFile := os.NewFile(uintptr(fd), "listener")
-		if listenerFile == nil {
-			return nil, fmt.Errorf("expecting listener in FD %d", fd)
-		}
-
-		l, err := net.FileListener(listenerFile)
-		if err != nil {
-			return nil, fmt.Errorf("error creating listener: %s", err)
-		}
-		return l, nil
-	}
-
-	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
-	if err != nil {
-		return nil, err
-	}
-	return net.ListenTCP("tcp", tcpAddr)
+func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	a.h.ServeHTTP(w, r)
 }

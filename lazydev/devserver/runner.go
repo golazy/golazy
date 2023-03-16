@@ -1,6 +1,7 @@
 package devserver
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"syscall"
@@ -25,6 +26,7 @@ func run(opts runOpts) (stdout, stderr <-chan ([]byte), exit <-chan (int), kill 
 	errC := make(chan []byte)
 	exitC := make(chan (int))
 
+	fmt.Println("Running:", opts.Path, "in dir:", opts.Dir)
 	cmd := exec.Command(opts.Path)
 	cmd.Dir = opts.Dir
 	cmd.Stdout = cWriter(stdC)

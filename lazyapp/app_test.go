@@ -14,6 +14,8 @@ import (
 //go:embed test_assets/*
 var FS embed.FS
 
+var Manager = lazyassets.New().AddFS(FS, "test_assets")
+
 type PagesController struct {
 }
 
@@ -24,7 +26,7 @@ func (c *PagesController) Index(ctx lazyaction.Context) {
 func TestLazyApp_Assets(t *testing.T) {
 
 	app := lazyapp.App{
-		Files: lazyassets.NewManager(FS, "test_assets"),
+		Assets: Manager,
 	}
 	app.Init()
 
@@ -77,7 +79,7 @@ func TestLazyApp_Middleware(t *testing.T) {
 		},
 	}
 
-	app.Router.Route("/", func() string {
+	app.Dispatcher.Route("/", func() string {
 		return "me"
 	})
 

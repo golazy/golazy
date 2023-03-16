@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"fmt"
 	"go/build"
 	"io/fs"
 	"os"
@@ -64,7 +63,6 @@ func mainPackages() []string {
 		mains = append(mains, rel)
 		return nil
 	})
-	fmt.Println(mains)
 	return mains
 
 }

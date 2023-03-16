@@ -1,30 +1,23 @@
 package devapp
 
 import (
+	"io"
 	"portal/layouts/golazy"
+
+	. "golazy.dev/lazyview/html"
 )
 
 type Controller struct {
 	golazy.Layout
 }
 
-func (a *Controller) Index() string {
-	return "hellos"
+func (a *Controller) Index() io.WriterTo {
 
-	/*
-		u := models.AppURL()
-		if u == nil {
-			models.EventEach(func(e events.Event) {
-				w.Write([]byte(lazyapp.Current.Name))
-				w.Write([]byte(e.String() + "\n"))
-			})
-			w.Write([]byte("Not running"))
-			return ""
-		}
+	return Div(
+		H1("Install certificate"),
+		A(Href("/download_cert"), "Download certificate", Download()),
+	)
 
-		httputil.NewSingleHostReverseProxy(u).ServeHTTP(w, r)
-		return "asdf"
-	*/
 }
 
 func (a *Controller) Status() string {

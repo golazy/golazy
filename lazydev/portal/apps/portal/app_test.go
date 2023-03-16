@@ -8,11 +8,13 @@ import (
 
 func TestApp(t *testing.T) {
 
-	a := App
+	expect := apptest.New(t, App).Expect
 
-	expect := apptest.New(t, a).Expect
-
+	expect("/")
+	expect("/")
+	expect("/")
 	expect("/").
 		Code(200).
-		Contains("hellos")
+		Contains("hola")
+
 }

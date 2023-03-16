@@ -1,7 +1,6 @@
 package models
 
 import (
-	"fmt"
 	"sync"
 
 	"golazy.dev/lazydev/devserver/events"
@@ -20,7 +19,6 @@ var eventsDB []events.Event
 var eventsDBLock sync.Mutex
 
 func EventSave(e events.Event) {
-	fmt.Println(e.Type())
 	eventsDBLock.Lock()
 	eventsDB = append(eventsDB, e)
 	if len(eventsDB) > MaxEvents {
@@ -84,7 +82,6 @@ func EventAll() []events.Event {
 }
 
 func event_process(e events.Event) {
-	fmt.Println(e)
 
 	switch e := e.(type) {
 	case events.Listen:

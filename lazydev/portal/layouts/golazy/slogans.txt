@@ -1,0 +1,111 @@
+The boring framework
+Optimized for the lazy
+DevSpeed!
+GoLazy allows you to go lazy.
+GoLazy is not Rails
+The slowest router in the go land
+The slow framework
+Too lazy to boilerplate
+It is nil until you ship it
+GoLazy Go!
+go lazy go
+The ADHD web development framework
+This is not PHP
+This is not Rails
+The micromonolith architecture
+First, you ship it
+Ship, Optimize and Ship again
+Does the final user really want what you are building?
+Do you really need that?
+Be lazy. Just do the urgent and important
+GoLazy is not a framework. It is a way of life
+Yet another go framework
+The web framework without ORM
+Golazy is too lazy to have an orm
+Microbenchmarks are not the answer
+100% faster than other frameworks
+<!-- marketing bullshit -->
+We optimize once we get the first million
+Shouldn't we wait until we have a user to optimize?
+Your mother does not count as a user
+Go is not ruby. Be aware of cyclic dependencies
+Do you miss the Apache web server?
+The quality of being unwilling to work or use energy; idleness
+Are you lazy?
+Are you testing?
+What about native?
+Is your equity worth the trouble?
+Are you sure you need that?
+You should totally optimize that code now!
+Have you heard about this new shiny framework?
+Stackoverflow is your friend.
+ChatGPT-5 is your friend
+Just remove that folder. That code was not worth it.
+YOU ARE NOT GOOGLE
+YOU ARE NOT FACEBOOK
+YOU ARE NOT AMAZON
+YOU ARE NOT MICROSOFT
+YOU ARE NOT APPLE
+YOU ARE NOT NETFLIX
+YOU ARE NOT TWITTER
+YOU ARE NOT TIKTOK
+YOU ARE NOT INSTAGRAM
+YOU ARE NOT WHATSAPP
+YOU ARE NOT YOUTUBE
+Users are ok if servers are down once in a while
+If knowledge is on the team: rewrite. If it is in the code: refactor
+How often do you hear the word 'politics' in your company?
+Do you fully understand the business model?
+How will that make money?
+Functional > Reliable > Usable > Convenient > Enjoyable > Significant
+It is easy to forget, but our users are not stupid
+KPI: number of focus changes per week
+It is not a bug. It is just crap!
+Before you deploy, remember to run the tests.
+When deploying, there is a time when the old and the new app are running at the same time
+You can't improve what you don't measure
+Impossible to have a good product without a good team
+Users want to be happy
+Users are nice!
+What are your values?
+42
+64Gb of RAM is enough
+Did you run the migrations?
+There is a new library every minute in github. Use it!
+If you need to read the docs, the API is not intuitive enough
+If users ask, you are not clear enough
+Show, don't tell
+Trust on yourself
+Follow your gut
+Trust in your team
+Trust in your users
+Trust your boss
+Trust!
+I like you
+I love your style
+Let's do microservices before the first users arrive
+Let's refactor before release. It always works!
+Estimations are part of the work.
+If development is a craftmanship, then estimations are part of the work
+The senior title requires good communication skills
+The senior title implies being predictable
+Seniority kills surprises
+Communication > Code
+No one cares if it works on your machine
+Love!
+High-performance teams are not afraid to speak up
+Embrace the arguments... after delivery
+Can we just do everything in the same database?
+Do we really need another microservice?
+Let's have distributed state management. That always work.
+One 32 Gb instance is better than 32 1Gb instances.
+A 64Gb server cost less than 50 bucks. Do you really need kubernetes?
+Scale teams, not code.
+Ensure there app structure follows the company structure.
+If two teams depend on each other they should be the same team
+Remove dependencies
+Be fast, but don't break things, please.
+Reduce the scope to deliver faster.
+Communicate actively with stakeholders
+Only inform the people affected by your decision
+Do you need to inform someone before deployment?

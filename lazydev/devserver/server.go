@@ -10,6 +10,7 @@ import (
 
 type Options struct {
 	BuildDir  string
+	RootDir   string
 	BuildArgs []string
 	Events    func(events.Event)
 	RunEnv    []string
@@ -85,7 +86,7 @@ func (srv *Server) app_start(s state) (state, action) {
 
 	outC, errC, exit, kill, err := run(runOpts{
 		Path: s.file,
-		Dir:  srv.opts.BuildDir,
+		Dir:  srv.opts.RootDir,
 	})
 	if err != nil {
 		srv.notify(events.AppStartError{Err: err})

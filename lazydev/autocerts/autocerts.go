@@ -18,7 +18,7 @@ import (
 	"time"
 )
 
-var keyLength = 4096
+var keyLength = 1024
 
 // DefaultSubject is used if no subject is supplied
 var DefaultSubject = &pkix.Name{
@@ -78,22 +78,9 @@ func Load(caFile string) (*Autocerts, error) {
 		return nil, fmt.Errorf("can't read CA file %s: %w", ac.caFile, err)
 	}
 
-	for {
-		data, err = ac.decodeCAPem(data)
-		if err != nil {
-			return nil, fmt.Errorf("error while decoding certificate %s: %w", ac.caFile, err)
-		}
-		if data == nil {
-			if ac.caCert == nil {
-				return nil, fmt.Errorf("ca file %s didn't countain a certificate", ac.caFile)
-			}
-			if ac.caKey == nil {
-				return nil, fmt.Errorf("ca file %s didn't countain a private key", ac.caFile)
-			}
-		}
-		if ac.caCert != nil && ac.caKey != nil {
-			break
-		}
+	ac.caCert, ac.caKey, err = DecodeCAPem(data)
+	if err != nil {
+		return nil, err
 	}
 
 	return ac, nil
@@ -113,26 +100,34 @@ func LoadOrCreate(certPath string, subject *pkix.Name) (*Autocerts, error) {
 	return Create(certPath, subject)
 }
 
-func (ac *Autocerts) decodeCAPem(data []byte) ([]byte, error) {
-	block, data := pem.Decode(data)
-	if block == nil {
-		return nil, fmt.Errorf("can't decode certificate")
-	}
-	if block.Type == "CERTIFICATE" {
-		cert, err := x509.ParseCertificate(block.Bytes)
-		if err != nil {
-			return nil, fmt.Errorf("can't parse certificate: %w", err)
+func eachBlock(data []byte) (blocks []*pem.Block) {
+	var p *pem.Block
+	for {
+		p, data = pem.Decode(data)
+		if p == nil {
+			return blocks
 		}
-		ac.caCert = cert
-	} else if block.Type == "RSA PRIVATE KEY" {
-		key, err := x509.ParsePKCS1PrivateKey(block.Bytes)
-		if err != nil {
-			return nil, fmt.Errorf("can't parse private key: %w", err)
-		}
-		ac.caKey = key
+		blocks = append(blocks, p)
 	}
+}
 
-	return data, nil
+func DecodeCAPem(data []byte) (cert *x509.Certificate, key *rsa.PrivateKey, errs error) {
+	var err error
+	for _, b := range eachBlock(data) {
+		switch b.Type {
+		case "CERTIFICATE":
+			cert, err = x509.ParseCertificate(b.Bytes)
+			if err != nil {
+				errs = errors.Join(errs, err)
+			}
+		case "RSA PRIVATE KEY":
+			key, err = x509.ParsePKCS1PrivateKey(b.Bytes)
+			if err != nil {
+				errs = errors.Join(errs, err)
+			}
+		}
+	}
+	return
 }
 
 func (ac *Autocerts) saveCA() error {
@@ -216,7 +211,6 @@ func (ac *Autocerts) CertificateFor(domain string) (*tls.Certificate, error) {
 	if ac.certCache == nil {
 		ac.certCache = make(map[string]*tls.Certificate)
 	} else {
-
 		cert, ok := ac.certCache[domain]
 		if ok {
 			return cert, nil
@@ -238,7 +232,7 @@ func (ac *Autocerts) generateCertFor(domain string) (*tls.Certificate, error) {
 	subject.CommonName = domain
 
 	xCert := &x509.Certificate{
-		SerialNumber: big.NewInt(1658),
+		SerialNumber: big.NewInt(time.Now().UnixNano()),
 		Issuer:       ac.caCert.Subject,
 		Subject:      subject,
 		DNSNames:     []string{domain},

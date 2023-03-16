@@ -1,7 +1,6 @@
 package models
 
 import (
-	"fmt"
 	"net/url"
 	"sync"
 )
@@ -23,11 +22,5 @@ func AppURL() *url.URL {
 func AppSetURL(url *url.URL) {
 	appL.Lock()
 	defer appL.Unlock()
-	fmt.Println("AppSetURL", url)
-	fmt.Println("AppSetURL", url)
-	fmt.Println("AppSetURL", url)
-	fmt.Println("AppSetURL", url)
-	fmt.Println("AppSetURL", url)
-	fmt.Println("AppSetURL", url)
 	appURL = url
 }

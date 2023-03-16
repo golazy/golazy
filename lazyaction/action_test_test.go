@@ -7,12 +7,12 @@ import (
 )
 
 func ExpectAction(actions []*Action, expected *Action) error {
-	if expected.Method == "" {
-		expected.Method = "GET"
+	if expected.Verb == "" {
+		expected.Verb = "GET"
 	}
 	r := FindAction(actions, expected)
 	if r == nil {
-		return errors.New("Action not found: " + expected.Method + " " + expected.URL.String())
+		return errors.New("Action not found: " + expected.Verb + " " + expected.URL.String())
 	}
 	if err := CompareAction(r, expected); err != nil {
 		return err
@@ -22,7 +22,7 @@ func ExpectAction(actions []*Action, expected *Action) error {
 
 func FindAction(actions []*Action, expected *Action) *Action {
 	for _, action := range actions {
-		if action.URL == expected.URL && action.Method == expected.Method {
+		if action.URL == expected.URL && action.Verb == expected.Verb {
 			return action
 		}
 	}
@@ -35,13 +35,13 @@ func CompareAction(original, expected *Action) error {
 		return fmt.Errorf("missing actions to compare")
 	}
 
-	if expected.Method != "" {
-		if original.Method != expected.Method {
-			errs = append(errs, fmt.Errorf("expected verb %s, got %s", expected.Method, original.Method))
+	if expected.Verb != "" {
+		if original.Verb != expected.Verb {
+			errs = append(errs, fmt.Errorf("expected verb %s, got %s", expected.Verb, original.Verb))
 		}
 	} else {
-		if original.Method != "GET" {
-			errs = append(errs, fmt.Errorf("expected empty verb to generate GET, got %s", original.Method))
+		if original.Verb != "GET" {
+			errs = append(errs, fmt.Errorf("expected empty verb to generate GET, got %s", original.Verb))
 		}
 	}
 
@@ -56,29 +56,27 @@ func CompareAction(original, expected *Action) error {
 			errs = append(errs, fmt.Errorf("expected name %s, got %s", expected.Name, original.Name))
 		}
 	}
-	if expected.Fn != nil {
-		if original.Fn == nil {
-			errs = append(errs, fmt.Errorf("expected function %s, got nil", expected.Fn))
-		} else {
-			if expected.Fn.Ins != nil {
-				if !reflect.DeepEqual(original.Fn.Ins, expected.Fn.Ins) {
-					errs = append(errs, fmt.Errorf("expected argument %s, got %s", expected.Fn.Ins, original.Fn.Ins))
-				}
-			}
-			if expected.Fn.Outs != nil {
-				if len(original.Fn.Outs) != len(expected.Fn.Outs) {
-					errs = append(errs, fmt.Errorf("expected %d return values, got %d", len(expected.Fn.Outs), len(original.Fn.Outs)))
-				}
+	if expected.ins != nil {
+		if !reflect.DeepEqual(original.ins, expected.ins) {
+			errs = append(errs, fmt.Errorf("expected argument %s, got %s", expected.ins, original.ins))
+		}
+	}
+	if expected.outs != nil {
+		if len(original.outs) != len(expected.outs) {
+			errs = append(errs, fmt.Errorf("expected %d return values, got %d", len(expected.outs), len(original.outs)))
+		}
 
-				for i, ret := range expected.Fn.Outs {
-					if original.Fn.Outs[i] != ret {
-						errs = append(errs, fmt.Errorf("expected return value %s, got %s", ret, original.Fn.Outs[i]))
-					}
-				}
+		for i, ret := range expected.outs {
+			if original.outs[i] != ret {
+				errs = append(errs, fmt.Errorf("expected return value %s, got %s", ret, original.outs[i]))
 			}
 		}
 	}
-
+	if expected.fn != nil {
+		if original.fn == nil {
+			errs = append(errs, fmt.Errorf("expected function %s, got nil", expected.fn))
+		}
+	}
 	if expected.Controller != nil {
 		if original.Controller != expected.Controller {
 			errs = append(errs, fmt.Errorf("expected controller %s, got %s", expected.Controller, original.Controller))

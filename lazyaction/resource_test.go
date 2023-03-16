@@ -4,8 +4,6 @@ import (
 	"testing"
 
 	"net/url"
-
-	"golazy.dev/lazyaction/internal/args"
 )
 
 func NewResourceTester(t *testing.T, controller any, options *ResourceOptions) (func(name string, expected *Action), []*Action) {
@@ -20,8 +18,8 @@ func NewResourceTester(t *testing.T, controller any, options *ResourceOptions) (
 		t.Run(name, func(t *testing.T) {
 
 			t.Helper()
-			if expected.Method == "" {
-				expected.Method = "GET"
+			if expected.Verb == "" {
+				expected.Verb = "GET"
 			}
 			err := ExpectAction(routes, expected)
 			if err != nil {
@@ -51,55 +49,55 @@ func TestResourceActions(t *testing.T) {
 	expect, _ := NewResourceTester(t, controller, &ResourceOptions{})
 
 	expect("route.ControllerName",
-		&Action{URL: u("/posts"), Method: "GET", ControllerName: "PostsController"})
+		&Action{URL: u("/posts"), Verb: "GET", ControllerName: "PostsController"})
 
 	expect("route.Controller",
-		&Action{URL: u("/posts"), Method: "GET", Controller: controller})
+		&Action{URL: u("/posts"), Verb: "GET", Controller: controller})
 
 	expect("route.Name",
-		&Action{URL: u("/posts"), Method: "GET", Name: "posts#index"})
+		&Action{URL: u("/posts"), Verb: "GET", Name: "posts#index"})
 
 	expect("route.Args",
 		&Action{
-			URL:    u("/posts"),
-			Method: "GET",
-			Fn:     &args.Fn{Ins: []string{"http.ResponseWriter", "*http.Request"}},
+			URL:  u("/posts"),
+			Verb: "GET",
+			ins:  []string{"http.ResponseWriter", "*http.Request"},
 		},
 	)
 
-	expect("Index", &Action{URL: u("/posts"), Method: "GET", Name: "posts#index"})
-	expect("New", &Action{URL: u("/posts/new"), Method: "GET", Name: "posts#new"})
-	expect("VerbMethod", &Action{URL: u("/posts/create_super"), Method: "POST", Name: "posts#create_super"})
+	expect("Index", &Action{URL: u("/posts"), Verb: "GET", Name: "posts#index"})
+	expect("New", &Action{URL: u("/posts/new"), Verb: "GET", Name: "posts#new"})
+	expect("VerbMethod", &Action{URL: u("/posts/create_super"), Verb: "POST", Name: "posts#create_super"})
 
-	expect("PUT and PATCH", &Action{URL: u("/posts/:post_id"), Method: "PUT,PATCH", Name: "posts#update"})
+	expect("PUT and PATCH", &Action{URL: u("/posts/:post_id"), Verb: "PUT,PATCH", Name: "posts#update"})
 
-	expect("Member", &Action{URL: u("/posts/:post_id/activate_later"), Method: "PUT", Name: "posts#activate_later"})
+	expect("Member", &Action{URL: u("/posts/:post_id/activate_later"), Verb: "PUT", Name: "posts#activate_later"})
 
-	expect("Plain action", &Action{URL: u("/posts/about"), Method: "GET", Name: "posts#about"})
+	expect("Plain action", &Action{URL: u("/posts/about"), Verb: "GET", Name: "posts#about"})
 }
 
 func TestResourceActions_PathNames(t *testing.T) {
 	controller := &PostsController{}
 	expect, _ := NewResourceTester(t, controller, &ResourceOptions{PathNames: struct{ New, Edit string }{"nuevo", "editar"}})
 
-	expect("New route", &Action{URL: u("/posts/nuevo"), Method: "GET", Name: "posts#new"})
-	expect("Edit route", &Action{URL: u("/posts/:post_id/editar"), Method: "GET", Name: "posts#edit"})
+	expect("New route", &Action{URL: u("/posts/nuevo"), Verb: "GET", Name: "posts#new"})
+	expect("Edit route", &Action{URL: u("/posts/:post_id/editar"), Verb: "GET", Name: "posts#edit"})
 }
 
 func TestResourceActions_Path(t *testing.T) {
 	controller := &PostsController{}
 	expect, _ := NewResourceTester(t, controller, &ResourceOptions{Path: "/articles"})
 
-	expect("About route", &Action{URL: u("/articles/about"), Method: "GET", Name: "posts#about"})
-	expect("Edit route", &Action{URL: u("/articles/:post_id/edit"), Method: "GET", Name: "posts#edit"})
+	expect("About route", &Action{URL: u("/articles/about"), Verb: "GET", Name: "posts#about"})
+	expect("Edit route", &Action{URL: u("/articles/:post_id/edit"), Verb: "GET", Name: "posts#edit"})
 }
 
 func TestResourceActions_Path_Root(t *testing.T) {
 	controller := &PostsController{}
 	expect, _ := NewResourceTester(t, controller, &ResourceOptions{Path: "/"})
 
-	expect("About route", &Action{URL: u("/about"), Method: "GET", Name: "posts#about"})
-	expect("Edit route", &Action{URL: u("/:post_id/edit"), Method: "GET", Name: "posts#edit"})
+	expect("About route", &Action{URL: u("/about"), Verb: "GET", Name: "posts#about"})
+	expect("Edit route", &Action{URL: u("/:post_id/edit"), Verb: "GET", Name: "posts#edit"})
 }
 
 func TestResourceActions_Names(t *testing.T) {
@@ -107,7 +105,7 @@ func TestResourceActions_Names(t *testing.T) {
 	expect, _ := NewResourceTester(t, controller, &ResourceOptions{Name: "Articles"})
 
 	expect("Index route", &Action{
-		URL: u("/articles/:article_id"), Method: "GET",
+		URL: u("/articles/:article_id"), Verb: "GET",
 		Name: "articles#show", Singular: "article", Plural: "articles", ParamName: ":article_id"})
 }
 
@@ -116,7 +114,7 @@ func TestResourceActions_Plural(t *testing.T) {
 	expect, _ := NewResourceTester(t, controller, &ResourceOptions{Plural: "articles"})
 
 	expect("Index route", &Action{
-		URL: u("/articles/:post_id"), Method: "GET",
+		URL: u("/articles/:post_id"), Verb: "GET",
 		Name: "posts#show", Singular: "post", Plural: "articles", ParamName: ":post_id"})
 }
 func TestResourceActions_Singular(t *testing.T) {
@@ -124,7 +122,7 @@ func TestResourceActions_Singular(t *testing.T) {
 	expect, _ := NewResourceTester(t, controller, &ResourceOptions{Singular: "article"})
 
 	expect("Index route", &Action{
-		URL: u("/posts/:article_id"), Method: "GET",
+		URL: u("/posts/:article_id"), Verb: "GET",
 		Name: "posts#show", Singular: "article", Plural: "posts", ParamName: ":article_id"})
 
 }
@@ -133,7 +131,7 @@ func TestResourceActions_Scheme(t *testing.T) {
 	controller := &PostsController{}
 	expect, _ := NewResourceTester(t, controller, &ResourceOptions{Scheme: "http"})
 
-	expect("http route", &Action{URL: u("http:///posts"), Method: "GET", Name: "posts#index"})
+	expect("http route", &Action{URL: u("http:///posts"), Verb: "GET", Name: "posts#index"})
 
 }
 
@@ -141,7 +139,7 @@ func TestResourceActions_Domain(t *testing.T) {
 	controller := &PostsController{}
 	expect, _ := NewResourceTester(t, controller, &ResourceOptions{Domain: "api.*"})
 
-	expect("http route", &Action{URL: u("//api.*/posts"), Method: "GET", Name: "posts#index"})
+	expect("http route", &Action{URL: u("//api.*/posts"), Verb: "GET", Name: "posts#index"})
 
 }
 
@@ -149,13 +147,13 @@ func TestResourceActions_Port(t *testing.T) {
 	controller := &PostsController{}
 	expect, _ := NewResourceTester(t, controller, &ResourceOptions{Port: "9000"})
 
-	expect("http route", &Action{URL: u("//:9000/posts"), Method: "GET", Name: "posts#index"})
+	expect("http route", &Action{URL: u("//:9000/posts"), Verb: "GET", Name: "posts#index"})
 }
 
 func TestResourceActions_Host(t *testing.T) {
 	controller := &PostsController{}
 	expect, _ := NewResourceTester(t, controller, &ResourceOptions{Port: "9000", Domain: "api.*"})
 
-	expect("http route", &Action{URL: u("//api.*:9000/posts"), Method: "GET", Name: "posts#index"})
+	expect("http route", &Action{URL: u("//api.*:9000/posts"), Verb: "GET", Name: "posts#index"})
 
 }

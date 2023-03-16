@@ -144,7 +144,7 @@ func (r *Resource) Actions() []*Action {
 
 func (r *Resource) genActionsForMethodN(val reflect.Value, i int) []*Action {
 	routes := []*Action{}
-	method := val.Method(i)
+	meth := val.Method(i)
 	cType := reflect.TypeOf(r.Controller)
 	methodT := cType.Method(i)
 
@@ -164,11 +164,16 @@ func (r *Resource) genActionsForMethodN(val reflect.Value, i int) []*Action {
 		u.Host = u.Host + ":" + r.Port
 	}
 
+	fn := args.NewFn(meth)
+
 	route := &Action{
-		Method: verb,
-		URL:    *u,
-		Name:   routeName,
-		Fn:     args.NewFn(method),
+		Verb:    verb,
+		Method:  name,
+		methodI: i,
+		URL:     *u,
+		Name:    routeName,
+		ins:     fn.Ins,
+		outs:    fn.Outs,
 
 		ControllerName: r.ControllerName,
 		Plural:         r.Plural,

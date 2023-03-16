@@ -54,13 +54,18 @@ func Register(c Component) Component {
 func InstallAll(opts InstallOptions) error {
 	fmt.Println("Installing components...", allComponents)
 	for _, c := range allComponents {
-		if c, ok := c.(ComponentWithInstall); ok {
-			if !c.Installed(opts) {
-				err := c.Install(opts)
+		if ci, ok := c.(ComponentWithInstall); ok {
+
+			if !ci.Installed(opts) {
+				fmt.Println("Missing!")
+				fmt.Println("Installing", c.String(), "with options", opts)
+				err := ci.Install(opts)
 				if err != nil {
+					fmt.Println(c.String(), "install error:", err)
 					return err
 				}
 			}
+			fmt.Println("OK")
 		}
 	}
 	return nil

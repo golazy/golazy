@@ -17,6 +17,10 @@ func NewHash(data []byte) Hash {
 	return Hash(h)
 }
 
+func (h Hash) Etag() string {
+	return h.String()
+}
+
 func (h Hash) Base64() string {
 	return base64.StdEncoding.EncodeToString(h[:])
 }

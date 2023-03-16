@@ -1,7 +1,9 @@
 package script
 
 import (
+	"fmt"
 	"io"
+	"net/url"
 
 	"golazy.dev/lazysupport"
 	"golazy.dev/lazyview/html"
@@ -142,4 +144,30 @@ func (s *Script) WriteTo(w io.Writer) (n int64, err error) {
 		return 0, nil
 	}
 	return s.Element().WriteTo(w)
+}
+
+func New(arg any) Script {
+	switch arg := arg.(type) {
+	case *Script:
+		return *arg
+	case Script:
+		return arg
+	case []byte:
+		return Script{
+			Content: string(arg),
+		}
+	case string:
+		u, err := url.Parse(arg)
+		if err != nil {
+			return Script{
+				Content: arg,
+			}
+		}
+		return Script{
+			Src: u.String(),
+		}
+	default:
+		panic(fmt.Sprintf("script.New: invalid argument type %T", arg))
+	}
+
 }

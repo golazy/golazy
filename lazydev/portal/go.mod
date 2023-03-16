@@ -6,6 +6,7 @@ replace golazy.dev => ./../..
 
 require (
 	github.com/adrg/xdg v0.4.0
+	github.com/gorilla/websocket v1.5.0
 	golazy.dev v0.0.0-00010101000000-000000000000
 )
 

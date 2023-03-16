@@ -53,5 +53,5 @@ func TestScript_Content(t *testing.T) {
 	expect(&Script{Src: "src", Referrerpolicy: StrictOriginWhenCrossOrigin}, "<script src=src type=module referrerpolicy=strict-origin-when-cross-origin></script>")
 	expect(&Script{Src: "src", Referrerpolicy: UnsafeURL}, "<script src=src type=module referrerpolicy=unsafe-url></script>")
 
-	expect(&Script{Src: "src", NoModule: true}, "<script src=src type=module nomodule></script>")
+	expect(&Script{Src: "src", NoModule: true}, "<script src=src nomodule></script>")
 }

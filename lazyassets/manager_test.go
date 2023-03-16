@@ -11,7 +11,8 @@ import (
 var TestAssetsFS embed.FS
 
 func TestManager_ByPath(t *testing.T) {
-	m := NewManager(TestAssetsFS, "test_assets")
+	m := New()
+	m.AddFS(TestAssetsFS, "test_assets")
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/@test/hello.world", nil)
@@ -28,10 +29,11 @@ func TestManager_ByPath(t *testing.T) {
 }
 
 func TestManager_Permalink(t *testing.T) {
-	m := NewManager(TestAssetsFS, "test_assets")
-	p, err := m.Permalink("@test/hello.world")
-	if err != nil {
-		t.Fatal(err)
+	m := New()
+	m.AddFS(TestAssetsFS, "test_assets")
+	p, f := m.Permalink("@test/hello.world")
+	if f == nil {
+		t.Fatal(f)
 	}
 
 	expected := "/@test/hello-0791006df812.world"
@@ -39,18 +41,16 @@ func TestManager_Permalink(t *testing.T) {
 		t.Errorf("Expected %q. Got: %q", expected, p)
 	}
 
-	_, err = m.Permalink("asdf")
-	if err == nil {
-		t.Errorf("Expected ErrNotFound. Got: %v", err)
-	}
-	if err, ok := err.(ErrNotFound); !ok {
-		t.Errorf("Expected ErrNotFound. Got: %v", err)
+	p, f = m.Permalink("asdf")
+	if f != nil || p != "" {
+		t.Errorf("Expected ErrNotFound. Got: %v", f)
 	}
 
 }
 
 func TestManager_ByPermalink(t *testing.T) {
-	m := NewManager(TestAssetsFS, "test_assets")
+	m := New()
+	m.AddFS(TestAssetsFS, "test_assets")
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/@test/hello-0791006df812.world", nil)
 
@@ -67,8 +67,8 @@ func TestManager_ByPermalink(t *testing.T) {
 }
 
 func TestManager_CacheControl(t *testing.T) {
-
-	m := NewManager(TestAssetsFS, "test_assets")
+	m := New()
+	m.AddFS(TestAssetsFS, "test_assets")
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/@test/hello.world", nil)
@@ -97,7 +97,8 @@ func TestManager_CacheControl(t *testing.T) {
 }
 
 func TestManager_ETag(t *testing.T) {
-	m := NewManager(TestAssetsFS, "test_assets")
+	m := New()
+	m.AddFS(TestAssetsFS, "test_assets")
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/@test/hello.world", nil)
@@ -194,35 +195,36 @@ func TestWithoutHash(t *testing.T) {
 
 func TestManager_Find(t *testing.T) {
 
-	m := NewManager(TestAssetsFS, "test_assets")
+	m := New()
+	m.AddFS(TestAssetsFS, "test_assets")
 
-	f, _ := m.Find("missing")
+	f := m.Find("missing")
 	if f != nil {
 		t.Error("Expected nil. Got:", f)
 	}
 
-	f, perm := m.Find("/@test/hello-0791006df812.world")
+	f = m.Find("/@test/hello-0791006df812.world")
 	if f == nil {
 		t.Error("Expected file. Got:", f)
 	}
-	if !perm {
-		t.Error("Expected file to be a permalink. Got:", perm)
+	if !f.Permalink {
+		t.Error("Expected file to be a permalink.")
 	}
 
-	f, perm = m.Find("/@test/hello-0791006df812.world")
+	f = m.Find("/@test/hello-0791006df812.world")
 	if f == nil {
 		t.Error("Expected file. Got:", f)
 	}
-	if !perm {
-		t.Error("Expected file to be a permalink. Got:", perm)
+	if !f.Permalink {
+		t.Error("Expected file to be a permalink. Got:")
 	}
 
-	f, perm = m.Find("/@test/hello.world")
+	f = m.Find("/@test/hello.world")
 	if f == nil {
 		t.Error("Expected file. Got:", f)
 	}
-	if perm {
-		t.Error("Expected file to not be a permalink. Got:", perm)
+	if f.Permalink {
+		t.Error("Expected file to not be a permalink. Got:")
 	}
 
 }

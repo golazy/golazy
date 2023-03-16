@@ -2,15 +2,25 @@ package lazyaction
 
 import (
 	"context"
+	"io"
 	"net/http"
 
 	"github.com/timewasted/go-accept-headers"
 )
 
+func newContext(w http.ResponseWriter, r *http.Request) *Context {
+	c := &Context{
+		Context:        r.Context(),
+		Request:        r,
+		ResponseWriter: w,
+	}
+	return c
+}
+
 type Context struct {
 	context.Context
-	Request         *http.Request
-	ResponseWritter http.ResponseWriter
+	Request        *http.Request
+	ResponseWriter http.ResponseWriter
 	Session
 	status  int
 	headers http.Header
@@ -18,6 +28,11 @@ type Context struct {
 	// Router
 	// Assets
 	// Views
+}
+
+func (c *Context) SendFile(filename string, data io.Reader) {
+	c.ResponseWriter.Header().Set("Content-Disposition", "attachment; filename=\""+filename)
+	io.Copy(c.ResponseWriter, data)
 }
 
 func (c *Context) GetHeader(h string) string {
@@ -54,5 +69,5 @@ func (c *Context) WriteString(data string) {
 }
 
 func (c *Context) Write(data []byte) {
-	c.ResponseWritter.Write(data)
+	c.ResponseWriter.Write(data)
 }

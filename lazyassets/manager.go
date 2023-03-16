@@ -1,180 +1,245 @@
 package lazyassets
 
 import (
-	"fmt"
+	"bytes"
 	"io"
 	"io/fs"
 	"net/http"
+	"net/url"
+	"os"
 	"path"
+	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
+
+	"golazy.dev/lazyaction/router"
 )
 
-type Manager struct {
+type Assets struct {
+	paths router.Matcher[File]
+
 	files  []File
-	fs     fs.ReadDirFS
 	Prefix string
 }
 
-func NewManager(fs fs.ReadDirFS, prefix string) *Manager {
-	m := &Manager{
-		Prefix: prefix,
-		fs:     fs,
-		files:  make([]File, 0, 100),
+func New() *Assets {
+	m := &Assets{
+		paths: router.NewPathMatcher[File](),
+		files: make([]File, 0, 100),
 	}
-
-	m.readFs()
 
 	return m
 }
 
-func (m *Manager) Get(path string) string {
-	p, err := m.Permalink(path)
-	if err != nil {
-		panic(fmt.Sprintf("file %s/%s not found", m.Prefix, path))
-	}
-	return p
+type Route struct {
+	Path string
+	Loc  string
 }
 
-func (m *Manager) NewMiddleware(h http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if f, shouldCache := m.Find(r.URL.Path); f != nil {
-			m.ServeFile(f, shouldCache, w, r)
-			return
+func (m *Assets) Routes() []Route {
+	path := m.paths.All()
+	routes := make([]Route, len(path))
+	for i, route := range path {
+		routes[i] = Route{
+			route.Req.URL.String(),
+			route.T.Loc,
 		}
-		h.ServeHTTP(w, r)
+	}
+	return routes
+}
+func (m *Assets) AddFS(fs fs.ReadDirFS, prefix string) *Assets {
+	m.addFS(fs, loc(), prefix)
+	return m
+}
+
+type Stylesheet struct {
+	content [][]byte
+}
+
+func (s *Stylesheet) Add(content []byte) {
+	// TODO: Add log info about the caller
+	s.content = append(s.content, content)
+}
+
+func (s *Stylesheet) newReader() io.Reader {
+	return bytes.NewReader(bytes.Join(s.content, nil))
+}
+
+func (m *Assets) NewStylesheet(path string) *Stylesheet {
+	if len(path) == 0 {
+		panic("path can't be empty")
+	}
+	if path[0] != '/' {
+		path = "/" + path
+	}
+
+	s := &Stylesheet{}
+	m.addFile(path, &File{
+		F:    s.newReader,
+		Mime: "text/css",
+		Loc:  loc(),
 	})
+	return s
 }
 
-func (m *Manager) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-
-	f, perm := m.Find(r.URL.Path)
-	if f == nil {
-		http.NotFound(w, r)
-		return
-	}
-	m.initFile(f)
-	m.ServeFile(f, perm, w, r)
-}
-
-func (m *Manager) initFile(f *File) error {
-	f.Lock()
-	defer f.Unlock()
-	if !f.Hash.Zero() {
-		return nil
-	}
-
-	file, err := m.fs.Open(path.Join(m.Prefix, f.Path))
-	if err != nil {
-		return err
-	}
-	f.Init(file)
-	file.Close()
-	return nil
-}
-
-func (m *Manager) Permalink(p string) (string, error) {
-	for i := 0; i < len(m.files); i++ {
-		f := &m.files[i]
-		if f.Path == p {
-			m.initFile(f)
-
-			return "/" + f.Permalink, nil
-		}
-	}
-	return "", ErrNotFound(p)
-}
-
-func (m *Manager) readFs(target ...string) {
-	base := path.Join(target...)
-
-	abs := path.Join(m.Prefix, base)
-	entries, err := m.fs.ReadDir(abs)
+func (m *Assets) addFS(fs fs.ReadDirFS, loc, prefix string, fpath ...string) {
+	filePath := path.Join(fpath...)
+	fullPath := path.Join(prefix, filePath)
+	dir, err := fs.ReadDir(fullPath)
 	if err != nil {
 		panic(err)
 	}
-	for _, e := range entries {
-		if e.IsDir() {
-			m.readFs(base, e.Name())
+
+	for _, entry := range dir {
+		p := path.Join(filePath, entry.Name())
+		if entry.IsDir() {
+			m.addFS(fs, loc, prefix, p)
 			continue
 		}
 
-		fullPath := path.Join(base, e.Name())
-		m.files = append(m.files, File{Path: fullPath})
-	}
-}
-
-func (m *Manager) find(p string) (f *File, shouldCache bool) {
-	if len(p) == 0 {
-		return nil, false
-	}
-	if p[0] == '/' {
-		p = p[1:]
-	}
-	clean, sha, err := withoutHash(p)
-	for i := 0; i < len(m.files); i++ {
-		f := &m.files[i]
-		// Fetch the normal path
-		if f.Path == p {
-			return f, false
-		}
-		if err != nil {
-			continue
-		}
-		if f.Permalink == p {
-			return f, true
-		}
-		// We found a file that matches. Check the sha
-		if f.Path == clean {
-			_, err := m.Permalink(clean)
+		f := newFile(p, loc, func() io.Reader {
+			file, err := fs.Open(path.Join(prefix, p))
 			if err != nil {
 				panic(err)
 			}
-			if sha == f.Hash.Short() {
-				return f, true
-			}
+			return file
+		}, false)
+
+		m.addFile("/"+p, f)
+
+	}
+}
+
+func (m *Assets) addFile(filepath string, f *File) {
+	m.paths.Add(router.NewRouteDefinition(filepath), f)
+}
+
+func loc() string {
+	_, file, line, ok := runtime.Caller(2)
+	if ok {
+		wd, _ := os.Getwd()
+		f, err := filepath.Rel(wd, file)
+		if err != nil {
+			return file + ":" + strconv.Itoa(line)
 		}
+		return f + ":" + strconv.Itoa(line)
 	}
-	return nil, false
+	return ""
+
 }
 
-func (m *Manager) Find(p string) (f *File, shouldCache bool) {
-	f, shouldCache = m.find(p)
-	if f == nil {
-		return
+func (m *Assets) AddFile(path string, content []byte) *Assets {
+	if len(path) == 0 {
+		panic("path can't be empty")
 	}
-	m.initFile(f)
-	return
+	if path[0] != '/' {
+		path = "/" + path
+	}
+
+	f := newFile(path, loc(), func() io.Reader {
+		return bytes.NewReader(content)
+	}, false)
+	m.addFile(path, f)
+	return m
 }
 
-func (m *Manager) ServeFile(f *File, shouldCache bool, w http.ResponseWriter, r *http.Request) {
-	m.initFile(f)
+func (m *Assets) NewMiddleware(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		f := m.paths.Find(r)
+		if f == nil {
+			h.ServeHTTP(w, r)
+			return
+		}
+		f.ServeHTTP(w, r)
+	})
+}
 
-	if f == nil {
+func (m *Assets) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	file := m.Find(r.URL.Path)
+	if file == nil {
 		http.NotFound(w, r)
 		return
 	}
+	file.ServeHTTP(w, r)
+}
 
-	noMatch := r.Header.Get("If-None-Match")
-	if strings.Contains(noMatch, f.Hash.String()) {
-		w.WriteHeader(http.StatusNotModified)
-		return
+func (m *Assets) Get(src string) string {
+	p, f := m.Permalink(src)
+	if f == nil {
+		panic("File not found: " + src)
+	}
+	return p
+
+}
+
+func (m *Assets) Permalink(p string) (string, *File) {
+	if len(p) == 0 {
+		return "", nil
+	}
+	if p[0] != '/' {
+		p = "/" + p
 	}
 
-	file, err := m.fs.Open(path.Join(m.Prefix, f.Path))
+	f := m.Find(p)
+	if f == nil {
+		return "", nil
+	}
+	if f.Permalink {
+		return p, f
+	}
+
+	path := withHash(p, f.RouteHash())
+	f = m.Find(path)
+
+	return path, f
+}
+
+func (m *Assets) PermalinkFile(p string) *File {
+	f := m.Find(p)
+	if f == nil {
+		return nil
+	}
+	if f.Permalink {
+		return f
+	}
+
+	f = m.Find(withHash(p, f.RouteHash()))
+	return f
+
+}
+
+func (m *Assets) Find(p string) (f *File) {
+	if len(p) == 0 || m.paths == nil {
+		return nil
+	}
+	if p[0] != '/' {
+		p = "/" + p
+	}
+	req := &http.Request{URL: &url.URL{Path: p}}
+
+	route := m.paths.Find(req)
+	if route != nil {
+		return route
+	}
+
+	clean, sha, err := withoutHash(p)
 	if err != nil {
-		panic(err)
+		return nil
 	}
+	route = m.paths.Find(&http.Request{URL: &url.URL{Path: clean}})
+	if route == nil {
+		return nil
+	}
+	if sha != route.RouteHash() {
+		return nil
+	}
+	// Add the route
+	f = newFile(p, route.Loc, route.F, true)
+	m.addFile(p, f)
 
-	if shouldCache {
-		w.Header().Set("Cache-Control", "public, max-age=31536000")
-	}
+	return f
 
-	w.Header().Set("Content-Type", f.Mime)
-	w.Header().Set("ETag", `"`+f.Hash.String()+`"`)
-	_, err = io.Copy(w, file)
-	if err != nil {
-		panic(err)
-	}
 }
 
 func withoutHash(permalink string) (cleanPath, hash string, err error) {
@@ -194,7 +259,7 @@ func withoutHash(permalink string) (cleanPath, hash string, err error) {
 	return
 }
 
-func addHash(p, hash string) string {
+func withHash(p, hash string) string {
 	ext := path.Ext(p)
 	return p[:len(p)-len(ext)] + "-" + hash + ext
 }

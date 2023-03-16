@@ -2,7 +2,6 @@ package component
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"os/exec"
 	"path"
@@ -28,8 +27,6 @@ func (n *Npm) String() string {
 }
 
 func (n *Npm) Installed(opts InstallOptions) bool {
-	fmt.Println("Checking if npm package is installed: " + n.Name + " (" + n.Version + ")")
-
 	for _, impPath := range n.Imports {
 		path := n.installPath(opts, impPath)
 		if !fileExists(path) {
@@ -54,8 +51,6 @@ func fileExists(path string) bool {
 }
 
 func (n *Npm) Install(opts InstallOptions) error {
-	fmt.Println("installing npm package: " + n.Name + " (" + n.Version + ")")
-
 	dest := opts.Cache
 	if dest == "" {
 		dest = opts.Path

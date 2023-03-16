@@ -37,7 +37,6 @@ func listMethods(t reflect.Type, parents ...reflect.Type) []Method {
 
 	for i := 0; i < t.NumMethod(); i++ {
 		m := t.Method(i)
-		fmt.Println(m)
 		methods = append(methods, Method{
 			Parents: newParents,
 			Method:  m,
@@ -56,15 +55,10 @@ func listMethods(t reflect.Type, parents ...reflect.Type) []Method {
 
 	for i := 0; i < t.NumField(); i++ {
 		field := t.Field(i)
-		fieldT := field.Type
-		fmt.Printf("=> %+v %+v  %+v\n", t, field, fieldT)
 		if !field.Anonymous {
 			continue
 		}
-		if field.Type.Kind() != reflect.Pointer {
-		}
 		newMethods := listMethods(field.Type, newParents...)
-		fmt.Println("#> ", field.Type.Name(), newMethods)
 		methods = append(methods, newMethods...)
 
 	}

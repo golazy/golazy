@@ -1,0 +1,140 @@
+package tcpdevserver
+
+import (
+	"bytes"
+	"fmt"
+	"os"
+	"os/exec"
+	"os/signal"
+	"path/filepath"
+	"syscall"
+	"time"
+)
+
+type App struct {
+	Dir        string
+	ExtraFiles []*os.File
+}
+
+//	r.cmd = r.Command()
+//	syscall.Kill(-r.cmd.Process.Pid, syscall.SIGKILL)
+
+type Runner struct {
+	Command                func() *exec.Cmd
+	AfterRestart           func()
+	AfterFailedCompilation func(output []byte)
+	cmd                    *exec.Cmd
+	i                      chan (os.Signal)
+	Log                    interface{ Print(v ...interface{}) }
+	td                     string // td TempDirectory
+}
+
+func (r *Runner) Restart() error {
+	return r.Start()
+}
+
+func (r *Runner) l(v ...interface{}) {
+	if r.Log != nil {
+		r.Log.Print(append([]interface{}{"runner:"}, v...)...)
+	}
+}
+
+func (r *Runner) tempDir() string {
+	if r.td == "" {
+		temp, err := os.MkdirTemp("", "runner-*")
+		if err != nil {
+			panic(err)
+		}
+		r.td = temp
+	}
+	return r.td
+}
+
+func (r *Runner) Cleanup() {
+	if r.td == "" {
+		return
+	}
+
+	os.RemoveAll(r.td)
+}
+
+// cs Compilation Status
+type cs struct {
+	path   string
+	output []byte
+	err    error
+}
+
+func (r *Runner) compile() *cs {
+	r.tempDir()
+	path = filepath.Join(r.tempDir(), fmt.Sprintf("lazyapp-%d", time.Now().UnixMilli))
+	cmd := exec.Command("go", "build", "-o", path)
+	b := &bytes.Buffer{}
+	cmd.Stdout = b
+	cmd.Stderr = b
+	err = cmd.Run()
+
+	return &cs{
+		path,
+		output,
+		err,
+	}
+}
+
+func (r *Runner) Start() error {
+	r.l("Start()")
+	if r.i == nil {
+		// This logic should be moved outside
+		r.i = make(chan os.Signal, 1)
+		signal.Notify(r.i, os.Interrupt)
+		go func() {
+			<-r.i
+			r.l("Got SIGINT")
+			r.Stop()
+			r.l("Childs are dead")
+			signal.Stop(r.i)
+
+			os.Exit(0) // This should be centrallyize to allow more than one runner
+		}()
+	}
+	cs := r.compile()
+	if cs.err != nil {
+
+	}
+
+	if r.cmd != nil && r.cmd.Process != nil {
+		if err := r.cmd.Process.Signal(syscall.Signal(0)); err == nil {
+			r.l("Start: Process runing. Calling Stop()")
+			r.Stop()
+		}
+	}
+
+	r.cmd = r.Command()
+	r.cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	r.l("Start: Starting process:", r.cmd.String())
+
+	err := r.cmd.Start()
+	if err != nil {
+		return err
+	}
+
+	if r.AfterRestart != nil {
+		r.l("Notifying AfterRestart")
+		r.AfterRestart()
+	}
+
+	return nil
+}
+
+// Stop tries to kill the process group and waits for the command to finish.
+// If the process is not running it does not return any error
+func (r *Runner) Stop() {
+	if r.cmd == nil || r.cmd.Process == nil {
+		return
+	}
+	// Should stop more gracefully
+	r.l("Stop: Killing process", r.cmd.Process.Pid)
+	syscall.Kill(-r.cmd.Process.Pid, syscall.SIGKILL)
+	r.cmd.Process.Wait()
+	os.Remove(r.cmd.Path)
+}

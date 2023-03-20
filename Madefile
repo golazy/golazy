@@ -19,3 +19,7 @@ install_dev_deps: #Install dev dependencies
 	GO111MODULE=on go get github.com/posener/goreadme/cmd/goreadme
 
 
+lazyapps: # Develop lazyapps
+  set -eux
+  made install 
+  lazy dev -n cmd/lazy -- dev ../../server/lazyapps/cmd/appserver

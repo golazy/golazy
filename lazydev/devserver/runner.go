@@ -1,7 +1,6 @@
 package devserver
 
 import (
-	"fmt"
 	"os"
 	"os/exec"
 	"syscall"
@@ -10,6 +9,7 @@ import (
 type runOpts struct {
 	Dir  string
 	Path string
+	Args []string
 	Env  []string
 }
 
@@ -26,8 +26,7 @@ func run(opts runOpts) (stdout, stderr <-chan ([]byte), exit <-chan (int), kill 
 	errC := make(chan []byte)
 	exitC := make(chan (int))
 
-	fmt.Println("Running:", opts.Path, "in dir:", opts.Dir)
-	cmd := exec.Command(opts.Path)
+	cmd := exec.Command(opts.Path, opts.Args...)
 	cmd.Dir = opts.Dir
 	cmd.Stdout = cWriter(stdC)
 	cmd.Stderr = cWriter(errC)

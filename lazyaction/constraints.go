@@ -108,8 +108,6 @@ func (c *Constraints) Resource(target any, options ...*ResourceOptions) {
 	for _, action := range resource.Actions() {
 		action.Dispatcher = c.d
 		action.Assets = c.d.Assets
-
-		fmt.Println(action.URL.String())
 		u := action.URL
 
 		if c.Scheme != "" {
@@ -141,7 +139,6 @@ func (c *Constraints) Resource(target any, options ...*ResourceOptions) {
 				u.Host = fmt.Sprintf("%s:%s", host, port)
 			}
 		}
-		fmt.Println(u.String())
 
 		c.d.router.Add(action.Verb+" "+u.String(), action)
 	}

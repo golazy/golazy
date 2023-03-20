@@ -5,7 +5,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"strings"
 
 	"golazy.dev/lazydev/devserver"
 	"golazy.dev/lazydev/devserver/events"
@@ -22,6 +21,7 @@ type Options struct {
 	App       DevApp
 	Addr      string
 	BuildArgs []string
+	RunArgs   []string
 	BuildDir  string
 }
 
@@ -55,6 +55,7 @@ func New(opts Options) *Server {
 		BuildDir:  opts.BuildDir,
 		BuildArgs: opts.BuildArgs,
 		RunEnv:    getRunEnv(devAddr),
+		RunArgs:   opts.RunArgs,
 		Events:    s.event,
 	})
 	return s
@@ -115,9 +116,5 @@ func getFreeAddr() string {
 }
 
 func getRunEnv(addr string) []string {
-	parts := strings.Split(addr, ":")
-	if len(parts) != 2 {
-		panic("invalid addr")
-	}
-	return []string{"LISTEN=" + addr, "PORT=" + parts[1]}
+	return []string{"PORT=" + addr}
 }

@@ -30,6 +30,10 @@ type Context struct {
 	// Views
 }
 
+func (c *Context) PathTo(args ...any) string {
+	panic("not implemented")
+}
+
 func (c *Context) SendFile(filename string, data io.Reader) {
 	c.ResponseWriter.Header().Set("Content-Disposition", "attachment; filename=\""+filename)
 	io.Copy(c.ResponseWriter, data)

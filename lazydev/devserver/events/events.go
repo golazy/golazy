@@ -1,6 +1,7 @@
 package events
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/url"
 
@@ -10,6 +11,9 @@ import (
 type Event interface {
 	String() string
 	Type() string
+}
+type DataEvent interface {
+	Data() []byte
 }
 
 // listen
@@ -61,6 +65,10 @@ func (e BuildError) Type() string {
 	return "build_error"
 }
 
+func (e BuildError) Data() []byte {
+	return e.Out
+}
+
 // build_app_start
 type AppStart struct {
 	URL *url.URL
@@ -75,6 +83,10 @@ func (e AppStart) String() string {
 
 func (e AppStart) Type() string {
 	return "app_start"
+}
+
+func (e AppStart) Data() []byte {
+	return []byte(e.URL.String())
 }
 
 // app_start_error
@@ -114,6 +126,18 @@ func (e FSChange) String() string {
 
 func (e FSChange) Type() string {
 	return "fs_change"
+}
+
+func (e FSChange) Data() []byte {
+	data, err := json.Marshal(e.Changes)
+	if err != nil {
+		data, err = json.Marshal([]string{err.Error()})
+		if err != nil {
+			panic(err)
+		}
+		return data
+	}
+	return data
 }
 
 type Stdout []byte

@@ -14,6 +14,7 @@ type Options struct {
 	BuildArgs []string
 	Events    func(events.Event)
 	RunEnv    []string
+	RunArgs   []string
 }
 
 type Server struct {
@@ -87,6 +88,8 @@ func (srv *Server) app_start(s state) (state, action) {
 	outC, errC, exit, kill, err := run(runOpts{
 		Path: s.file,
 		Dir:  srv.opts.RootDir,
+		Args: srv.opts.RunArgs,
+		Env:  srv.opts.RunEnv,
 	})
 	if err != nil {
 		srv.notify(events.AppStartError{Err: err})

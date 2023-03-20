@@ -13,7 +13,7 @@ import (
 )
 
 var serveCmd = func(a *App) *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use: a.Name,
 		Run: func(c *cobra.Command, args []string) {
 
@@ -34,6 +34,12 @@ var serveCmd = func(a *App) *cobra.Command {
 
 		},
 	}
+
+	cmd.Flags().StringP("port", "p", "127.0.0.1:2000", "Port to listen on")
+	viper.BindPFlag("port", cmd.Flags().Lookup("port"))
+	viper.BindEnv("port")
+
+	return cmd
 }
 
 func getListener(a *App, addr string) (net.Listener, error) {

@@ -2,7 +2,7 @@ package portal
 
 import (
 	"crypto/tls"
-	"portal/models"
+	pe "portal/resources/events"
 
 	"github.com/adrg/xdg"
 	"golazy.dev/lazyapp"
@@ -17,7 +17,7 @@ type PortalApp struct {
 }
 
 func (a *PortalApp) Event(e events.Event) {
-	models.EventSave(e)
+	pe.Save(e)
 }
 
 func (a *PortalApp) ListenAndServe(addr string) error {

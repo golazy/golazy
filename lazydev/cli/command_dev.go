@@ -19,9 +19,12 @@ import (
 
 func init() {
 	cmd := &cobra.Command{
-		Use:   "dev [main package dir]",
+		Use:   "dev [flags] [main package dir] -- [program args]",
 		Short: "Start development server",
 		Run: func(cmd *cobra.Command, args []string) {
+			if len(args) < 1 {
+				panic("No main package dir specified")
+			}
 
 			mainDir, err := filepath.Abs(args[0])
 			if err != nil {
@@ -41,6 +44,11 @@ func init() {
 				panic(err)
 			}
 
+			port, err := cmd.Flags().GetString("port")
+			if err != nil {
+				panic(err)
+			}
+
 			interrupt := make(chan os.Signal, 1)
 			signal.Notify(interrupt, os.Interrupt)
 
@@ -50,7 +58,8 @@ func init() {
 					BuildDir:  args[0],
 					RootDir:   findFirstRoot(mainDir),
 					BuildArgs: strings.Split("-buildvcs=false", " "),
-					RunEnv:    []string{"PORT=2000"},
+					RunEnv:    []string{"PORT=" + port},
+					RunArgs:   SubArgs,
 					Events: func(e events.Event) {
 
 						if e, ok := e.(events.Stdout); ok {
@@ -84,9 +93,10 @@ func init() {
 			}
 
 			srv := portalserver.New(portalserver.Options{
-				Addr:      "127.0.0.1:2000",
+				Addr:      port,
 				BuildDir:  args[0],
 				BuildArgs: strings.Split("-buildvcs=false", " "),
+				RunArgs:   SubArgs,
 				App:       portal.App,
 			})
 
@@ -102,7 +112,7 @@ func init() {
 			}
 
 		},
-		Args: cobra.MatchAll(cobra.ExactArgs(1), cobra.OnlyValidArgs),
+		Args: cobra.MatchAll(cobra.MinimumNArgs(1), cobra.OnlyValidArgs),
 		ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 			return mainPackages(), cobra.ShellCompDirectiveNoFileComp
 		},
@@ -110,6 +120,10 @@ func init() {
 	cmd.PersistentFlags().BoolP("noportal", "n", false, "Disable portal and serve only the main package")
 	viper.BindPFlag("noportal", cmd.PersistentFlags().Lookup("nosportal"))
 	viper.BindEnv("noportal")
+
+	cmd.PersistentFlags().StringP("port", "p", "127.0.0.1:2000", "Listen port (or address:port pair)")
+	viper.BindPFlag("port", cmd.PersistentFlags().Lookup("port"))
+	viper.BindEnv("port")
 
 	rootCmd.AddCommand(cmd)
 

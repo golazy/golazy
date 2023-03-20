@@ -2,6 +2,7 @@ package portal
 
 import (
 	"bytes"
+	"portal/apps/portal/rerouter"
 	"portal/assets"
 	ar "portal/resources/assets"
 	"portal/resources/builds"
@@ -16,6 +17,7 @@ import (
 	"golazy.dev/lazyaction"
 	"golazy.dev/lazyapp"
 	"golazy.dev/lazydev/injector"
+	"golazy.dev/lazyview/component"
 )
 
 var App = &PortalApp{
@@ -42,9 +44,15 @@ func init() {
 	//		Cache: filepath.Join(d, "assets/cache"),
 	//	})
 
+	component.DefaultInstallOptions = component.InstallOptions{
+		Path:  "assets/public",
+		Cache: "assets/cache",
+	}
+
 	//App.Router.Resource(&rhttp.HttpController{}, &lazyaction.ResourceOptions{Scheme: "http", Path: "/"})
 	//App.Router.Resource(&rhttp.HttpController{}, &lazyaction.ResourceOptions{Scheme: "https", Path: "/"})
 	App.Middleware(injector.New(bytes.NewBufferString("<!-- holasdfasdfa -->")))
+	App.Middleware(rerouter.New)
 
 	h := App.With(lazyaction.Constraints{Scheme: "http"})
 	h.Resource(&http.Controller{}, &lazyaction.ResourceOptions{Path: "/"})

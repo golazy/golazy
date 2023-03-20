@@ -23,6 +23,7 @@ func TestRouteTable(t *testing.T) {
 	expect("/posts/123", "posts_show")
 	expect("/posts/new", "posts_new")
 	expect("/users/123/censor", "users_censor")
+	expect("/users/npm:@hotwired%2Fturbo/censor", "users_censor")
 
 }
 

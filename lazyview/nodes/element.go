@@ -121,6 +121,8 @@ func (r *Element) add(something any) {
 		r.children = append(r.children, Raw(v))
 	case string:
 		r.children = append(r.children, Text(v))
+	case bool:
+		r.children = append(r.children, Text(fmt.Sprint(v)))
 	case nil:
 
 	default:

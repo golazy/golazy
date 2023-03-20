@@ -46,7 +46,7 @@ func (rt *PathMatcher[T]) Add(req *RouteDefinition, t *T) {
 }
 
 func (n *PathMatcher[T]) Find(req *http.Request) *T {
-	path := req.URL.Path
+	path := req.URL.EscapedPath()
 	if len(path) == 0 {
 		path = "/"
 	}

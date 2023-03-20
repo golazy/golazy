@@ -14,6 +14,7 @@ var Current *App
 type App struct {
 	Name        string
 	Addr        string
+	Services    []string
 	Dispatcher  lazyaction.Dispatcher
 	Server      http.Server
 	Assets      *lazyassets.Assets
@@ -79,6 +80,10 @@ func (a *App) Init() {
 	for _, m := range a.MiddleWares {
 		a.h = m(a.h)
 	}
+}
+
+func (a *App) StartServices() {
+
 }
 
 func (a *App) Boot() {

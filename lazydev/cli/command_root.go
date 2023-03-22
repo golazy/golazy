@@ -24,20 +24,7 @@ func Execute() error {
 	return rootCmd.Execute()
 }
 
-var SubArgs = []string{}
-
-func ExtractExtraArgs() {
-	for i, arg := range os.Args {
-		if arg == "--" {
-			SubArgs = os.Args[i+1:]
-			os.Args = os.Args[:i]
-		}
-	}
-}
-
 func init() {
-
-	ExtractExtraArgs()
 
 	cobra.OnInitialize(initConfig)
 

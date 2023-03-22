@@ -4,17 +4,11 @@ import (
 	"fmt"
 	"go/build"
 	"os"
-	"os/signal"
 	"path/filepath"
-	"strings"
-
-	"portal/apps/portal"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"golazy.dev/lazydev/devserver"
-	"golazy.dev/lazydev/devserver/events"
-	"golazy.dev/lazydev/portalserver"
+	"golazy.dev/lazydev/cli/commands/dev"
 )
 
 func init() {
@@ -49,67 +43,12 @@ func init() {
 				panic(err)
 			}
 
-			interrupt := make(chan os.Signal, 1)
-			signal.Notify(interrupt, os.Interrupt)
-
-			// Launch normal devserver if noportal is set
-			if np {
-				srv := devserver.New(devserver.Options{
-					BuildDir:  args[0],
-					RootDir:   findFirstRoot(mainDir),
-					BuildArgs: strings.Split("-buildvcs=false", " "),
-					RunEnv:    []string{"PORT=" + port},
-					RunArgs:   SubArgs,
-					Events: func(e events.Event) {
-
-						if e, ok := e.(events.Stdout); ok {
-							os.Stdout.Write([]byte(e))
-							return
-						}
-
-						if e, ok := e.(events.Stderr); ok {
-							os.Stderr.Write([]byte(e))
-							return
-						}
-
-						if e, ok := e.(events.BuildError); ok {
-							fmt.Println(string(e.Out))
-							return
-						}
-
-						fmt.Printf("#> %-15s %s\n", e.Type(), e.String())
-					},
-				})
-				go func() {
-					<-interrupt
-					fmt.Println("Got CTRL+C, shutting down...")
-					srv.Close()
-				}()
-				err := srv.Serve()
-				if err != nil {
-					panic(err)
-				}
-				return
-			}
-
-			srv := portalserver.New(portalserver.Options{
-				Addr:      port,
-				BuildDir:  args[0],
-				BuildArgs: strings.Split("-buildvcs=false", " "),
-				RunArgs:   SubArgs,
-				App:       portal.App,
+			dev.Run(dev.DevOpts{
+				MainDir: mainDir,
+				Dir:     findFirstRoot(mainDir),
+				Portal:  !np,
+				Port:    port,
 			})
-
-			go func() {
-				<-interrupt
-				fmt.Println("Got CTRL+C, shutting down...")
-				srv.Close()
-			}()
-
-			srv.ListenAndServe()
-			if err != nil {
-				panic(err)
-			}
 
 		},
 		Args: cobra.MatchAll(cobra.MinimumNArgs(1), cobra.OnlyValidArgs),

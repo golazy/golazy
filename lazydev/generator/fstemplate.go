@@ -1,4 +1,4 @@
-package prjtmpl
+package generator
 
 import (
 	"embed"

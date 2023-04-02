@@ -55,9 +55,9 @@ func (a *App) Redirect(route_def string, target string) {
 	})
 }
 
-func (a *App) Resource(resource any, opts ...*lazyaction.ResourceOptions) {
+func (a *App) Resource(resource any, opts ...*lazyaction.ResourceOptions) *lazyaction.Constraints {
 	a.Dispatcher.Assets = a.Assets
-	a.Dispatcher.Resource(resource, opts...)
+	return a.Dispatcher.Resource(resource, opts...)
 }
 
 func (a *App) Init() {
@@ -71,7 +71,7 @@ func (a *App) Init() {
 	}
 
 	// Add logger
-	a.h = loggerMiddleware(a.h)
+	//a.h = loggerMiddleware(a.h)
 
 	// Add panic handler
 	a.h = panicMiddleware(a.h)

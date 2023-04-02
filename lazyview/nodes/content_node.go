@@ -19,3 +19,5 @@ func (c ContentNode) WriteTo(w io.Writer) (n64 int64, err error) {
 func NewContentNode(nodes ...io.WriterTo) ContentNode {
 	return nodes
 }
+
+var Collection = NewContentNode

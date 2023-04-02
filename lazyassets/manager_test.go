@@ -226,5 +226,21 @@ func TestManager_Find(t *testing.T) {
 	if f.Permalink {
 		t.Error("Expected file to not be a permalink. Got:")
 	}
+}
 
+func TestManager_Permalinkize(t *testing.T) {
+	m := New()
+	m.AddFile("/a.png", []byte(""))
+
+	expect := func(input, expectation string) {
+		out := m.CSSPermalink(input)
+		if out != expectation {
+			t.Errorf("Expected %q to produce %q. Got: %q", input, expectation, out)
+		}
+	}
+
+	expect("", "")
+	expect("hola", "hola")
+	expect("123 url('hola') 456 url('hey') 789", "123 url('hola') 456 url('hey') 789")
+	expect("123 url('/a.png') 456 url('hey') 789", "123 url('/a-38b060a751ac.png') 456 url('hey') 789")
 }

@@ -5,4 +5,5 @@ github.com/jondot/goweight v1.0.5 h1:aRpnyj1G8BLLNhem8xezuuV0GlFz4G11e3/UtBU/FlQ
 github.com/mattn/go-zglob v0.0.0-20180803001819-2ea3427bfa53 h1:tGfIHhDghvEnneeRhODvGYOt305TPwingKt6p90F4MU=
 github.com/thoas/go-funk v0.0.0-20180716193722-1060394a7713 h1:knaxjm6QMbUMNvuaSnJZmw0gRX4V/79JVUQiziJGM84=
 github.com/yuin/goldmark v1.4.13 h1:fVcFKWvrslecOb/tg+Cc05dkeYx540o0FuFt3nUVDoE=
+golang.org/x/oauth2 v0.0.0-20221014153046-6fdb5e3db783 h1:nt+Q6cXKz4MosCSpnbMtqiQ8Oz0pxTef2B4Vca2lvfk=
 gopkg.in/alecthomas/kingpin.v2 v2.2.6 h1:jMFz6MfLP0/4fUyZle81rXUoxOBFi19VUFKVDOQfozc=

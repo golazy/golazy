@@ -10,7 +10,6 @@ import (
 
 type panicWriter struct {
 	http.ResponseWriter
-	header http.Header
 	status int
 	body   []byte
 }
@@ -25,16 +24,13 @@ func (pw *panicWriter) WriteHeader(statusCode int) {
 }
 
 func (pw *panicWriter) Flush() {
-	for k, v := range pw.header {
-		pw.ResponseWriter.Header()[k] = v
-	}
 	if pw.status != 0 {
 		pw.ResponseWriter.WriteHeader(pw.status)
 	}
 	pw.ResponseWriter.Write(pw.body)
-	if flush, ok := pw.ResponseWriter.(http.Flusher); ok {
-		flush.Flush()
-	}
+	//if flush, ok := pw.ResponseWriter.(http.Flusher); ok {
+	//	flush.Flush()
+	//}
 }
 
 func panicMiddleware(h http.Handler) http.Handler {

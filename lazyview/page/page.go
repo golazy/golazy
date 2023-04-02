@@ -50,7 +50,11 @@ func (p *Page) AddStyleLink(href string) {
 		href = p.Assets.Get(href)
 	}
 
-	p.Styles = append(p.Styles, style.Style{Href: href})
+	s := style.Style{
+		Href: href,
+		Data: map[string]string{"turbo-reload": "true"},
+	}
+	p.Styles = append(p.Styles, s)
 }
 
 func (p *Page) AddStyle(s style.Style) {
@@ -228,7 +232,17 @@ func (p *Page) styles() []io.WriterTo {
 	for _, c := range p.Components {
 		if c, ok := (c).(component.ComponentWithStyles); ok {
 			for _, s := range c.PageStyles() {
-				styles = append(styles, s.Element())
+				if s.Href == "" {
+					styles = append(styles, s.Element())
+					continue
+				}
+				href := p.toPermalink(s.Href)
+				styles = append(styles,
+					&style.Style{
+						Href:    href,
+						Content: s.Content,
+						Media:   s.Media,
+					})
 			}
 		}
 	}

@@ -117,20 +117,18 @@ func Find(name string) Component {
 }
 
 func InstallAll(opts InstallOptions) error {
-	fmt.Println("Installing components...", allComponents)
 	for _, c := range allComponents {
 		if ci, ok := c.(ComponentWithInstall); ok {
 
 			if !ci.Installed(opts) {
-				fmt.Println("Missing!")
-				fmt.Println("Installing", c.String(), "with options", opts)
+				fmt.Println("Installing ", c.String(), " ")
 				err := ci.Install(opts)
 				if err != nil {
-					fmt.Println(c.String(), "install error:", err)
+					fmt.Println("  error:", err)
 					return err
 				}
+				fmt.Println("  Installed")
 			}
-			fmt.Println("OK")
 		}
 	}
 	return nil

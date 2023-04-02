@@ -10,9 +10,16 @@ var Component = component.Register(&component.Npm{
 	Name:    "@hotwired/turbo",
 	Imports: component.ImportMap{"@hotwired/turbo": "dist/turbo.es2017-esm.js"},
 	Scripts: []script.Script{
-		{Content: `import * as Turbo from "@hotwired/turbo"; Turbo.start(); `},
+		{
+			Content: `import * as Turbo from "@hotwired/turbo"; Turbo.start(); `,
+			Data: map[string]string{
+				"turbo-track": "reload",
+			},
+		},
 	},
 })
+
+var ReloadAttr = map[string]string{"turbo-track": "reload"}
 
 func TurboFrame(options ...any) nodes.Element {
 	return nodes.NewElement("turbo-frame", options...)

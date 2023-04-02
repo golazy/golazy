@@ -127,3 +127,8 @@ func TestMultipleAcronymInflections(t *testing.T) {
 	term := "SSLError"
 	assert.Equal(t, term, Camelize(Underscorize(term)))
 }
+
+func TestUnderscorize(t *testing.T) {
+	term := "Lazy app"
+	assert.Equal(t, "lazy_app", Underscorize(term))
+}

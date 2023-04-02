@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"golazy.dev/lazyview/script"
+	"golazy.dev/lazyview/style"
 )
 
 type Npm struct {
@@ -16,6 +17,11 @@ type Npm struct {
 	Imports ImportMap
 	Files   []string
 	Scripts []script.Script
+	Styles  []style.Style
+}
+
+func (n *Npm) PageStyles() []style.Style {
+	return n.Styles
 }
 
 func (n *Npm) String() string {

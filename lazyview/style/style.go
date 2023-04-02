@@ -11,12 +11,19 @@ type Style struct {
 	Href    string
 	Content string
 	Media   string
+	Data    map[string]string
 }
 
 func (s *Style) Element() nodes.Element {
 	opts := []nodes.Attr{}
 	if s.Media != "" {
 		opts = append(opts, html.Media(s.Media))
+	}
+
+	if s.Data != nil {
+		for k, v := range s.Data {
+			opts = append(opts, html.DataAttr(k, v))
+		}
 	}
 
 	if s.Content != "" {

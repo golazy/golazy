@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -53,7 +54,26 @@ func (m *Assets) AddFS(fs fs.ReadDirFS, prefix string) *Assets {
 	return m
 }
 
+var linkRegExp = regexp.MustCompile(`url\([\s'"]*([^'"\)]+)[ '"]*\)`)
+
+func (m *Assets) CSSPermalink(data string) string {
+
+	result := []byte{}
+	last := 0
+	for _, submatches := range linkRegExp.FindAllStringSubmatchIndex(data, -1) {
+		result = append(result, data[last:submatches[2]]...)
+
+		url := data[submatches[2]:submatches[3]]
+		result = append(result, []byte(m.Get(url))...)
+		last = submatches[3]
+	}
+	result = append(result, data[last:]...)
+	return string(result)
+
+}
+
 type Stylesheet struct {
+	assets  *Assets
 	content [][]byte
 }
 
@@ -63,7 +83,10 @@ func (s *Stylesheet) Add(content []byte) {
 }
 
 func (s *Stylesheet) newReader() io.Reader {
-	return bytes.NewReader(bytes.Join(s.content, nil))
+	data := string(bytes.Join(s.content, nil))
+	withPerma := s.assets.CSSPermalink(data)
+
+	return strings.NewReader(withPerma)
 }
 
 func (m *Assets) NewStylesheet(path string) *Stylesheet {
@@ -74,7 +97,7 @@ func (m *Assets) NewStylesheet(path string) *Stylesheet {
 		path = "/" + path
 	}
 
-	s := &Stylesheet{}
+	s := &Stylesheet{assets: m}
 	m.addFile(path, &File{
 		F:    s.newReader,
 		Mime: "text/css",
@@ -167,7 +190,7 @@ func (m *Assets) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (m *Assets) Get(src string) string {
 	p, f := m.Permalink(src)
 	if f == nil {
-		panic("File not found: " + src)
+		return src
 	}
 	return p
 

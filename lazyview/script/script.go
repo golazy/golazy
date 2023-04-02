@@ -30,6 +30,7 @@ type Script struct {
 	Nonce          string
 	Referrerpolicy ReferrerPolicy
 	NoModule       bool
+	Data           map[string]string
 }
 
 //go:generate stringer -type=Priority
@@ -133,6 +134,12 @@ func (s *Script) Element() io.WriterTo {
 	}
 	if s.Content != "" {
 		options = append(options, nodes.Raw(s.Content))
+	}
+
+	if s.Data != nil {
+		for k, v := range s.Data {
+			options = append(options, html.DataAttr(k, v))
+		}
 	}
 
 	return html.Script(options...)

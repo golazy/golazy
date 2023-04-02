@@ -154,6 +154,17 @@ func Camelize(term string) string {
 	})
 }
 
+func Humanize(term string) string {
+	camel := Camelize(term)
+	spaces := strings.Replace(camel, "_", " ", -1)
+	if len(camel) <= 2 {
+		return spaces
+	}
+
+	return string(spaces[0]) + strings.ToLower(spaces[1:])
+
+}
+
 // Underscorize converts strings to underscored, lowercase form.
 func Underscorize(term string) string {
 	term = acronymRegex.ReplaceAllStringFunc(term, func(match string) string {
@@ -166,6 +177,7 @@ func Underscorize(term string) string {
 	term = upperWordsRegex.ReplaceAllString(term, replacement)
 	term = lowerWordsRegex.ReplaceAllString(term, replacement)
 	term = strings.Replace(term, "-", "_", -1)
+	term = strings.Replace(term, " ", "_", -1)
 	return strings.ToLower(term)
 }
 

@@ -11,7 +11,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-func (t *Tester) Connect(ins ...any) (conn *WSConn) {
+func (t *tester) Connect(ins ...any) (conn *WSConn) {
 	t.t.Helper()
 
 	if app, ok := t.app.(app); ok {

@@ -5,14 +5,16 @@ install:
   cd cmd/lazy
   go install -buildvcs=false
 
-docs: # Generates the README.md for all directories
-	dirs=$(find -type d | grep -v ".git" | grep -v "vscode" | grep -v "examples" | grep -v "^\.$" | grep -v "_dirty")
-	for dir in $dirs; do
-		cd $dir 
-      goreadme -recursive -factories -functions -variabless -recursive -factories -types -methods > README.md
-  
-		cd - 
-	done
+
+ 
+ docs: # Generates the README.md for all directories
+ 	# dirs=$(find -type d | grep -v ".git" | grep -v "vscode" | grep -v "examples" | grep -v "^\.$" | grep -v "_dirty")
+ 	# for dir in $dirs; do
+ 	# 	cd $dir 
+  #      goreadme -recursive -factories -functions -variabless -recursive -factories -types -methods > README.md
+  #  
+ 	# 	cd - 
+ 	# done
 
 
 install_dev_deps: #Install dev dependencies

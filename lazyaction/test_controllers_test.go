@@ -1,13 +1,14 @@
 package lazyaction
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"time"
+
+	"golazy.dev/lazyview/page"
 )
 
 func ActionHandler(id string) string {
@@ -277,7 +278,10 @@ type LayoutController struct {
 }
 
 func (g *LayoutController) RenderLayout(content []byte) io.WriterTo {
-	return bytes.NewBufferString("--" + string(content) + "--")
+	p := &page.Page{
+		Content: content,
+	}
+	return p
 }
 
 func (g *LayoutController) Index() string {
@@ -297,4 +301,42 @@ type PagesWithLayout struct {
 
 func (g *PagesWithLayout) Index() string {
 	return "embebed index"
+}
+
+type RedirectController struct{}
+
+func (r *RedirectController) GetOne(w http.ResponseWriter, req *http.Request) {
+	http.Redirect(w, req, "/one", http.StatusMovedPermanently)
+}
+func (r *RedirectController) GetTwo(ctx *Context) {
+	ctx.Redirect("/two", 301)
+}
+func (r *RedirectController) GetThree(ctx *Context) http.Handler {
+	return Redirect("/three")
+}
+
+func (r *RedirectController) GetFour(ctx *Context) error {
+	return Redirect("/four")
+}
+
+type redirectUser string
+
+func (r *RedirectController) GenUser(ctx *Context) (*redirectUser, error) {
+	return nil, Redirect("/five")
+}
+
+func (r *RedirectController) GetFive(u *redirectUser) string {
+	return "hola"
+}
+
+type SessionController struct {
+	WithSession
+}
+
+func (s *SessionController) GetOne(r *http.Request, session *Session) {
+	session.Set("id", "123")
+}
+
+func (s *SessionController) GetTwo(r *http.Request, session *Session) string {
+	return session.Get("id")
 }

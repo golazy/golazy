@@ -3,7 +3,6 @@ package lazyaction
 import (
 	"net/http"
 
-	"github.com/felixge/httpsnoop"
 	"golazy.dev/lazyaction/router"
 	"golazy.dev/lazyassets"
 )
@@ -72,9 +71,10 @@ Custom actions can be added to the resource by combining the verb and if it belo
 
 Resource internally calls Route to add the routes to the router.
 */
-func (d *Dispatcher) Resource(target any, options ...*ResourceOptions) {
+func (d *Dispatcher) Resource(target any, options ...*ResourceOptions) *Constraints {
 	rc := &Constraints{d: d}
-	rc.Resource(target, options...)
+
+	return rc.Resource(target, options...)
 }
 
 func (d *Dispatcher) With(c Constraints) *Constraints {
@@ -93,8 +93,8 @@ func (d *Dispatcher) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		http.NotFound(w, req)
 		return
 	}
+	action.ServeHTTP(w, req)
 
-	httpsnoop.CaptureMetrics(action, w, req)
 	//metrics := httpsnoop.CaptureMetrics(action, w, req)
 	//fmt.Printf("action : %+v\n", action)
 	//fmt.Printf("metrics: %+v\n", metrics)

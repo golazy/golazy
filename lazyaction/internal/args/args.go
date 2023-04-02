@@ -43,6 +43,16 @@ type InputSet struct {
 	Values     map[string][]any
 }
 
+func (is InputSet) Merge(b InputSet) {
+	// Merge generators
+	for k, v := range b.Generators {
+		is.Generators[k] = v
+	}
+	for k, v := range b.Values {
+		is.Values[k] = v
+	}
+}
+
 // InputSetMerge merges two input sets and returns a new one.
 func InputSetMerge(a, b InputSet) InputSet {
 	is := InputSet{
@@ -197,29 +207,6 @@ func OutsToInputs(outs []reflect.Value) InputSet {
 	return InputSet{
 		Values: values,
 	}
-}
-
-func (is InputSet) Merge(is2 InputSet) InputSet {
-	newIs := InputSet{
-		Values:     make(map[string][]any),
-		Generators: make(map[string][]Gen),
-	}
-	// Copy original values
-	for k, v := range is.Values {
-		newIs.Values[k] = append(newIs.Values[k], v...)
-	}
-	for k, v := range is.Generators {
-		newIs.Generators[k] = append(newIs.Generators[k], v...)
-	}
-
-	// Append new ones
-	for k, v := range is2.Values {
-		is.Values[k] = append(is.Values[k], v...)
-	}
-	for k, v := range is2.Generators {
-		is.Generators[k] = append(is.Generators[k], v...)
-	}
-	return is
 }
 
 /*

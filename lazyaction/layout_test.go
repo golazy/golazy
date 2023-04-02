@@ -3,10 +3,13 @@ package lazyaction
 import (
 	"net/http/httptest"
 	"testing"
+
+	"golazy.dev/lazyview/nodes"
 )
 
 func TestLayout(t *testing.T) {
 
+	nodes.Beautify = false
 	r := &Dispatcher{}
 
 	r.Resource(&LayoutController{})
@@ -18,8 +21,9 @@ func TestLayout(t *testing.T) {
 	if w.Code != 200 {
 		t.Errorf("Expected 200, got %d", w.Code)
 	}
-	if w.Body.String() != "--index--" {
-		t.Errorf("Expected --index-- , got %s", w.Body.String())
+	expected := `<!DOCTYPE html><html><head><body>index`
+	if w.Body.String() != expected {
+		t.Errorf("Expected %q, got %s", expected, w.Body.String())
 	}
 
 }

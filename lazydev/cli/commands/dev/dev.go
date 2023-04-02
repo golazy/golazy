@@ -83,8 +83,8 @@ func Run(opts DevOpts) error {
 	signal.Notify(interrupt, os.Interrupt)
 
 	if opts.Portal {
-		return runNoPortal(opts)
+		return runPortal(opts)
 	}
 
-	return runPortal(opts)
+	return runNoPortal(opts)
 }

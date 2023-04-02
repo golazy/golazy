@@ -116,6 +116,13 @@ func (e AppStop) Type() string {
 	return "app_stop"
 }
 
+func (e AppStop) Data() []byte {
+	if e.Expected {
+		return []byte{}
+	}
+	return []byte(e.Reason)
+}
+
 type FSChange struct {
 	Changes *filewatcher.ChangeSet
 }

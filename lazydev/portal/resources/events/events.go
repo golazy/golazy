@@ -29,7 +29,16 @@ func Save(e events.Event) {
 	if chanName == "devapp/stdout" {
 		fmt.Println("OUT:", string(data))
 	}
+	if chanName == "devapp/stdout" {
+		fmt.Println("OUT:", string(data))
+	}
 	if chanName == "devapp/stderr" {
+		fmt.Println("ERR:", string(data))
+	}
+	if chanName == "devapp/build_error" {
+		fmt.Println("ERR:", string(data))
+	}
+	if chanName == "devapp/app_stop" {
 		fmt.Println("ERR:", string(data))
 	}
 	Events.Emit(&lazyroom.Event{

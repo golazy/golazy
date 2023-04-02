@@ -124,6 +124,7 @@ func (srv *Server) app_start(s state) (state, action) {
 		c <- nil
 		return s, nil
 	case c := <-changes:
+		fmt.Println(c)
 		srv.notify(events.FSChange{Changes: &c})
 		kill()
 		<-exit
@@ -154,6 +155,7 @@ func (srv *Server) standby(s state) (state, action) {
 		c <- nil
 		return s, nil
 	case cset := <-changes:
+		fmt.Println(cset)
 		srv.notify(events.FSChange{Changes: &cset})
 		return s, srv.build
 	}

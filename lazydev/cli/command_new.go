@@ -1,19 +1,16 @@
 package cli
 
 import (
-	"embed"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
-	"golazy.dev/lazydev/cli/prjtmpl"
+	"golazy.dev/lazydev/generator/base"
 
 	_ "embed"
 )
-
-//go:embed all:project
-var projectTemplate embed.FS
 
 func init() {
 	rootCmd.AddCommand(&cobra.Command{
@@ -29,16 +26,9 @@ func init() {
 
 			target := filepath.Join(wd, args[0])
 
-			p := prjtmpl.Project{
-				FS:         projectTemplate,
-				TrimPrefix: "project",
-				Dest:       target,
-				Data: map[string]any{
-					"Name": args[0],
-				},
-			}
-
-			err = p.Install()
+			err = base.Project.Generate(args[0], map[string]string{
+				"Name": args[0],
+			})
 			if err != nil {
 				panic(err)
 			}
@@ -46,6 +36,7 @@ func init() {
 			if shell == "" {
 				return
 			}
+			fmt.Println(shell)
 			subShell := exec.Command(shell)
 			subShell.Dir = target
 			subShell.Stdout = os.Stdout

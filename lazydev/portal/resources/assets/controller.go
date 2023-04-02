@@ -3,8 +3,9 @@ package assets
 import (
 	"io"
 	"portal/assets"
-	"portal/components/table"
 	"portal/layouts/golazy"
+
+	"golazy.dev/lazyview/components/table"
 )
 
 type Controller struct {

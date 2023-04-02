@@ -1,10 +1,12 @@
 package builds
 
 import (
+	"io"
 	"portal/layouts/golazy"
 	pe "portal/resources/events"
 
 	"golazy.dev/lazyroom"
+	"golazy.dev/lazyview/html"
 )
 
 func init() {
@@ -35,6 +37,10 @@ func (c *Controller) Index() string {
 	return "Builds"
 }
 
-func (c *Controller) GetRerouter() string {
-	return string(Data)
+func (c *Controller) GetRerouter() io.WriterTo {
+	return html.Code(
+		html.Pre(
+			string(Data),
+		),
+	)
 }

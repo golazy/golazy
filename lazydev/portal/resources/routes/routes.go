@@ -2,10 +2,10 @@ package routes
 
 import (
 	"io"
-	"portal/components/table"
 	"portal/layouts/golazy"
 
 	"golazy.dev/lazyaction"
+	"golazy.dev/lazyview/components/table"
 )
 
 type Controller struct {

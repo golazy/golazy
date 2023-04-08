@@ -34,10 +34,6 @@ type Comment struct {
 	CreatedAt time.Time
 }
 
-type CommentsController struct {
-	RestController[Comment, MemStore[Comment]]
-}
-
 type PostsController struct {
 }
 
@@ -339,4 +335,12 @@ func (s *SessionController) GetOne(r *http.Request, session *Session) {
 
 func (s *SessionController) GetTwo(r *http.Request, session *Session) string {
 	return session.Get("id")
+}
+
+type ValuesController struct {
+	Value string
+}
+
+func (v *ValuesController) Index() string {
+	return v.Value
 }

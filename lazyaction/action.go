@@ -15,6 +15,8 @@ import (
 
 type Action struct {
 	Dispatcher *Dispatcher
+	Befores    []*args.Fn
+	Afters     []*args.Fn
 	ins        []string
 	outs       []string
 	Assets     *lazyassets.Assets
@@ -99,7 +101,13 @@ func (a *Action) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	//
 	cType := reflect.TypeOf(a.Controller).Elem()
-	instance := reflect.New(cType).Interface()
+
+	// Create a new instance
+	instanceNew := reflect.New(cType)
+	instanceNew.Elem().Set(reflect.ValueOf(a.Controller).Elem())
+	instance := instanceNew.Interface()
+
+	// Copy the variables from reflect value
 
 	instanceV := reflect.ValueOf(instance)
 	method := instanceV.Method(a.methodI)

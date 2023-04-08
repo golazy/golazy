@@ -3,6 +3,7 @@ package lazyaction
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 
@@ -22,10 +23,43 @@ type Context struct {
 	context.Context
 	Request        *http.Request
 	ResponseWriter http.ResponseWriter
+	ses            Session
 	replied        bool
 	// Router
 	// Assets
 	// Views
+}
+
+func (c *Context) Session() *Session {
+	s, err := c.getSession()
+	if err != nil {
+		panic(fmt.Errorf("error while getting users session: %w", err))
+	}
+	return s
+}
+
+func (c *Context) getSession() (*Session, error) {
+	if c.ses.s != nil {
+		return &c.ses, nil
+	}
+
+	s, err := Store.Get(c.Request, "golazy_session")
+	if err != nil {
+		return nil, err
+	}
+
+	c.ses.s = s
+	c.ses.w = c.ResponseWriter
+	c.ses.r = c.Request
+	return &c.ses, nil
+}
+
+func (c *Context) FillWithParams(model string, data any) error {
+	err := c.Request.ParseForm()
+	if err != nil {
+		return err
+	}
+	return Values(c.Request.Form).Extract(model).Load(data)
 }
 
 func (c *Context) PathTo(args ...any) string {
@@ -60,7 +94,7 @@ func (c *Context) Redirect(url string, status ...int) {
 		c.alreadyReplied()
 		return
 	}
-	code := 307
+	code := 303
 	if len(status) > 0 {
 		code = status[0]
 	}

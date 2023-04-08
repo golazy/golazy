@@ -1,16 +1,17 @@
-package lazyaction
+package lazyaction_test
 
 import (
 	"testing"
 
+	"golazy.dev/lazyaction"
 	"golazy.dev/lazyapp/apptest"
 )
 
 func TestRedirects(t *testing.T) {
 
-	r := &Dispatcher{}
+	r := &lazyaction.Dispatcher{}
 
-	r.Resource(&RedirectController{})
+	r.Resource(&lazyaction.RedirectController{})
 
 	expect := apptest.New(t, r).Expect
 

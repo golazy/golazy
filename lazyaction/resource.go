@@ -25,6 +25,8 @@ type ResourceOptions struct {
 
 type Resource struct {
 	BaseUrl url.URL
+	Befores []string
+	Afters  []string
 	Layout  *args.Fn
 	ResourceOptions
 	Controller any
@@ -130,6 +132,10 @@ func (r *Resource) Actions() []*Action {
 			generators[t] = append(generators[t], fn)
 		case name == "RenderLayout":
 			r.Layout = args.NewFn(methodV)
+		case strings.HasPrefix(name, "Before"):
+			r.Befores = append(r.Befores, name)
+		case strings.HasPrefix(name, "After"):
+			r.Afters = append(r.Afters, name)
 		}
 	}
 

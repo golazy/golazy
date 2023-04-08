@@ -2,6 +2,7 @@ package lazyaction
 
 import (
 	"net/http"
+	"strings"
 
 	"golazy.dev/lazyaction/router"
 	"golazy.dev/lazyassets"
@@ -84,6 +85,18 @@ func (d *Dispatcher) With(c Constraints) *Constraints {
 }
 
 func (d *Dispatcher) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	if strings.HasPrefix(req.Header.Get("Content-Type"), "application/x-www-form-urlencoded") {
+		req.ParseForm()
+		m := req.PostForm["_method"]
+
+		if m != nil && len(m) > 0 {
+			method := m[0]
+			switch method {
+			case "PUT", "DELETE", "PATCH":
+				req.Method = method
+			}
+		}
+	}
 	if d.router == nil {
 		http.NotFound(w, req)
 		return

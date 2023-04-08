@@ -47,13 +47,9 @@ func (r *rerouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		r.h.ServeHTTP(w, req)
 		return
 	}
-	fmt.Println("Got request to ", req.URL.Path)
-
 	r.RLock()
 	u := r.u
 	r.RUnlock()
-
-	fmt.Println("u=", u)
 
 	if u == nil {
 		fmt.Println("Got request to portal")
@@ -66,7 +62,6 @@ func (r *rerouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	fmt.Println("Got request to ", u)
 	httputil.NewSingleHostReverseProxy(u).ServeHTTP(w, req)
 }
 

@@ -2,6 +2,7 @@ package lazyapp
 
 import (
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
@@ -23,6 +24,14 @@ type HTTPReqInfo struct {
 }
 
 func loggerMiddleware(next http.Handler) http.Handler {
+
+	slog.SetDefault(
+		slog.New(
+			slog.HandlerOptions{
+				AddSource: true,
+			}.NewTextHandler(os.Stdout),
+		),
+	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Upgrade") != "" {
 			next.ServeHTTP(w, r)

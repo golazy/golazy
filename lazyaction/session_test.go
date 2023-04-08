@@ -1,18 +1,19 @@
-package lazyaction
+package lazyaction_test
 
 import (
 	"net/http"
 	"strings"
 	"testing"
 
+	"golazy.dev/lazyaction"
 	"golazy.dev/lazyapp/apptest"
 )
 
 func TestSession(t *testing.T) {
 
-	r := &Dispatcher{}
+	r := &lazyaction.Dispatcher{}
 
-	r.Resource(&SessionController{})
+	r.Resource(&lazyaction.SessionController{})
 
 	expect := apptest.New(t, r).Expect
 

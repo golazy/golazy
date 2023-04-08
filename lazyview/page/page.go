@@ -34,11 +34,41 @@ func (p *Page) AddScript(s any) {
 	p.Scripts = append(p.Scripts, script.New(s))
 }
 
-func (p *Page) Use(c component.Component) {
-	p.Components = append(p.Components, c)
+func (p *Page) AddHead(h ...io.WriterTo) *Page {
+	p.Head = append(p.Head, h...)
+	return p
 }
 
-func (p *Page) AddStyleLink(href string) {
+func (p *Page) Use(c component.Component) *Page {
+	p.Components = append(p.Components, c)
+	return p
+}
+
+func (pold Page) Add(args ...any) Page {
+	p := pold
+	for _, a := range args {
+		switch a := a.(type) {
+		case component.Component:
+			p.Components = append(p.Components, a)
+		case style.Style:
+			p.Styles = append(p.Styles, a)
+		case script.Script:
+			p.Scripts = append(p.Scripts, a)
+		case io.WriterTo:
+			p.Head = append(p.Head, a)
+		default:
+			panic("unknown type")
+		}
+	}
+	return p
+}
+
+func (p *Page) AddStylesheet(ss *lazyassets.Stylesheet) *Page {
+	p.AddStyleLink(ss.Path)
+	return p
+}
+
+func (p *Page) AddStyleLink(href string) *Page {
 	if len(href) == 0 {
 		panic("href must not be empty")
 	}
@@ -55,10 +85,12 @@ func (p *Page) AddStyleLink(href string) {
 		Data: map[string]string{"turbo-reload": "true"},
 	}
 	p.Styles = append(p.Styles, s)
+	return p
 }
 
-func (p *Page) AddStyle(s style.Style) {
+func (p *Page) AddStyle(s style.Style) *Page {
 	p.Styles = append(p.Styles, s)
+	return p
 }
 
 func (p *Page) Element() *nodes.Element {
@@ -109,7 +141,7 @@ func (p *Page) Element() *nodes.Element {
 
 }
 
-func (p *Page) With(content any) io.WriterTo {
+func (p *Page) With(content ...any) io.WriterTo {
 	p.Content = content
 	return p.Element()
 }
@@ -247,6 +279,9 @@ func (p *Page) styles() []io.WriterTo {
 		}
 	}
 	for _, s := range p.Styles {
+		if s.Href != "" {
+			s.Href = p.toPermalink(s.Href)
+		}
 		styles = append(styles, s.Element())
 	}
 	return styles

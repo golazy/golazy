@@ -15,7 +15,7 @@ var (
 type Result http.Handler
 
 func Redirect(url string, status ...int) *redirect {
-	r := &redirect{url, 307}
+	r := &redirect{url, 303}
 	if len(status) > 0 {
 		r.Status = status[0]
 	}

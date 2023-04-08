@@ -12,5 +12,5 @@ var FS embed.FS
 var (
 	Manager    = lazyassets.New()
 	Assets     = Manager.AddFS(FS, "public")
-	Stylesheet = Assets.NewStylesheet("app.css")
+	Stylesheet = Assets.NewStylesheet("/golazy/app.css")
 )

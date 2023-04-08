@@ -1,0 +1,64 @@
+package restcontroller
+
+import (
+	"encoding/json"
+	"io"
+	"net/http"
+)
+
+type Storage[K any] interface {
+	List(...any) ([]*K, error)
+	Read(string) (*K, error)
+	Destroy(string) error
+	Write(string, *K) error
+	New() *K
+}
+
+type RestControllerOld[T any, J Storage[T]] struct {
+	S J
+}
+
+func (rc *RestControllerOld[T, J]) Index(w http.ResponseWriter, r *http.Request) error {
+	rows, err := rc.S.List()
+	if err != nil {
+		return err
+	}
+
+	return json.NewEncoder(w).Encode(rows)
+}
+
+func (rc *RestControllerOld[T, J]) Show(w http.ResponseWriter, id string) error {
+	r, err := rc.S.Read(id)
+	if err != nil {
+		return err
+	}
+	return json.NewEncoder(w).Encode(r)
+
+}
+
+func (rc *RestControllerOld[T, J]) Create() {
+}
+
+func (rc *RestControllerOld[T, J]) Update() {
+
+}
+
+func (rc *RestControllerOld[T, J]) Destroy() {
+
+}
+
+func (rc *RestControllerOld[T, J]) New() {
+
+}
+func (rc *RestControllerOld[T, J]) Edit() {
+
+}
+
+type RestController struct {
+	Storage
+}
+
+func (r *RestController) Index() (io.WriterTo, error) {
+
+
+}

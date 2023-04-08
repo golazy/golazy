@@ -13,7 +13,7 @@ import (
 var logo []byte
 
 func init() {
-	assets.Assets.AddFile("img/logo.svg", logo)
+	assets.Assets.AddFile("golazy/img/logo.svg", logo)
 }
 
 const (
@@ -24,7 +24,7 @@ const (
 
 func Logo(size string) nodes.Element {
 	return html.Img(
-		html.Src(assets.Assets.Get("img/logo.svg")),
+		html.Src(assets.Assets.Get("/golazy/img/logo.svg")),
 		html.Alt("GoLazy"),
 		html.Width(size),
 	)

@@ -71,7 +71,7 @@ func (a *App) Init() {
 	}
 
 	// Add logger
-	//a.h = loggerMiddleware(a.h)
+	a.h = loggerMiddleware(a.h)
 
 	// Add panic handler
 	a.h = panicMiddleware(a.h)

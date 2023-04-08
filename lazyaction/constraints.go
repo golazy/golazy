@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"path"
 	"reflect"
 	"strings"
 
@@ -159,6 +160,6 @@ func (c *Constraints) Resource(target any, options ...*ResourceOptions) *Constra
 
 	c2 := *c
 	c2.resource = resource
-	c2.Prefix = c.Prefix + "/" + resource.Path
+	c2.Prefix = path.Join(c.Prefix, resource.Path, path.Join(resource.Prefix...))
 	return &c2
 }

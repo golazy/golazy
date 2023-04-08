@@ -63,3 +63,16 @@ func TestRouterResources(t *testing.T) {
 	t.Log(dispatcher.String())
 
 }
+
+func TestControllerDefaultValues(t *testing.T) {
+
+	dispatcher := Dispatcher{}
+
+	expect := newExpect(t, &dispatcher)
+
+	dispatcher.Resource(&ValuesController{Value: "hola"})
+	expect("/values", "hola")
+
+	t.Log(dispatcher.Routes())
+
+}

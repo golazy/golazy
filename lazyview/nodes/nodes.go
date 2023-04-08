@@ -3,10 +3,38 @@
 package nodes
 
 import (
+	"fmt"
+	"reflect"
 	"sort"
 
 	"golang.org/x/exp/constraints"
 )
+
+func If(cond bool, vals ...any) any {
+	if len(vals) == 0 {
+		return nil
+	}
+	if cond {
+		return vals[0]
+	}
+	if len(vals) > 1 {
+		return vals[1]
+	}
+	return nil
+}
+
+func IfSet(val any, vals ...any) any {
+	if val == nil {
+		return If(false, vals...)
+	}
+	if s, ok := val.(string); ok {
+		return If(s != "", vals...)
+	}
+	if reflect.ValueOf(val).IsNil() {
+		return If(false, vals...)
+	}
+	panic("IfSet only supports string values or nils. Got: " + fmt.Sprintf("%T %+v", val, val))
+}
 
 func Each[T any, J any](items []T, fn func(T) J) []J {
 

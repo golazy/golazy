@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"runtime"
 	"strings"
+
+	"golazy.dev/lazyaction"
 )
 
 type Tester interface {
@@ -39,6 +41,19 @@ func New(t T, app http.Handler) Tester {
 		t:   t,
 		app: app,
 	}
+}
+
+func NewController(t T, controller any) Tester {
+	t.Helper()
+	d := &lazyaction.Dispatcher{}
+	d.Resource(controller, &lazyaction.ResourceOptions{
+		Path: "/",
+	})
+	return &tester{
+		t:   t,
+		app: d,
+	}
+
 }
 
 func NewFull(t T, app http.Handler) Tester {
@@ -107,7 +122,7 @@ func (r *Result) Contains(in string) *Result {
 func (r *Result) Code(in int) *Result {
 	r.t.Helper()
 	if r.Response.Code() != in {
-		r.t.Errorf("Expected code %d, got %d", in, r.Response.Code)
+		r.t.Errorf("Expected code %d, got %d", in, r.Response.Code())
 	}
 	return r
 }

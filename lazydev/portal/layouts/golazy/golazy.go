@@ -20,7 +20,7 @@ import (
 )
 
 //go:embed style.css
-var css []byte
+var css string
 
 //go:embed slogans.txt
 var slogansC string
@@ -40,7 +40,7 @@ func cite() string {
 	return slogans[rand.Intn(len(slogans))]
 }
 
-func (l *Layout) RenderLayout(w http.ResponseWriter, current *url.URL, assets *lazyassets.Assets, content []byte) io.WriterTo {
+func (l *Layout) RenderLayout(w http.ResponseWriter, current *url.URL, lass *lazyassets.Assets, content []byte) io.WriterTo {
 	if l.SkipL {
 		return bytes.NewBuffer(content)
 	}
@@ -48,16 +48,17 @@ func (l *Layout) RenderLayout(w http.ResponseWriter, current *url.URL, assets *l
 	if ct != "" && ct != "text/html" {
 		return bytes.NewBuffer(content)
 	}
-	if assets == nil {
+	if lass == nil {
 		panic("What!")
 	}
-	l.Page.Assets = assets
+	l.Page.Assets = lass
 	l.Use(es_module_shims.Component)
-	l.Assets = assets
+	l.Assets = lass
 	l.Charset = "utf-8"
 	l.Title = "GoLazy" + " " + l.Title
 	l.Viewport = "width=device-width, initial-scale=1"
-	l.AddStyleLink("app.css")
+
+	l.AddStylesheet(assets.Stylesheet)
 
 	l.Content = Body(
 		nav.Navigation(current),

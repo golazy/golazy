@@ -13,7 +13,7 @@ import (
 )
 
 //go:embed nav.css
-var css []byte
+var css string
 
 func init() {
 	assets.Stylesheet.Add(css)

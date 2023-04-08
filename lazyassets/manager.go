@@ -75,11 +75,13 @@ func (m *Assets) CSSPermalink(data string) string {
 type Stylesheet struct {
 	assets  *Assets
 	content [][]byte
+	Path    string
 }
 
-func (s *Stylesheet) Add(content []byte) {
+func (s *Stylesheet) Add(content string) *Stylesheet {
 	// TODO: Add log info about the caller
-	s.content = append(s.content, content)
+	s.content = append(s.content, []byte(content+"\n"))
+	return s
 }
 
 func (s *Stylesheet) newReader() io.Reader {
@@ -97,7 +99,7 @@ func (m *Assets) NewStylesheet(path string) *Stylesheet {
 		path = "/" + path
 	}
 
-	s := &Stylesheet{assets: m}
+	s := &Stylesheet{assets: m, Path: path}
 	m.addFile(path, &File{
 		F:    s.newReader,
 		Mime: "text/css",

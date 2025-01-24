@@ -1,0 +1,48 @@
+go: finding module for package github.com/timewasted/go-accept-headers
+go: finding module for package golazy.dev/lazyml/html/page
+go: finding module for package github.com/lmittmann/tint
+go: finding module for package github.com/gorilla/websocket
+go: finding module for package golang.org/x/term
+go: finding module for package github.com/mr-tron/base58
+go: finding module for package github.com/JohannesKaufmann/html-to-markdown
+go: finding module for package github.com/microcosm-cc/bluemonday
+go: finding module for package golazy.dev/lazyml/html/script
+go: finding module for package golang.org/x/sync/errgroup
+go: finding module for package golang.org/x/exp/constraints
+go: finding module for package github.com/gorilla/schema
+go: finding module for package github.com/gorilla/sessions
+go: finding module for package golazy.dev/lazyml/html/style
+go: finding module for package github.com/chromedp/chromedp
+go: finding module for package github.com/chromedp/cdproto/dom
+go: finding module for package github.com/quic-go/quic-go/http3
+go: finding module for package github.com/stretchr/testify/assert
+go: finding module for package golang.org/x/exp/rand
+go: finding module for package github.com/adrg/xdg
+go: finding module for package golang.org/x/exp/slog
+go: found github.com/gorilla/sessions in github.com/gorilla/sessions v1.4.0
+go: found github.com/timewasted/go-accept-headers in github.com/timewasted/go-accept-headers v0.0.0-20130320203746-c78f304b1b09
+go: found github.com/gorilla/schema in github.com/gorilla/schema v1.4.1
+go: found github.com/gorilla/websocket in github.com/gorilla/websocket v1.5.3
+go: found golang.org/x/term in golang.org/x/term v0.28.0
+go: found golang.org/x/exp/constraints in golang.org/x/exp v0.0.0-20250106191152-7588d65b2ba8
+go: found github.com/lmittmann/tint in github.com/lmittmann/tint v1.0.6
+go: found golang.org/x/sync/errgroup in golang.org/x/sync v0.10.0
+go: found github.com/JohannesKaufmann/html-to-markdown in github.com/JohannesKaufmann/html-to-markdown v1.6.0
+go: found github.com/microcosm-cc/bluemonday in github.com/microcosm-cc/bluemonday v1.0.27
+go: found github.com/mr-tron/base58 in github.com/mr-tron/base58 v1.2.0
+go: found github.com/chromedp/cdproto/dom in github.com/chromedp/cdproto v0.0.0-20250120090109-d38428e4d9c8
+go: found github.com/chromedp/chromedp in github.com/chromedp/chromedp v0.12.1
+go: found golazy.dev/lazyml/html/script in golazy.dev/lazyml v0.0.10
+go: found golazy.dev/lazyml/html/style in golazy.dev/lazyml v0.0.10
+go: found golazy.dev/lazyml/html/page in golazy.dev/lazyml v0.0.10
+go: found github.com/quic-go/quic-go/http3 in github.com/quic-go/quic-go v0.49.0
+go: found github.com/stretchr/testify/assert in github.com/stretchr/testify v1.10.0
+go: found golang.org/x/exp/rand in golang.org/x/exp v0.0.0-20250106191152-7588d65b2ba8
+go: found github.com/adrg/xdg in github.com/adrg/xdg v0.5.3
+go: found golang.org/x/exp/slog in golang.org/x/exp v0.0.0-20250106191152-7588d65b2ba8
+go: golazy.dev/lazyml: ambiguous import: found package golazy.dev/lazyml in multiple modules:
+	golazy.dev (/home/guillermo/Projects/Apps/GoLazy/golazy.dev/lazyml)
+	golazy.dev/lazyml v0.0.10 (/home/guillermo/go/pkg/mod/golazy.dev/lazyml@v0.0.10)
+go: golazy.dev/lazyml/html: ambiguous import: found package golazy.dev/lazyml/html in multiple modules:
+	golazy.dev (/home/guillermo/Projects/Apps/GoLazy/golazy.dev/lazyml/html)
+	golazy.dev/lazyml v0.0.10 (/home/guillermo/go/pkg/mod/golazy.dev/lazyml@v0.0.10/html)

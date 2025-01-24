@@ -1,0 +1,14 @@
+#!/bin/bash
+
+
+DIRS="apptemplate layerfs lazycontext lazyservice lazyapp lazyassets lazycontroller lazydispatch lazyhttp lazyml lazysupport lazyview memfs router lazyplugin sreflect"
+#DIRS="lazyservice lazyapp lazydispatch lazyhttp lazyml lazysupport"
+
+pushd .
+DIR=`pwd`
+for a in $DIRS ; do
+cd $DIR/$a
+echo -e "\e[31m>$a\$ $*\e[0m"
+eval "$*"
+done
+popd

@@ -1,0 +1,5 @@
+
+update:
+  ./each go get -u
+  ./each go mod tidy
+

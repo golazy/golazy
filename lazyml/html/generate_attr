@@ -1,0 +1,26 @@
+#!/usr/bin/env ruby
+
+require 'active_support'
+include ActiveSupport::Inflector
+
+attributes = File.read("attributes").split
+tags = File.read("tags").split
+
+f = File.open("autoattributes.go", "w")
+
+f << "package html\n\n"
+
+f << "import \"golazy.dev/lazyml\"\n\n"
+
+attributes.each do  |attr|
+  fn = camelize(attr.gsub("-","_"))
+  fn += "Attr" if tags.include?(attr)
+  fn = "DataAttrValue" if attr == "data"
+
+  f << "// #{fn} sets #{attr} attribute\n"
+  f << "func #{fn}(value ...string) lazyml.Attr {\n"
+  f << "  return lazyml.NewAttr(\"#{attr}\", value...)\n"
+  f << "}\n\n"
+end
+
+f.close

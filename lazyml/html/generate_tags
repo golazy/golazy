@@ -1,0 +1,19 @@
+#!/usr/bin/env ruby
+
+tags = File.read("tags").split
+
+f = File.open("autotags.go", "w")
+
+f << "package html\n\n"
+
+f << "import \"golazy.dev/lazyml\"\n\n"
+
+tags.each do  |tag|
+  fn = tag.capitalize
+  f << "// #{fn} Creates a new #{tag} element\n"
+  f << "func #{fn}(options ...any) lazyml.Element {\n"
+  f << "  return lazyml.NewElement(\"#{tag}\", options...)\n"
+  f << "}\n\n"
+end
+
+f.close

@@ -1,0 +1,1 @@
+plugin/admin/authors/index.html.tpl

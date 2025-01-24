@@ -1,0 +1,12 @@
+#!/bin/bash
+
+TAG=${1:?tag required}
+DIR=`pwd`
+for a in `ls -d` ; do
+	cd $DIR/$a
+	git tag $TAG
+	git push &
+	git push --tags &
+done
+
+

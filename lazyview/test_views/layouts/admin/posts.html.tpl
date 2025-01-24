@@ -1,0 +1,1 @@
+layouts/admin/posts.html.tpl {{.Content}}

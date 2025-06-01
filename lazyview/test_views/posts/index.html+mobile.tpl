@@ -1,0 +1,1 @@
+posts/index.html+mobile.tpl

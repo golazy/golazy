@@ -1,0 +1,12 @@
+{
+    "favorites.resources": [
+        {
+            "filePath": "dispatcher.go",
+            "group": "Default"
+        },
+        {
+            "filePath": "router.go",
+            "group": "Default"
+        }
+    ]
+}

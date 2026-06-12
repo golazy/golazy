@@ -3,7 +3,14 @@
 GoLazy is a convention-first web framework for Go.
 
 This repository currently contains the controller and routing primitives
-extracted from the sample application. Its canonical Go module path is:
+extracted from the sample application:
+
+```text
+golazy.dev/lazycontroller
+golazy.dev/lazyroutes
+```
+
+Its canonical Go module path is:
 
 ```text
 golazy.dev

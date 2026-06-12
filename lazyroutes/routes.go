@@ -1,4 +1,4 @@
-package routes
+package lazyroutes
 
 import (
 	"context"

@@ -84,6 +84,9 @@ func NewBase(ctx context.Context, viewPath ...string) (Base, error) {
 }
 
 func (b *Base) Set(name string, value any) {
+	if b.data == nil {
+		b.data = make(map[string]any)
+	}
 	b.data[name] = value
 }
 
@@ -128,4 +131,48 @@ func (b *Base) Render(view string) error {
 		Layout:     b.layout,
 		UseLayout:  true,
 	})
+}
+
+func (b *Base) HandleError(w http.ResponseWriter, r *http.Request, err error) error {
+	if err == nil {
+		return nil
+	}
+	if w == nil {
+		w = b.writer
+	}
+	if r == nil {
+		r = b.request
+	}
+	ResetResponse(w)
+
+	status := StatusCode(err)
+	b.Set("status", status)
+	b.Set("statusText", http.StatusText(status))
+	b.Set("error", err.Error())
+
+	if b.renderer == nil || w == nil {
+		http.Error(w, http.StatusText(status), status)
+		return nil
+	}
+	w.WriteHeader(status)
+	renderErr := b.renderer.Render(lazyview.Options{
+		Context:    b.ctx,
+		Request:    r,
+		Writer:     w,
+		Variables:  b.data,
+		Helpers:    b.helpers,
+		Route:      b.route,
+		Namespace:  b.route.Namespace,
+		Controller: b.controller,
+		Action:     "error",
+		Layout:     b.layout,
+		UseLayout:  true,
+	})
+	if renderErr == nil {
+		return nil
+	}
+
+	ResetResponse(w)
+	http.Error(w, http.StatusText(status), status)
+	return nil
 }

@@ -61,6 +61,7 @@ func New(config Config) *App {
 	}
 
 	dispatcher := lazydispatch.NewDispatcher()
+	dispatcher.Use(lazydispatch.ResponseBuffer())
 	for _, middleware := range config.Middlewares {
 		dispatcher.Use(middleware)
 	}

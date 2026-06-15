@@ -173,7 +173,7 @@ func (v *Views) findView(ctx *Context) (string, error) {
 	if ctx.Namespace != "" {
 		directories = append(directories, ctx.Namespace)
 	}
-	directories = append(directories, "application")
+	directories = append(directories, "app")
 
 	var tried []string
 	for _, directory := range directories {

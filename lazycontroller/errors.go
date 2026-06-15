@@ -1,6 +1,7 @@
 package lazycontroller
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 )
@@ -20,4 +21,13 @@ func (e *HTTPError) Unwrap() error {
 
 func Error(status int, err error) error {
 	return &HTTPError{Status: status, Err: err}
+}
+
+func StatusCode(err error) int {
+	status := http.StatusInternalServerError
+	var httpError *HTTPError
+	if errors.As(err, &httpError) && httpError.Status != 0 {
+		status = httpError.Status
+	}
+	return status
 }

@@ -44,3 +44,30 @@ func TestRenderUsesHelpersAndPartials(t *testing.T) {
 		t.Fatalf("rendered body = %q, want %q", got, want)
 	}
 }
+
+func TestRenderFallsBackToAppViews(t *testing.T) {
+	views, err := lazyview.New(fstest.MapFS{
+		"layouts/app.html.tpl": {Data: []byte(`<main>{{.content}}</main>`)},
+		"app/error.html.tpl":   {Data: []byte(`fallback {{.status}}`)},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var out strings.Builder
+	err = views.Render(lazyview.Options{
+		Writer:     &out,
+		Variables:  map[string]any{"status": 404},
+		Route:      lazyview.Route{Controller: "posts", Action: "show"},
+		Controller: "posts",
+		Action:     "error",
+		UseLayout:  true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got, want := out.String(), `<main>fallback 404</main>`; got != want {
+		t.Fatalf("rendered body = %q, want %q", got, want)
+	}
+}

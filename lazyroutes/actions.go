@@ -2,7 +2,6 @@ package lazyroutes
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"reflect"
@@ -49,7 +48,8 @@ func newControllerConstructor(controller any) controllerConstructor {
 func (c controllerConstructor) bind(ctx context.Context, action reflect.Value) http.Handler {
 	validateControllerAction(c.controllerType, action)
 
-	return Handle(func(w http.ResponseWriter, r *http.Request) error {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w = ensureResponseState(w)
 		controllerContext := lazycontroller.WithWriter(ctx, w)
 		controllerContext = lazycontroller.WithRequest(controllerContext, r)
 		if route, params, ok := RouteFromRequest(r); ok {
@@ -66,18 +66,29 @@ func (c controllerConstructor) bind(ctx context.Context, action reflect.Value) h
 
 		values := c.value.Call([]reflect.Value{reflect.ValueOf(controllerContext)})
 		if !values[1].IsNil() {
-			return values[1].Interface().(error)
+			handleControllerError(w, r, nil, values[1].Interface().(error))
+			return
 		}
 
+		controller := values[0].Interface()
 		values = action.Call([]reflect.Value{
 			values[0],
 			reflect.ValueOf(w),
 			reflect.ValueOf(r),
 		})
-		if values[0].IsNil() {
-			return nil
+		if !values[0].IsNil() {
+			handleControllerError(w, r, controller, values[0].Interface().(error))
+			return
 		}
-		return values[0].Interface().(error)
+
+		if lazycontroller.WasResponseSent(w) {
+			return
+		}
+		if renderer, ok := controller.(interface{ Render(string) error }); ok {
+			if err := renderer.Render(""); err != nil {
+				handleControllerError(w, r, controller, err)
+			}
+		}
 	})
 }
 
@@ -112,12 +123,57 @@ func validateControllerAction(controllerType reflect.Type, actionValue reflect.V
 func Handle(action Action) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if err := action(w, r); err != nil {
-			status := http.StatusInternalServerError
-			var httpError *lazycontroller.HTTPError
-			if errors.As(err, &httpError) {
-				status = httpError.Status
-			}
-			http.Error(w, http.StatusText(status), status)
+			lazycontroller.WriteError(w, r, err)
 		}
 	})
+}
+
+type controllerErrorHandler interface {
+	HandleError(http.ResponseWriter, *http.Request, error) error
+}
+
+type responseTracker struct {
+	http.ResponseWriter
+	sent bool
+}
+
+func ensureResponseState(w http.ResponseWriter) http.ResponseWriter {
+	if lazycontroller.WasResponseSent(w) {
+		return w
+	}
+	if _, ok := w.(interface{ WasResponseSent() bool }); ok {
+		return w
+	}
+	return &responseTracker{ResponseWriter: w}
+}
+
+func (w *responseTracker) Write(data []byte) (int, error) {
+	w.sent = true
+	return w.ResponseWriter.Write(data)
+}
+
+func (w *responseTracker) WriteHeader(status int) {
+	if w.sent {
+		return
+	}
+	w.sent = true
+	w.ResponseWriter.WriteHeader(status)
+}
+
+func (w *responseTracker) WasResponseSent() bool {
+	return w.sent || lazycontroller.WasResponseSent(w.ResponseWriter)
+}
+
+func (w *responseTracker) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
+}
+
+func handleControllerError(w http.ResponseWriter, r *http.Request, controller any, err error) {
+	lazycontroller.ResetResponse(w)
+	if handler, ok := controller.(controllerErrorHandler); ok {
+		if handleErr := handler.HandleError(w, r, err); handleErr == nil {
+			return
+		}
+	}
+	lazycontroller.WriteError(w, r, err)
 }

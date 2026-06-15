@@ -17,6 +17,7 @@ type Config struct {
 	Public      func() (fs.FS, error)
 	Views       func() (fs.FS, error)
 	Context     func(context.Context) context.Context
+	Helpers     []map[string]any
 	Middlewares []lazydispatch.Middleware
 }
 
@@ -31,12 +32,13 @@ var afterDraw = func(*lazyroutes.Scope) {}
 
 func New(config Config) *App {
 	ctx := context.Background()
+	var renderer *lazycontroller.Renderer
 	if config.Views != nil {
 		views, err := config.Views()
 		if err != nil {
 			panic(fmt.Errorf("open views: %w", err))
 		}
-		renderer, err := lazycontroller.NewRenderer(views)
+		renderer, err = lazycontroller.NewRenderer(views)
 		if err != nil {
 			panic(fmt.Errorf("initialize renderer: %w", err))
 		}
@@ -51,6 +53,12 @@ func New(config Config) *App {
 		config.Drawer(router)
 	}
 	afterDraw(router)
+	if renderer != nil {
+		renderer.AddHelpers(router.RegisterHelpers())
+		for _, helpers := range config.Helpers {
+			renderer.AddHelpers(helpers)
+		}
+	}
 
 	dispatcher := lazydispatch.NewDispatcher()
 	for _, middleware := range config.Middlewares {

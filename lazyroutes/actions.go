@@ -8,6 +8,7 @@ import (
 	"reflect"
 
 	"golazy.dev/lazycontroller"
+	"golazy.dev/lazyview"
 )
 
 type Action func(http.ResponseWriter, *http.Request) error
@@ -49,7 +50,21 @@ func (c controllerConstructor) bind(ctx context.Context, action reflect.Value) h
 	validateControllerAction(c.controllerType, action)
 
 	return Handle(func(w http.ResponseWriter, r *http.Request) error {
-		values := c.value.Call([]reflect.Value{reflect.ValueOf(lazycontroller.WithWriter(ctx, w))})
+		controllerContext := lazycontroller.WithWriter(ctx, w)
+		controllerContext = lazycontroller.WithRequest(controllerContext, r)
+		if route, params, ok := RouteFromRequest(r); ok {
+			controllerContext = lazycontroller.WithRoute(controllerContext, lazyview.Route{
+				Name:       route.Name,
+				Method:     route.Method,
+				Path:       route.Path,
+				Namespace:  route.Namespace,
+				Controller: route.Controller,
+				Action:     route.Action,
+				Params:     params,
+			})
+		}
+
+		values := c.value.Call([]reflect.Value{reflect.ValueOf(controllerContext)})
 		if !values[1].IsNil() {
 			return values[1].Interface().(error)
 		}

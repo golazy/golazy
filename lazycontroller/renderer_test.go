@@ -7,6 +7,9 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+
+	"golazy.dev/lazyview"
+	_ "golazy.dev/lazyview/gotmpl"
 )
 
 func TestRenderEscapesDataAndComposesLayout(t *testing.T) {
@@ -21,7 +24,8 @@ func TestRenderEscapesDataAndComposesLayout(t *testing.T) {
 	response := httptest.NewRecorder()
 	ctx := WithRenderer(context.Background(), renderer)
 	ctx = WithWriter(ctx, response)
-	base, err := NewBase(ctx, "posts")
+	ctx = WithRoute(ctx, lazyview.Route{Controller: "posts"})
+	base, err := NewBase(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +50,8 @@ func TestRenderMissingView(t *testing.T) {
 	}
 	ctx := WithRenderer(context.Background(), renderer)
 	ctx = WithWriter(ctx, httptest.NewRecorder())
-	base, err := NewBase(ctx, "posts")
+	ctx = WithRoute(ctx, lazyview.Route{Controller: "posts"})
+	base, err := NewBase(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,30 +1,25 @@
 package lazycontroller
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"html/template"
 	"io/fs"
 	"net/http"
-	"path"
+	"strings"
+
+	"golazy.dev/lazyview"
 )
 
-type Renderer struct {
-	views fs.FS
-}
+// Renderer is the application view renderer.
+type Renderer = lazyview.Views
 
 type rendererContextKey struct{}
 type writerContextKey struct{}
+type requestContextKey struct{}
+type routeContextKey struct{}
 
 func NewRenderer(views fs.FS) (*Renderer, error) {
-	if views == nil {
-		return nil, fmt.Errorf("views filesystem is required")
-	}
-	if _, err := fs.Stat(views, "layouts/app.html.tpl"); err != nil {
-		return nil, fmt.Errorf("load default layout: %w", err)
-	}
-	return &Renderer{views: views}, nil
+	return lazyview.New(views)
 }
 
 func WithRenderer(ctx context.Context, renderer *Renderer) context.Context {
@@ -35,15 +30,27 @@ func WithWriter(ctx context.Context, writer http.ResponseWriter) context.Context
 	return context.WithValue(ctx, writerContextKey{}, writer)
 }
 
-type Base struct {
-	writer   http.ResponseWriter
-	renderer *Renderer
-	viewPath string
-	layout   string
-	data     map[string]any
+func WithRequest(ctx context.Context, request *http.Request) context.Context {
+	return context.WithValue(ctx, requestContextKey{}, request)
 }
 
-func NewBase(ctx context.Context, viewPath string) (Base, error) {
+func WithRoute(ctx context.Context, route lazyview.Route) context.Context {
+	return context.WithValue(ctx, routeContextKey{}, route)
+}
+
+type Base struct {
+	ctx        context.Context
+	request    *http.Request
+	writer     http.ResponseWriter
+	renderer   *Renderer
+	route      lazyview.Route
+	controller string
+	layout     string
+	data       map[string]any
+	helpers    map[string]any
+}
+
+func NewBase(ctx context.Context, viewPath ...string) (Base, error) {
 	renderer, ok := ctx.Value(rendererContextKey{}).(*Renderer)
 	if !ok {
 		return Base{}, fmt.Errorf("renderer is missing from application context")
@@ -52,13 +59,27 @@ func NewBase(ctx context.Context, viewPath string) (Base, error) {
 	if !ok {
 		return Base{}, fmt.Errorf("response writer is missing from controller context")
 	}
+	request, _ := ctx.Value(requestContextKey{}).(*http.Request)
+	route, _ := ctx.Value(routeContextKey{}).(lazyview.Route)
+
+	controller := route.Controller
+	if len(viewPath) > 0 && strings.TrimSpace(viewPath[0]) != "" {
+		controller = viewPath[0]
+	}
+	if controller == "" {
+		return Base{}, fmt.Errorf("controller route metadata is missing from controller context")
+	}
 
 	return Base{
-		writer:   writer,
-		renderer: renderer,
-		viewPath: viewPath,
-		layout:   "app",
-		data:     make(map[string]any),
+		ctx:        ctx,
+		request:    request,
+		writer:     writer,
+		renderer:   renderer,
+		route:      route,
+		controller: controller,
+		layout:     "app",
+		data:       make(map[string]any),
+		helpers:    make(map[string]any),
 	}, nil
 }
 
@@ -70,43 +91,41 @@ func (b *Base) SetLayout(layout string) {
 	b.layout = layout
 }
 
+func (b *Base) Helper(name string, helper any) {
+	if b.helpers == nil {
+		b.helpers = make(map[string]any)
+	}
+	b.helpers[name] = helper
+}
+
+func (b *Base) Helpers(helpers map[string]any) {
+	for name, helper := range helpers {
+		b.Helper(name, helper)
+	}
+}
+
 func (b *Base) Render(view string) error {
 	if b.writer == nil || b.renderer == nil {
 		return fmt.Errorf("controller base is not initialized")
 	}
-
-	viewFile := path.Join(b.viewPath, view+".html.tpl")
-	viewTemplate, err := template.ParseFS(b.renderer.views, viewFile)
-	if err != nil {
-		return fmt.Errorf("parse view %q: %w", viewFile, err)
+	if view == "" {
+		view = strings.ToLower(b.route.Action)
+	}
+	if view == "" {
+		return fmt.Errorf("view name is required")
 	}
 
-	var content bytes.Buffer
-	if err := viewTemplate.Execute(&content, b.data); err != nil {
-		return fmt.Errorf("execute view %q: %w", viewFile, err)
-	}
-
-	layoutFile := path.Join("layouts", b.layout+".html.tpl")
-	layoutTemplate, err := template.ParseFS(b.renderer.views, layoutFile)
-	if err != nil {
-		return fmt.Errorf("parse layout %q: %w", layoutFile, err)
-	}
-
-	layoutData := make(map[string]any, len(b.data)+1)
-	for name, value := range b.data {
-		layoutData[name] = value
-	}
-	layoutData["content"] = template.HTML(content.String())
-
-	var page bytes.Buffer
-	if err := layoutTemplate.Execute(&page, layoutData); err != nil {
-		return fmt.Errorf("execute layout %q: %w", layoutFile, err)
-	}
-
-	b.writer.Header().Set("Content-Type", "text/html; charset=utf-8")
-	b.writer.WriteHeader(http.StatusOK)
-	if _, err := page.WriteTo(b.writer); err != nil {
-		return fmt.Errorf("write response: %w", err)
-	}
-	return nil
+	return b.renderer.Render(lazyview.Options{
+		Context:    b.ctx,
+		Request:    b.request,
+		Writer:     b.writer,
+		Variables:  b.data,
+		Helpers:    b.helpers,
+		Route:      b.route,
+		Namespace:  b.route.Namespace,
+		Controller: b.controller,
+		Action:     view,
+		Layout:     b.layout,
+		UseLayout:  true,
+	})
 }

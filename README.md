@@ -10,6 +10,7 @@ golazy.dev/lazyapp
 golazy.dev/lazycontroller
 golazy.dev/lazydispatch
 golazy.dev/lazyroutes
+golazy.dev/lazysupport/inflection
 ```
 
 Its canonical Go module path is:

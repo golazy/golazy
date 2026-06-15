@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"strings"
 	"unicode"
+
+	"golazy.dev/lazysupport/inflection"
 )
 
 type Resource struct {
@@ -107,8 +109,8 @@ func (r *Resource) MemberDelete(path string, action any) {
 func newResource(scope *Scope, controller any) *Resource {
 	controllerConstructor := newControllerConstructor(controller)
 	name := controllerNameFromType(controllerConstructor.controllerType)
-	singular := singularize(name)
-	plural := pluralize(singular)
+	singular := inflection.Singularize(name)
+	plural := inflection.Pluralize(singular)
 	return &Resource{
 		scope:      scope,
 		controller: controllerConstructor,
@@ -257,21 +259,4 @@ func toRouteWord(name string) string {
 		out.WriteRune(r)
 	}
 	return out.String()
-}
-
-func pluralize(singular string) string {
-	if strings.HasSuffix(singular, "y") {
-		return strings.TrimSuffix(singular, "y") + "ies"
-	}
-	if strings.HasSuffix(singular, "s") {
-		return singular
-	}
-	return singular + "s"
-}
-
-func singularize(plural string) string {
-	if strings.HasSuffix(plural, "ies") {
-		return strings.TrimSuffix(plural, "ies") + "y"
-	}
-	return strings.TrimSuffix(plural, "s")
 }

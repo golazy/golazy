@@ -17,7 +17,7 @@ lazyapp.New(lazyapp.Config{
 
 `lazyapp.New`:
 
-- Opens embedded views and initializes the renderer.
+- Opens views and initializes the renderer.
 - Calls the application context initializer.
 - Creates the root `lazyroutes.Scope`.
 - Calls the route drawer.

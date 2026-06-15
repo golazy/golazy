@@ -34,7 +34,7 @@ func New(config Config) *App {
 	if config.Views != nil {
 		views, err := config.Views()
 		if err != nil {
-			panic(fmt.Errorf("open embedded views: %w", err))
+			panic(fmt.Errorf("open views: %w", err))
 		}
 		renderer, err := lazycontroller.NewRenderer(views)
 		if err != nil {

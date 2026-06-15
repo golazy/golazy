@@ -121,12 +121,7 @@ func newResource(scope *Scope, controller any) *Resource {
 	}
 }
 
-func (r *Resource) add(
-	method string,
-	path string,
-	member bool,
-	action any,
-) {
+func (r *Resource) add(method string, path string, member bool, action any) {
 	r.custom = append(r.custom, resourceRoute{
 		method: method,
 		path:   strings.Trim(path, "/"),

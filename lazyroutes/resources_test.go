@@ -63,8 +63,8 @@ func (c *articlesController) Preview(w http.ResponseWriter, r *http.Request) err
 }
 
 func TestResourcesRegistersRESTAndCustomRoutes(t *testing.T) {
-	mux := http.NewServeMux()
-	Resources(context.Background(), mux, newArticlesController, func(r *Resource[articlesController]) {
+	scope := New(context.Background())
+	scope.Resources(newArticlesController, func(r *Resource) {
 		r.Get("search", (*articlesController).Search)
 		r.MemberGet("preview", (*articlesController).Preview)
 	})
@@ -89,7 +89,7 @@ func TestResourcesRegistersRESTAndCustomRoutes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.method+" "+tt.path, func(t *testing.T) {
 			response := httptest.NewRecorder()
-			mux.ServeHTTP(response, httptest.NewRequest(tt.method, tt.path, nil))
+			scope.ServeHTTP(response, httptest.NewRequest(tt.method, tt.path, nil))
 			if response.Code != http.StatusOK {
 				t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
 			}
@@ -97,6 +97,27 @@ func TestResourcesRegistersRESTAndCustomRoutes(t *testing.T) {
 				t.Fatalf("body = %q, want %q", response.Body.String(), tt.body)
 			}
 		})
+	}
+
+	routeByPathAndMethod := func(method, path string) (Route, bool) {
+		for _, route := range scope.Routes {
+			if route.Method == method && route.Path == path {
+				return route, true
+			}
+		}
+		return Route{}, false
+	}
+	if route, ok := routeByPathAndMethod(http.MethodGet, "/articles/{article_id}"); !ok || route.Name != "article" {
+		t.Fatalf("expected article route for GET /articles/{article_id}, got %#v (found=%v)", route, ok)
+	}
+	if route, ok := routeByPathAndMethod(http.MethodGet, "/articles/search"); !ok || route.Name != "search_articles" {
+		t.Fatalf("expected search_articles route for GET /articles/search, got %#v (found=%v)", route, ok)
+	}
+	if route, ok := routeByPathAndMethod(http.MethodGet, "/articles/{article_id}/preview"); !ok || route.Name != "preview_article" {
+		t.Fatalf("expected preview_article route for GET /articles/{article_id}/preview, got %#v (found=%v)", route, ok)
+	}
+	if route, ok := routeByPathAndMethod(http.MethodGet, "/articles/{article_id}"); !ok || !route.NamedParams["article_id"] {
+		t.Fatalf("expected route for article_id param, got %#v (found=%v)", route, ok)
 	}
 }
 
@@ -112,20 +133,53 @@ func (c *profilesController) Show(w http.ResponseWriter, r *http.Request) error 
 }
 
 func TestResourcesSupportsOverrides(t *testing.T) {
-	mux := http.NewServeMux()
-	Resources(context.Background(), mux, newProfilesController, func(r *Resource[profilesController]) {
+	scope := New(context.Background())
+	scope.Resources(newProfilesController, func(r *Resource) {
 		r.Path("people")
 		r.Param("user")
 	})
 
 	response := httptest.NewRecorder()
-	mux.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/people/guillermo", nil))
+	scope.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/people/guillermo", nil))
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
 	}
 	if response.Body.String() != "profile guillermo" {
 		t.Fatalf("body = %q, want %q", response.Body.String(), "profile guillermo")
 	}
+}
+
+func TestResourcesUseNamespaceScope(t *testing.T) {
+	scope := New(context.Background())
+
+	scope.Namespace("admin", func(admin *Scope) {
+		admin.Resources(newArticlesController)
+	})
+
+	response := httptest.NewRecorder()
+	scope.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/admin/articles/hello", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+	if response.Body.String() != "show hello" {
+		t.Fatalf("body = %q, want %q", response.Body.String(), "show hello")
+	}
+
+	for _, route := range scope.Routes {
+		if route.Method == http.MethodGet && route.Path == "/admin/articles/{article_id}" {
+			if route.Name != "admin_article" {
+				t.Fatalf("route.Name = %q, want %q", route.Name, "admin_article")
+			}
+			if route.Namespace != "admin" {
+				t.Fatalf("route.Namespace = %q, want %q", route.Namespace, "admin")
+			}
+			if !route.NamedParams["article_id"] {
+				t.Fatalf("route.NamedParams = %#v, want article_id", route.NamedParams)
+			}
+			return
+		}
+	}
+	t.Fatalf("admin article route not found in %#v", scope.Routes)
 }
 
 func TestHandleConvertsHTTPErrorStatus(t *testing.T) {

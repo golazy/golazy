@@ -50,6 +50,13 @@ func (c controllerConstructor) bind(ctx context.Context, action reflect.Value) h
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w = ensureResponseState(w)
+		var controller any
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				reportControllerError(ctx, w, r, controller, lazycontroller.PanicError(recovered))
+			}
+		}()
+
 		controllerContext := lazycontroller.WithWriter(ctx, w)
 		controllerContext = lazycontroller.WithRequest(controllerContext, r)
 		if route, params, ok := RouteFromRequest(r); ok {
@@ -66,18 +73,19 @@ func (c controllerConstructor) bind(ctx context.Context, action reflect.Value) h
 
 		values := c.value.Call([]reflect.Value{reflect.ValueOf(controllerContext)})
 		if !values[1].IsNil() {
-			handleControllerError(w, r, nil, values[1].Interface().(error))
+			reportControllerError(ctx, w, r, nil, values[1].Interface().(error))
 			return
 		}
 
-		controller := values[0].Interface()
+		controller = values[0].Interface()
+		lazycontroller.ReportController(r, controller)
 		values = action.Call([]reflect.Value{
 			values[0],
 			reflect.ValueOf(w),
 			reflect.ValueOf(r),
 		})
 		if !values[0].IsNil() {
-			handleControllerError(w, r, controller, values[0].Interface().(error))
+			reportControllerError(ctx, w, r, controller, values[0].Interface().(error))
 			return
 		}
 
@@ -86,7 +94,7 @@ func (c controllerConstructor) bind(ctx context.Context, action reflect.Value) h
 		}
 		if renderer, ok := controller.(interface{ Render(string) error }); ok {
 			if err := renderer.Render(""); err != nil {
-				handleControllerError(w, r, controller, err)
+				reportControllerError(ctx, w, r, controller, err)
 			}
 		}
 	})
@@ -122,7 +130,19 @@ func validateControllerAction(controllerType reflect.Type, actionValue reflect.V
 
 func Handle(action Action) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				err := lazycontroller.PanicError(recovered)
+				if lazycontroller.ReportError(r, nil, err) {
+					return
+				}
+				lazycontroller.WriteError(w, r, err)
+			}
+		}()
 		if err := action(w, r); err != nil {
+			if lazycontroller.ReportError(r, nil, err) {
+				return
+			}
 			lazycontroller.WriteError(w, r, err)
 		}
 	})
@@ -168,12 +188,38 @@ func (w *responseTracker) Unwrap() http.ResponseWriter {
 	return w.ResponseWriter
 }
 
-func handleControllerError(w http.ResponseWriter, r *http.Request, controller any, err error) {
+func reportControllerError(ctx context.Context, w http.ResponseWriter, r *http.Request, controller any, err error) {
+	if lazycontroller.ReportError(r, controller, err) {
+		return
+	}
+	handleControllerError(ctx, w, r, controller, err)
+}
+
+func handleControllerError(ctx context.Context, w http.ResponseWriter, r *http.Request, controller any, err error) {
+	if err == nil {
+		return
+	}
 	lazycontroller.ResetResponse(w)
 	if handler, ok := controller.(controllerErrorHandler); ok {
-		if handleErr := handler.HandleError(w, r, err); handleErr == nil {
+		handleErr := callControllerErrorHandler(handler, w, r, err)
+		if handleErr == nil {
 			return
 		}
+		lazycontroller.ResetResponse(w)
+		if lazycontroller.WriteErrorFallback(ctx, w, r) {
+			return
+		}
+		lazycontroller.WriteError(w, r, handleErr)
+		return
 	}
 	lazycontroller.WriteError(w, r, err)
+}
+
+func callControllerErrorHandler(handler controllerErrorHandler, w http.ResponseWriter, r *http.Request, err error) (handleErr error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			handleErr = lazycontroller.PanicError(recovered)
+		}
+	}()
+	return handler.HandleError(w, r, err)
 }

@@ -1,6 +1,7 @@
 package lazyapp
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"net/http"
@@ -70,5 +71,38 @@ func TestAppRegistersGeneratedAssetSources(t *testing.T) {
 	}
 	if app.Assets == nil || app.Assets.Empty() {
 		t.Fatal("app Assets registry is empty")
+	}
+}
+
+func TestAppServesStatic500ForUserRouteErrors(t *testing.T) {
+	app := New(Config{
+		Name: "test",
+		Drawer: func(router *lazyroutes.Scope) {
+			router.HandleFunc(http.MethodGet, "/returned", func(w http.ResponseWriter, _ *http.Request) error {
+				_, _ = fmt.Fprint(w, "partial")
+				return errors.New("broken")
+			})
+			router.HandleFunc(http.MethodGet, "/panic", func(w http.ResponseWriter, _ *http.Request) error {
+				_, _ = fmt.Fprint(w, "partial")
+				panic("boom")
+			})
+		},
+		Public: func() (fs.FS, error) {
+			return fstest.MapFS{
+				"500.html": {Data: []byte("<h1>static 500</h1>")},
+			}, nil
+		},
+	})
+
+	for _, path := range []string{"/returned", "/panic"} {
+		response := httptest.NewRecorder()
+		app.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+
+		if response.Code != http.StatusInternalServerError {
+			t.Fatalf("%s status = %d, want %d", path, response.Code, http.StatusInternalServerError)
+		}
+		if got, want := response.Body.String(), "<h1>static 500</h1>"; got != want {
+			t.Fatalf("%s body = %q, want %q", path, got, want)
+		}
 	}
 }

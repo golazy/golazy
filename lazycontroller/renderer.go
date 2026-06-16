@@ -1,10 +1,12 @@
 package lazycontroller
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io/fs"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"golazy.dev/lazyview"
@@ -150,15 +152,22 @@ func (b *Base) HandleError(w http.ResponseWriter, r *http.Request, err error) er
 	b.Set("statusText", http.StatusText(status))
 	b.Set("error", err.Error())
 
-	if b.renderer == nil || w == nil {
-		http.Error(w, http.StatusText(status), status)
+	if b.returnFile(w, r, strconv.Itoa(status)+".html", status) == nil {
 		return nil
 	}
-	w.WriteHeader(status)
+	if b.renderer == nil {
+		return fmt.Errorf("controller renderer is not initialized")
+	}
+	if w == nil {
+		return fmt.Errorf("response writer is missing")
+	}
+
+	buffer := newBufferedResponse()
+	buffer.WriteHeader(status)
 	renderErr := b.renderer.Render(lazyview.Options{
 		Context:    b.ctx,
 		Request:    r,
-		Writer:     w,
+		Writer:     buffer,
 		Variables:  b.data,
 		Helpers:    b.helpers,
 		Route:      b.route,
@@ -168,11 +177,68 @@ func (b *Base) HandleError(w http.ResponseWriter, r *http.Request, err error) er
 		Layout:     b.layout,
 		UseLayout:  true,
 	})
-	if renderErr == nil {
-		return nil
+	if renderErr != nil {
+		return renderErr
 	}
 
 	ResetResponse(w)
-	http.Error(w, http.StatusText(status), status)
-	return nil
+	copyHeaders(w.Header(), buffer.Header())
+	w.WriteHeader(status)
+	_, writeErr := w.Write(buffer.body.Bytes())
+	return writeErr
+}
+
+func (b *Base) ReturnFile(file string, status int) error {
+	return b.returnFile(nil, nil, file, status)
+}
+
+func (b *Base) ServeErrorPage(w http.ResponseWriter, r *http.Request, status int) bool {
+	return b.returnFile(w, r, strconv.Itoa(status)+".html", status) == nil
+}
+
+func (b *Base) returnFile(w http.ResponseWriter, r *http.Request, file string, status int) error {
+	if w == nil {
+		w = b.writer
+	}
+	if r == nil {
+		r = b.request
+	}
+	return WriteFile(b.ctx, w, r, file, status)
+}
+
+type bufferedResponse struct {
+	header http.Header
+	body   bytes.Buffer
+	sent   bool
+}
+
+func newBufferedResponse() *bufferedResponse {
+	return &bufferedResponse{
+		header: make(http.Header),
+	}
+}
+
+func (w *bufferedResponse) Header() http.Header {
+	return w.header
+}
+
+func (w *bufferedResponse) Write(data []byte) (int, error) {
+	if !w.sent {
+		w.WriteHeader(http.StatusOK)
+	}
+	return w.body.Write(data)
+}
+
+func (w *bufferedResponse) WriteHeader(status int) {
+	if w.sent {
+		return
+	}
+	w.sent = true
+}
+
+func copyHeaders(target http.Header, source http.Header) {
+	for key, values := range source {
+		target.Del(key)
+		target[key] = append([]string(nil), values...)
+	}
 }

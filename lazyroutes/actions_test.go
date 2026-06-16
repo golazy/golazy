@@ -43,6 +43,11 @@ func (c *autoRenderController) Broken(w http.ResponseWriter, _ *http.Request) er
 	return lazycontroller.Error(http.StatusNotFound, errors.New("missing post"))
 }
 
+func (c *autoRenderController) Panic(w http.ResponseWriter, _ *http.Request) error {
+	_, _ = fmt.Fprint(w, "partial")
+	panic("boom")
+}
+
 func TestControllerActionAutoRendersDefaultView(t *testing.T) {
 	scope := newAutoRenderScope(t)
 	scope.Get("/posts", newAutoRenderController, (*autoRenderController).Index)
@@ -70,6 +75,84 @@ func TestControllerActionSkipsAutoRenderWhenResponseWasWritten(t *testing.T) {
 		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
 	}
 	if got, want := response.Body.String(), "direct"; got != want {
+		t.Fatalf("body = %q, want %q", got, want)
+	}
+}
+
+func TestControllerPanicRendersAppFallback(t *testing.T) {
+	scope := newAutoRenderScope(t)
+	scope.Get("/panic", newAutoRenderController, (*autoRenderController).Panic)
+	handler := lazydispatch.ResponseBuffer().Handler(scope)
+
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/panic", nil))
+
+	if response.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusInternalServerError)
+	}
+	body := response.Body.String()
+	if strings.Contains(body, "partial") {
+		t.Fatalf("body contains stale partial response: %q", body)
+	}
+	if !strings.Contains(body, "error 500 Internal Server Error") || !strings.Contains(body, "panic: boom") {
+		t.Fatalf("unexpected body: %q", body)
+	}
+}
+
+func TestControllerErrorUsesStaticFallbackWhenErrorTemplateFails(t *testing.T) {
+	renderer, err := lazycontroller.NewRenderer(fstest.MapFS{
+		"layouts/app.html.tpl": {Data: []byte(`<main>{{.content}}</main>`)},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := lazycontroller.WithRenderer(context.Background(), renderer)
+	ctx = lazycontroller.WithErrorPages(ctx, fstest.MapFS{
+		"500.html": {Data: []byte(`<h1>static 500</h1>`)},
+	})
+	scope := New(ctx)
+	scope.Get("/broken", newAutoRenderController, (*autoRenderController).Broken)
+	handler := lazydispatch.ResponseBuffer().Handler(scope)
+
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/broken", nil))
+
+	if response.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusInternalServerError)
+	}
+	body := response.Body.String()
+	if strings.Contains(body, "partial") {
+		t.Fatalf("body contains stale partial response: %q", body)
+	}
+	if got, want := body, "<h1>static 500</h1>"; got != want {
+		t.Fatalf("body = %q, want %q", got, want)
+	}
+}
+
+func TestControllerHandleErrorCanServeStaticStatusPage(t *testing.T) {
+	renderer, err := lazycontroller.NewRenderer(fstest.MapFS{
+		"layouts/app.html.tpl": {Data: []byte(`<main>{{.content}}</main>`)},
+		"app/error.html.tpl":   {Data: []byte(`dynamic {{.status}}`)},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := lazycontroller.WithRenderer(context.Background(), renderer)
+	ctx = lazycontroller.WithErrorPages(ctx, fstest.MapFS{
+		"404.html": {Data: []byte(`<h1>static 404</h1>`)},
+		"500.html": {Data: []byte(`<h1>static 500</h1>`)},
+	})
+	scope := New(ctx)
+	scope.Get("/broken", newAutoRenderController, (*autoRenderController).Broken)
+	handler := lazydispatch.ResponseBuffer().Handler(scope)
+
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/broken", nil))
+
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusNotFound)
+	}
+	if got, want := response.Body.String(), "<h1>static 404</h1>"; got != want {
 		t.Fatalf("body = %q, want %q", got, want)
 	}
 }

@@ -31,3 +31,14 @@ func StatusCode(err error) int {
 	}
 	return status
 }
+
+func PanicError(recovered any) error {
+	switch value := recovered.(type) {
+	case nil:
+		return nil
+	case error:
+		return fmt.Errorf("panic: %v", value)
+	default:
+		return fmt.Errorf("panic: %v", value)
+	}
+}

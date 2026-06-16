@@ -3,6 +3,7 @@ package lazycontroller
 import (
 	"context"
 	"io/fs"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -57,6 +58,40 @@ func TestRenderMissingView(t *testing.T) {
 	}
 	if err := base.Render("missing"); err == nil {
 		t.Fatal("expected missing view error")
+	}
+}
+
+func TestReturnFileWritesPublicFileWithStatus(t *testing.T) {
+	renderer, err := NewRenderer(fstest.MapFS{
+		"layouts/app.html.tpl": {Data: []byte(`{{.content}}`)},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := httptest.NewRecorder()
+	ctx := WithRenderer(context.Background(), renderer)
+	ctx = WithWriter(ctx, response)
+	ctx = WithRoute(ctx, lazyview.Route{Controller: "posts"})
+	ctx = WithErrorPages(ctx, fstest.MapFS{
+		"404.html": {Data: []byte("<h1>missing</h1>")},
+	})
+	base, err := NewBase(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := base.ReturnFile("404.html", http.StatusNotFound); err != nil {
+		t.Fatal(err)
+	}
+
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusNotFound)
+	}
+	if got, want := response.Body.String(), "<h1>missing</h1>"; got != want {
+		t.Fatalf("body = %q, want %q", got, want)
+	}
+	if got, want := response.Header().Get("Content-Type"), "text/html; charset=utf-8"; got != want {
+		t.Fatalf("Content-Type = %q, want %q", got, want)
 	}
 }
 

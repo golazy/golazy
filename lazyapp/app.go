@@ -58,6 +58,7 @@ func New(config Config) *App {
 		if err != nil {
 			panic(fmt.Errorf("open embedded public files: %w", err))
 		}
+		ctx = lazycontroller.WithErrorPages(ctx, public)
 		if err := assets.AddFS(public); err != nil {
 			panic(fmt.Errorf("register public assets: %w", err))
 		}
@@ -88,6 +89,7 @@ func New(config Config) *App {
 	dispatcher.Use(lazydispatch.RouteOnly(
 		router,
 		lazydispatch.ResponseBuffer(),
+		lazydispatch.MiddlewareFunc(lazycontroller.ErrorHandler(ctx)),
 		lazydispatch.ETag(),
 	))
 	for _, middleware := range config.Middlewares {

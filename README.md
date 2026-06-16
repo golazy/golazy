@@ -45,8 +45,10 @@ framework itself is just Go packages.
 golazy.dev/lazyapp                 Application composition
 golazy.dev/lazyassets              Asset registry, fingerprints, and serving
 golazy.dev/lazycontroller          Request-local controllers and render state
+golazy.dev/lazycookie              Signed and encrypted secure cookies
 golazy.dev/lazydispatch            HTTP dispatch and middleware
 golazy.dev/lazyroutes              Route DSL, resources, scopes, and route table
+golazy.dev/lazysession             Cookie sessions and session middleware
 golazy.dev/lazyview                View rendering and helper registry
 golazy.dev/lazyview/gotmpl         html/template engine for lazyview
 golazy.dev/lazysupport/inflection  Naming and inflection helpers
@@ -60,7 +62,10 @@ A GoLazy app is assembled with `lazyapp.New`:
 package appinit
 
 import (
+    "os"
+
     "golazy.dev/lazyapp"
+    "golazy.dev/lazysession"
     _ "golazy.dev/lazyview/gotmpl"
     "my_app/app"
 )
@@ -72,6 +77,12 @@ func App() *lazyapp.App {
         Public:  app.Public,
         Views:   app.Views,
         Context: Context,
+        Sessions: lazysession.Config{
+            Name: "my_app_session",
+            KeyPairs: [][]byte{
+                []byte(os.Getenv("SECURE_COOKIE_KEY")),
+            },
+        },
     })
 }
 ```
@@ -182,3 +193,7 @@ The sample application is available at
 ## License
 
 GoLazy is released under the MIT License. See [LICENSE](LICENSE).
+
+The `lazycookie` and `lazysession` packages include code adapted from Gorilla
+`securecookie` and Gorilla `sessions`. Those package directories retain the
+Gorilla BSD-style license notice.

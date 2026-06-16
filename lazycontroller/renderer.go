@@ -103,6 +103,10 @@ func (b *Base) Helper(name string, helper any) {
 	b.helpers[name] = helper
 }
 
+func (b *Base) Request() *http.Request {
+	return b.request
+}
+
 func (b *Base) Helpers(helpers map[string]any) {
 	for name, helper := range helpers {
 		b.Helper(name, helper)

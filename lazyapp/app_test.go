@@ -11,6 +11,7 @@ import (
 
 	"golazy.dev/lazyassets"
 	"golazy.dev/lazyroutes"
+	"golazy.dev/lazysession"
 )
 
 func TestAppAddsDynamicETagToRoutesAndAssetETagToPublicFiles(t *testing.T) {
@@ -71,6 +72,46 @@ func TestAppRegistersGeneratedAssetSources(t *testing.T) {
 	}
 	if app.Assets == nil || app.Assets.Empty() {
 		t.Fatal("app Assets registry is empty")
+	}
+}
+
+func TestAppInstallsSessionManager(t *testing.T) {
+	app := New(Config{
+		Name: "test",
+		Sessions: lazysession.Config{
+			Name: "app_session",
+			KeyPairs: [][]byte{
+				[]byte("0123456789abcdef0123456789abcdef"),
+			},
+		},
+		Drawer: func(router *lazyroutes.Scope) {
+			router.HandleFunc(http.MethodGet, "/", func(w http.ResponseWriter, r *http.Request) error {
+				session, err := lazysession.Get(r)
+				if err != nil {
+					return err
+				}
+				session.Values["visited"] = true
+				_, _ = fmt.Fprint(w, "session")
+				return nil
+			})
+		},
+	})
+	if app.Sessions == nil {
+		t.Fatal("app Sessions manager is nil")
+	}
+
+	response := httptest.NewRecorder()
+	app.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+	cookies := response.Result().Cookies()
+	if len(cookies) != 1 {
+		t.Fatalf("cookies = %d, want 1", len(cookies))
+	}
+	if cookies[0].Name != "app_session" {
+		t.Fatalf("cookie name = %q, want app_session", cookies[0].Name)
 	}
 }
 

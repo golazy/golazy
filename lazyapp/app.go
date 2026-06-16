@@ -10,6 +10,7 @@ import (
 	"golazy.dev/lazycontroller"
 	"golazy.dev/lazydispatch"
 	"golazy.dev/lazyroutes"
+	"golazy.dev/lazysession"
 )
 
 type Config struct {
@@ -21,6 +22,7 @@ type Config struct {
 	Helpers      []map[string]any
 	Assets       []lazyassets.Source
 	AssetOptions []lazyassets.Option
+	Sessions     lazysession.Config
 	Middlewares  []lazydispatch.Middleware
 }
 
@@ -30,12 +32,23 @@ type App struct {
 	Dispatcher *lazydispatch.Dispatcher
 	Router     *lazyroutes.Scope
 	Assets     *lazyassets.Registry
+	Sessions   *lazysession.Manager
 }
 
 var afterDraw = func(*lazyroutes.Scope) {}
 
 func New(config Config) *App {
 	ctx := context.Background()
+	var sessions *lazysession.Manager
+	if config.Sessions.Enabled() {
+		var err error
+		sessions, err = lazysession.NewManager(config.Sessions)
+		if err != nil {
+			panic(fmt.Errorf("initialize sessions: %w", err))
+		}
+		ctx = lazysession.WithManager(ctx, sessions)
+	}
+
 	var renderer *lazycontroller.Renderer
 	if config.Views != nil {
 		views, err := config.Views()
@@ -92,6 +105,9 @@ func New(config Config) *App {
 		lazydispatch.MiddlewareFunc(lazycontroller.ErrorHandler(ctx)),
 		lazydispatch.ETag(),
 	))
+	if sessions != nil {
+		dispatcher.Use(sessions)
+	}
 	for _, middleware := range config.Middlewares {
 		dispatcher.Use(middleware)
 	}
@@ -108,6 +124,7 @@ func New(config Config) *App {
 		Dispatcher: dispatcher,
 		Router:     router,
 		Assets:     assets,
+		Sessions:   sessions,
 	}
 }
 

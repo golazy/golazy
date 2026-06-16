@@ -61,6 +61,28 @@ func TestRenderMissingView(t *testing.T) {
 	}
 }
 
+func TestBaseExposesRequest(t *testing.T) {
+	views := fstest.MapFS{
+		"layouts/app.html.tpl": {Data: []byte(`{{.content}}`)},
+	}
+	renderer, err := NewRenderer(views)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodGet, "/posts", nil)
+	ctx := WithRenderer(context.Background(), renderer)
+	ctx = WithWriter(ctx, httptest.NewRecorder())
+	ctx = WithRequest(ctx, request)
+	ctx = WithRoute(ctx, lazyview.Route{Controller: "posts"})
+	base, err := NewBase(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if base.Request() != request {
+		t.Fatal("base Request did not return controller request")
+	}
+}
+
 func TestReturnFileWritesPublicFileWithStatus(t *testing.T) {
 	renderer, err := NewRenderer(fstest.MapFS{
 		"layouts/app.html.tpl": {Data: []byte(`{{.content}}`)},

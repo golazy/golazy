@@ -2,6 +2,7 @@ package lazysession
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"net/http"
 )
@@ -12,25 +13,29 @@ type managerContextKey struct{}
 
 // Config describes the default session manager created by lazyapp.
 //
-// Store is optional. When it is nil, KeyPairs are used to build a CookieStore.
+// Store is optional. When it is nil, Key and KeyPairs are used to build a
+// CookieStore.
 // Supplying Store keeps the lazyapp integration open to other backends without
 // changing application configuration later.
 type Config struct {
-	Name     string
-	Store    Store
+	Name  string
+	Store Store
+	// Key is the common app-facing session secret. It is deterministically
+	// expanded with SHA-256 before constructing the cookie store.
+	Key      string
 	KeyPairs [][]byte
 	Options  *Options
 }
 
 // Enabled reports whether this config should install session middleware.
 func (c Config) Enabled() bool {
-	return c.Store != nil || len(c.KeyPairs) > 0
+	return c.Store != nil || c.Key != "" || len(c.KeyPairs) > 0
 }
 
 // NewManager creates a request session manager from config.
 func NewManager(config Config) (*Manager, error) {
 	if !config.Enabled() {
-		return nil, fmt.Errorf("lazysession: store or key pairs are required")
+		return nil, fmt.Errorf("lazysession: store, key, or key pairs are required")
 	}
 
 	name := config.Name
@@ -43,7 +48,10 @@ func NewManager(config Config) (*Manager, error) {
 
 	store := config.Store
 	if store == nil {
-		keyPairs := make([][]byte, 0, len(config.KeyPairs))
+		keyPairs := make([][]byte, 0, len(config.KeyPairs)+1)
+		if config.Key != "" {
+			keyPairs = append(keyPairs, deriveKey(config.Key))
+		}
 		for _, key := range config.KeyPairs {
 			keyPairs = append(keyPairs, append([]byte(nil), key...))
 		}
@@ -67,6 +75,11 @@ func applyOptions(store Store, options *Options) {
 		s.Options = &copied
 		s.MaxAge(copied.MaxAge)
 	}
+}
+
+func deriveKey(key string) []byte {
+	sum := sha256.Sum256([]byte(key))
+	return sum[:]
 }
 
 // Manager provides request helpers and middleware for one application session.

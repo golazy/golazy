@@ -1,6 +1,8 @@
 package lazysession
 
 import (
+	"bytes"
+	"crypto/sha256"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -96,9 +98,35 @@ func TestManagerAcceptsCustomStore(t *testing.T) {
 	}
 }
 
+func TestNewManagerAcceptsSingleKey(t *testing.T) {
+	manager, err := NewManager(Config{
+		Key: "sample-cookie-01",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := manager.Name(), defaultSessionName; got != want {
+		t.Fatalf("manager name = %q, want %q", got, want)
+	}
+	if _, ok := manager.Store().(*CookieStore); !ok {
+		t.Fatalf("store = %T, want *CookieStore", manager.Store())
+	}
+}
+
+func TestDeriveKeyExpandsShortKeys(t *testing.T) {
+	got := deriveKey("sample-cookie-01")
+	want := sha256.Sum256([]byte("sample-cookie-01"))
+	if !bytes.Equal(got, want[:]) {
+		t.Fatal("derived key does not match SHA-256")
+	}
+	if len(got) != sha256.Size {
+		t.Fatalf("derived key length = %d, want %d", len(got), sha256.Size)
+	}
+}
+
 func TestNewManagerRejectsMissingStore(t *testing.T) {
 	_, err := NewManager(Config{})
-	if err == nil || !strings.Contains(err.Error(), "store or key pairs are required") {
+	if err == nil || !strings.Contains(err.Error(), "store, key, or key pairs are required") {
 		t.Fatalf("error = %v", err)
 	}
 }

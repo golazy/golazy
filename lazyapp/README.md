@@ -6,14 +6,19 @@ It is intentionally small. Application code gives it the pieces that already
 exist in the app:
 
 ```go
-lazyapp.New(lazyapp.Config{
+app := lazyapp.New(lazyapp.Config{
     Name:    "sample_app",
     Drawer:  Draw,
     Public:  app.Public,
     Views:   app.Views,
     Context: Context,
+    Helpers: lazyapp.Helpers{helpers.RegisterHelpers()},
     Assets:  []lazyassets.Source{generatedAssets},
+    Sessions: lazysession.Config{
+        Key: os.Getenv("SECURE_COOKIE_KEY"),
+    },
 })
+log.Fatal(app.ListenAndServe())
 ```
 
 `lazyapp.New`:
@@ -31,5 +36,22 @@ lazyapp.New(lazyapp.Config{
 - Installs the router middleware.
 - Installs asset serving as the public fallback.
 
-The returned `App` implements `http.Handler` and is normally passed directly to
-`http.Server`.
+The returned `App` implements `http.Handler`. `App.ListenAndServe` is the
+default server shortcut; it uses `ADDR`, then `PORT`, then `:3000`.
+
+When sessions are enabled and `Sessions.Name` is empty, the cookie name defaults
+to the application name followed by `_session`. `lazysession.Config.Key` is
+expanded deterministically before the cookie store is created.
+
+For embedded application files, `MustSub` converts an embedded root filesystem
+into the function shape expected by `Config`:
+
+```go
+//go:embed views public
+var files embed.FS
+
+lazyapp.New(lazyapp.Config{
+    Public: lazyapp.MustSub(files, "public"),
+    Views:  lazyapp.MustSub(files, "views"),
+})
+```

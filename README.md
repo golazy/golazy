@@ -78,12 +78,24 @@ func App() *lazyapp.App {
         Views:   app.Views,
         Context: Context,
         Sessions: lazysession.Config{
-            Name: "my_app_session",
-            KeyPairs: [][]byte{
-                []byte(os.Getenv("SECURE_COOKIE_KEY")),
-            },
+            Key: os.Getenv("SECURE_COOKIE_KEY"),
         },
     })
+}
+```
+
+When `Sessions.Name` is omitted, `lazyapp` uses the application name followed
+by `_session`. `lazysession.Config.Key` is deterministically expanded before it
+is passed to the cookie signer, so templates can use a short development key and
+production apps can load a stable value from `SECURE_COOKIE_KEY`.
+
+The command entrypoint can then stay small:
+
+```go
+func main() {
+    if err := appinit.App().ListenAndServe(); err != nil {
+        log.Fatal(err)
+    }
 }
 ```
 

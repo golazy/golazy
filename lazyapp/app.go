@@ -2,9 +2,12 @@ package lazyapp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"net/http"
+	"os"
+	"strconv"
 
 	"golazy.dev/lazyassets"
 	"golazy.dev/lazycontroller"
@@ -13,13 +16,15 @@ import (
 	"golazy.dev/lazysession"
 )
 
+type Helpers []map[string]any
+
 type Config struct {
 	Name         string
 	Drawer       func(*lazyroutes.Scope)
 	Public       func() (fs.FS, error)
 	Views        func() (fs.FS, error)
 	Context      func(context.Context) context.Context
-	Helpers      []map[string]any
+	Helpers      Helpers
 	Assets       []lazyassets.Source
 	AssetOptions []lazyassets.Option
 	Sessions     lazysession.Config
@@ -37,12 +42,26 @@ type App struct {
 
 var afterDraw = func(*lazyroutes.Scope) {}
 
+func MustSub(fsys fs.FS, dir string) func() (fs.FS, error) {
+	sub, err := fs.Sub(fsys, dir)
+	if err != nil {
+		panic(fmt.Errorf("open %s: %w", dir, err))
+	}
+	return func() (fs.FS, error) {
+		return sub, nil
+	}
+}
+
 func New(config Config) *App {
 	ctx := context.Background()
 	var sessions *lazysession.Manager
 	if config.Sessions.Enabled() {
+		sessionConfig := config.Sessions
+		if sessionConfig.Name == "" && config.Name != "" {
+			sessionConfig.Name = config.Name + "_session"
+		}
 		var err error
-		sessions, err = lazysession.NewManager(config.Sessions)
+		sessions, err = lazysession.NewManager(sessionConfig)
 		if err != nil {
 			panic(fmt.Errorf("initialize sessions: %w", err))
 		}
@@ -130,4 +149,32 @@ func New(config Config) *App {
 
 func (app *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	app.Dispatcher.ServeHTTP(w, r)
+}
+
+func (app *App) ListenAndServe() error {
+	server := &http.Server{
+		Addr:    listenAddr(),
+		Handler: app,
+	}
+	if err := server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+		return err
+	}
+	return nil
+}
+
+func listenAddr() string {
+	if addr := os.Getenv("ADDR"); addr != "" {
+		return normalizeListenAddr(addr)
+	}
+	if port := os.Getenv("PORT"); port != "" {
+		return normalizeListenAddr(port)
+	}
+	return ":3000"
+}
+
+func normalizeListenAddr(addr string) string {
+	if _, err := strconv.ParseUint(addr, 10, 16); err == nil {
+		return ":" + addr
+	}
+	return addr
 }

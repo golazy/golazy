@@ -79,10 +79,7 @@ func TestAppInstallsSessionManager(t *testing.T) {
 	app := New(Config{
 		Name: "test",
 		Sessions: lazysession.Config{
-			Name: "app_session",
-			KeyPairs: [][]byte{
-				[]byte("0123456789abcdef0123456789abcdef"),
-			},
+			Key: "sample-cookie-01",
 		},
 		Drawer: func(router *lazyroutes.Scope) {
 			router.HandleFunc(http.MethodGet, "/", func(w http.ResponseWriter, r *http.Request) error {
@@ -110,8 +107,24 @@ func TestAppInstallsSessionManager(t *testing.T) {
 	if len(cookies) != 1 {
 		t.Fatalf("cookies = %d, want 1", len(cookies))
 	}
-	if cookies[0].Name != "app_session" {
-		t.Fatalf("cookie name = %q, want app_session", cookies[0].Name)
+	if cookies[0].Name != "test_session" {
+		t.Fatalf("cookie name = %q, want test_session", cookies[0].Name)
+	}
+}
+
+func TestAppKeepsConfiguredSessionName(t *testing.T) {
+	app := New(Config{
+		Name: "test",
+		Sessions: lazysession.Config{
+			Name: "custom_session",
+			Key:  "sample-cookie-01",
+		},
+	})
+	if app.Sessions == nil {
+		t.Fatal("app Sessions manager is nil")
+	}
+	if got, want := app.Sessions.Name(), "custom_session"; got != want {
+		t.Fatalf("session name = %q, want %q", got, want)
 	}
 }
 
@@ -145,5 +158,61 @@ func TestAppServesStatic500ForUserRouteErrors(t *testing.T) {
 		if got, want := response.Body.String(), "<h1>static 500</h1>"; got != want {
 			t.Fatalf("%s body = %q, want %q", path, got, want)
 		}
+	}
+}
+
+func TestMustSubReturnsSubFS(t *testing.T) {
+	fsys := fstest.MapFS{
+		"public/styles.css": {Data: []byte("body { color: black; }")},
+	}
+	public := MustSub(fsys, "public")
+
+	sub, err := public()
+	if err != nil {
+		t.Fatalf("MustSub func returned error: %v", err)
+	}
+	content, err := fs.ReadFile(sub, "styles.css")
+	if err != nil {
+		t.Fatalf("ReadFile(styles.css) error = %v", err)
+	}
+	if got, want := string(content), "body { color: black; }"; got != want {
+		t.Fatalf("styles.css = %q, want %q", got, want)
+	}
+}
+
+func TestMustSubPanicsForInvalidDir(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("MustSub did not panic")
+		}
+	}()
+
+	MustSub(fstest.MapFS{}, "../public")
+}
+
+func TestListenAddr(t *testing.T) {
+	tests := []struct {
+		name string
+		addr string
+		port string
+		want string
+	}{
+		{name: "unset", want: ":3000"},
+		{name: "port only", port: "9191", want: ":9191"},
+		{name: "port with colon", port: ":9191", want: ":9191"},
+		{name: "addr overrides port", addr: "127.0.0.1:8181", port: "9191", want: "127.0.0.1:8181"},
+		{name: "numeric addr", addr: "8181", want: ":8181"},
+		{name: "all interfaces", addr: ":8181", want: ":8181"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv("ADDR", test.addr)
+			t.Setenv("PORT", test.port)
+
+			if got := listenAddr(); got != test.want {
+				t.Fatalf("listenAddr() = %q, want %q", got, test.want)
+			}
+		})
 	}
 }

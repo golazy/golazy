@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"regexp"
 	"sort"
 	"strings"
 )
@@ -39,6 +40,7 @@ type Options struct {
 	HashLength     int
 	LogicalCache   CachePolicy
 	PermanentCache CachePolicy
+	RewriteCSSURLs bool
 }
 
 type Option func(*Options)
@@ -74,8 +76,20 @@ func WithCachePolicies(logical, permanent CachePolicy) Option {
 	}
 }
 
+func WithCSSURLRewrite(enabled bool) Option {
+	return func(options *Options) {
+		options.RewriteCSSURLs = enabled
+	}
+}
+
 type Source interface {
 	Assets(*Registry) error
+}
+
+type SourceFunc func(*Registry) error
+
+func (fn SourceFunc) Assets(registry *Registry) error {
+	return fn(registry)
 }
 
 type Registry struct {
@@ -98,6 +112,7 @@ type Asset struct {
 	Ignored     bool   `json:"ignored,omitempty"`
 
 	content []byte
+	raw     []byte
 	open    OpenFunc
 }
 
@@ -157,6 +172,7 @@ func New(options ...Option) *Registry {
 		HashLength:     defaultHashLength,
 		LogicalCache:   "public, max-age=0, must-revalidate",
 		PermanentCache: "public, max-age=31536000, immutable",
+		RewriteCSSURLs: true,
 	}
 	for _, option := range options {
 		option(&config)
@@ -286,6 +302,10 @@ func (r *Registry) Manifest() Manifest {
 		manifest.Assets = append(manifest.Assets, asset.snapshot())
 	}
 	return manifest
+}
+
+func (r *Registry) Empty() bool {
+	return r == nil || len(r.assets) == 0
 }
 
 func (r *Registry) Handler(next http.Handler) http.Handler {
@@ -435,6 +455,7 @@ func (r *Registry) addBytes(assetPath string, content []byte, generated bool, op
 		Source:      opts.source,
 		Generated:   generated,
 		content:     content,
+		raw:         append([]byte(nil), content...),
 	}
 	r.register(asset, opts.replace)
 	return nil
@@ -471,6 +492,7 @@ func (r *Registry) register(asset *Asset, replace bool) {
 		r.permanent[asset.Permanent] = asset
 	}
 	r.assets = append(r.assets, asset)
+	r.rewriteCSSURLs()
 }
 
 func (r *Registry) remove(asset *Asset) {
@@ -484,6 +506,83 @@ func (r *Registry) remove(asset *Asset) {
 			return
 		}
 	}
+}
+
+var cssURLPattern = regexp.MustCompile(`url\(\s*(['"]?)([^'")]+)['"]?\s*\)`)
+
+func (r *Registry) rewriteCSSURLs() {
+	if !r.options.RewriteCSSURLs {
+		return
+	}
+	for _, asset := range r.assets {
+		if asset.Ignored || !strings.HasPrefix(asset.ContentType, "text/css") || len(asset.raw) == 0 {
+			continue
+		}
+		rewritten := []byte(r.rewriteCSSContent(asset, string(asset.raw)))
+		if bytes.Equal(rewritten, asset.content) {
+			continue
+		}
+		r.updateAssetContent(asset, rewritten)
+	}
+}
+
+func (r *Registry) rewriteCSSContent(stylesheet *Asset, css string) string {
+	return cssURLPattern.ReplaceAllStringFunc(css, func(match string) string {
+		parts := cssURLPattern.FindStringSubmatch(match)
+		if len(parts) != 3 {
+			return match
+		}
+		quote := parts[1]
+		ref := strings.TrimSpace(parts[2])
+		if skipCSSURL(ref) {
+			return match
+		}
+		refPath, suffix := splitURLSuffix(ref)
+		if refPath == "" {
+			return match
+		}
+		targetPath := refPath
+		if !strings.HasPrefix(refPath, "/") {
+			targetPath = path.Join(path.Dir(stylesheet.Path), refPath)
+		}
+		target, ok := r.findLogical(targetPath)
+		if !ok || target == stylesheet || target.Permanent == "" {
+			return match
+		}
+		return "url(" + quote + target.Permanent + suffix + quote + ")"
+	})
+}
+
+func (r *Registry) updateAssetContent(asset *Asset, content []byte) {
+	if asset.Permanent != "" {
+		delete(r.permanent, asset.Permanent)
+	}
+	digest := newHash(content)
+	asset.content = content
+	asset.Size = int64(len(content))
+	asset.Hash = digest.Hex()
+	asset.ETag = digest.ETag()
+	asset.Integrity = digest.Integrity()
+	asset.Permanent = withHash(asset.Path, digest.Short(r.options.HashLength))
+	r.permanent[asset.Permanent] = asset
+}
+
+func skipCSSURL(ref string) bool {
+	ref = strings.TrimSpace(ref)
+	if ref == "" || strings.HasPrefix(ref, "#") || strings.HasPrefix(ref, "//") {
+		return true
+	}
+	colon := strings.Index(ref, ":")
+	slash := strings.Index(ref, "/")
+	return colon >= 0 && (slash == -1 || colon < slash)
+}
+
+func splitURLSuffix(ref string) (string, string) {
+	index := strings.IndexAny(ref, "?#")
+	if index == -1 {
+		return ref, ""
+	}
+	return ref[:index], ref[index:]
 }
 
 func (r *Registry) serveAsset(w http.ResponseWriter, req *http.Request, asset *Asset, permanent bool) {

@@ -8,10 +8,11 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"golazy.dev/lazyassets"
 	"golazy.dev/lazyroutes"
 )
 
-func TestAppAddsETagToRoutesOnly(t *testing.T) {
+func TestAppAddsDynamicETagToRoutesAndAssetETagToPublicFiles(t *testing.T) {
 	app := New(Config{
 		Name: "test",
 		Drawer: func(router *lazyroutes.Scope) {
@@ -41,7 +42,33 @@ func TestAppAddsETagToRoutesOnly(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("public status = %d, want %d", response.Code, http.StatusOK)
 	}
-	if response.Header().Get("ETag") != "" {
-		t.Fatalf("public ETag = %q, want empty", response.Header().Get("ETag"))
+	if response.Header().Get("ETag") == "" {
+		t.Fatal("public ETag is empty")
+	}
+	if got := response.Header().Get("Cache-Control"); got != "public, max-age=0, must-revalidate" {
+		t.Fatalf("public Cache-Control = %q, want asset logical cache policy", got)
+	}
+}
+
+func TestAppRegistersGeneratedAssetSources(t *testing.T) {
+	app := New(Config{
+		Name: "test",
+		Assets: []lazyassets.Source{
+			lazyassets.SourceFunc(func(registry *lazyassets.Registry) error {
+				return registry.Add("/generated.js", []byte("console.log('generated');"))
+			}),
+		},
+	})
+
+	response := httptest.NewRecorder()
+	app.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/generated.js", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("generated status = %d, want %d", response.Code, http.StatusOK)
+	}
+	if response.Body.String() != "console.log('generated');" {
+		t.Fatalf("generated body = %q, want generated JavaScript", response.Body.String())
+	}
+	if app.Assets == nil || app.Assets.Empty() {
+		t.Fatal("app Assets registry is empty")
 	}
 }

@@ -43,8 +43,9 @@ framework itself is just Go packages.
 
 ```text
 golazy.dev/lazyapp                 Application composition
+golazy.dev/lazyassets              Asset registry, fingerprints, and serving
 golazy.dev/lazycontroller          Request-local controllers and render state
-golazy.dev/lazydispatch            HTTP dispatch, middleware, and public files
+golazy.dev/lazydispatch            HTTP dispatch and middleware
 golazy.dev/lazyroutes              Route DSL, resources, scopes, and route table
 golazy.dev/lazyview                View rendering and helper registry
 golazy.dev/lazyview/gotmpl         html/template engine for lazyview

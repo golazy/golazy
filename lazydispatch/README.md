@@ -55,13 +55,13 @@ func App() *lazyapp.App {
 route-only response buffer and ETag handling
 application middleware
 router middleware
-public static-file middleware
+asset/public fallback middleware
 404 final handler
 ```
 
 Application middleware sees the request before route lookup and public-file
 fallback. Response buffering and dynamic ETags are gated by the route table, so
-public files are not buffered by the app response layer.
+public assets are not buffered by the app response layer.
 
 ## Middleware
 

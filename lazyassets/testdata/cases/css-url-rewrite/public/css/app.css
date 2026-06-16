@@ -1,0 +1,6 @@
+.logo {
+  background: url("../images/logo.txt");
+  mask-image: url('/images/icon.txt#shape');
+  cursor: url(data:image/png;base64,abc), auto;
+  border-image-source: url("https://example.test/remote.png");
+}

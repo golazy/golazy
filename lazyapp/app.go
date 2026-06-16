@@ -6,19 +6,22 @@ import (
 	"io/fs"
 	"net/http"
 
+	"golazy.dev/lazyassets"
 	"golazy.dev/lazycontroller"
 	"golazy.dev/lazydispatch"
 	"golazy.dev/lazyroutes"
 )
 
 type Config struct {
-	Name        string
-	Drawer      func(*lazyroutes.Scope)
-	Public      func() (fs.FS, error)
-	Views       func() (fs.FS, error)
-	Context     func(context.Context) context.Context
-	Helpers     []map[string]any
-	Middlewares []lazydispatch.Middleware
+	Name         string
+	Drawer       func(*lazyroutes.Scope)
+	Public       func() (fs.FS, error)
+	Views        func() (fs.FS, error)
+	Context      func(context.Context) context.Context
+	Helpers      []map[string]any
+	Assets       []lazyassets.Source
+	AssetOptions []lazyassets.Option
+	Middlewares  []lazydispatch.Middleware
 }
 
 type App struct {
@@ -26,6 +29,7 @@ type App struct {
 	Context    context.Context
 	Dispatcher *lazydispatch.Dispatcher
 	Router     *lazyroutes.Scope
+	Assets     *lazyassets.Registry
 }
 
 var afterDraw = func(*lazyroutes.Scope) {}
@@ -48,6 +52,25 @@ func New(config Config) *App {
 		ctx = config.Context(ctx)
 	}
 
+	assets := lazyassets.New(config.AssetOptions...)
+	if config.Public != nil {
+		public, err := config.Public()
+		if err != nil {
+			panic(fmt.Errorf("open embedded public files: %w", err))
+		}
+		if err := assets.AddFS(public); err != nil {
+			panic(fmt.Errorf("register public assets: %w", err))
+		}
+	}
+	for _, source := range config.Assets {
+		if source == nil {
+			panic(fmt.Errorf("register generated assets: asset source is nil"))
+		}
+		if err := source.Assets(assets); err != nil {
+			panic(fmt.Errorf("register generated assets: %w", err))
+		}
+	}
+
 	router := lazyroutes.New(ctx)
 	if config.Drawer != nil {
 		config.Drawer(router)
@@ -55,6 +78,7 @@ func New(config Config) *App {
 	afterDraw(router)
 	if renderer != nil {
 		renderer.AddHelpers(router.RegisterHelpers())
+		renderer.AddHelpers(assets.Helpers())
 		for _, helpers := range config.Helpers {
 			renderer.AddHelpers(helpers)
 		}
@@ -70,12 +94,10 @@ func New(config Config) *App {
 		dispatcher.Use(middleware)
 	}
 	dispatcher.Use(lazydispatch.Router(router))
-	if config.Public != nil {
-		public, err := config.Public()
-		if err != nil {
-			panic(fmt.Errorf("open embedded public files: %w", err))
-		}
-		dispatcher.Use(lazydispatch.Public(public))
+	if !assets.Empty() {
+		dispatcher.Use(lazydispatch.MiddlewareFunc(func(next http.Handler) http.Handler {
+			return assets.Handler(next)
+		}))
 	}
 
 	return &App{
@@ -83,6 +105,7 @@ func New(config Config) *App {
 		Context:    ctx,
 		Dispatcher: dispatcher,
 		Router:     router,
+		Assets:     assets,
 	}
 }
 

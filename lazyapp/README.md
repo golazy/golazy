@@ -25,7 +25,8 @@ lazyapp.New(lazyapp.Config{
 - Installs route-only response buffering and ETag handling.
 - Installs application middleware.
 - Installs the router middleware.
-- Installs public static-file middleware.
+- Registers public and generated assets.
+- Installs asset serving as the public fallback.
 
 The returned `App` implements `http.Handler` and is normally passed directly to
 `http.Server`.

@@ -98,6 +98,46 @@ func TestRegistryHandlesIfNoneMatch(t *testing.T) {
 	}
 }
 
+func TestRegistryRewritesCSSURLsToPermanentAssetPaths(t *testing.T) {
+	registry := New()
+	if err := registry.AddFS(os.DirFS("testdata/cases/css-url-rewrite/public")); err != nil {
+		t.Fatal(err)
+	}
+
+	response := fetchAsset(registry, http.MethodGet, "/css/app.css", nil)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+	body := response.Body.String()
+	if !regexp.MustCompile(`/images/logo-[a-f0-9]{12}\.txt`).MatchString(body) {
+		t.Fatalf("body = %q, want rewritten relative logo URL", body)
+	}
+	if !regexp.MustCompile(`/images/icon-[a-f0-9]{12}\.txt#shape`).MatchString(body) {
+		t.Fatalf("body = %q, want rewritten root icon URL with fragment", body)
+	}
+	if !strings.Contains(body, "data:image/png;base64,abc") {
+		t.Fatalf("body = %q, want data URL preserved", body)
+	}
+	if !strings.Contains(body, "https://example.test/remote.png") {
+		t.Fatalf("body = %q, want remote URL preserved", body)
+	}
+}
+
+func TestRegistryCanDisableCSSURLRewrite(t *testing.T) {
+	registry := New(WithCSSURLRewrite(false))
+	if err := registry.AddFS(os.DirFS("testdata/cases/css-url-rewrite/public")); err != nil {
+		t.Fatal(err)
+	}
+
+	response := fetchAsset(registry, http.MethodGet, "/css/app.css", nil)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+	if !strings.Contains(response.Body.String(), `url("../images/logo.txt")`) {
+		t.Fatalf("body = %q, want original CSS URL", response.Body.String())
+	}
+}
+
 func TestRegistrySupportsGeneratedAssets(t *testing.T) {
 	registry := New()
 	if err := registry.Add("/generated/app.js", []byte("console.log('generated');"), ContentType("text/javascript")); err != nil {

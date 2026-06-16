@@ -116,6 +116,9 @@ func New(config Config) *App {
 		for _, helpers := range config.Helpers {
 			renderer.AddHelpers(helpers)
 		}
+		if err := renderer.Cache(); err != nil {
+			panic(fmt.Errorf("cache views: %w", err))
+		}
 	}
 
 	dispatcher := lazydispatch.NewDispatcher()

@@ -71,6 +71,9 @@ func newBenchmarkScope(b *testing.B) *Scope {
 	if err != nil {
 		b.Fatal(err)
 	}
+	if err := renderer.Cache(); err != nil {
+		b.Fatal(err)
+	}
 	return New(lazycontroller.WithRenderer(context.Background(), renderer))
 }
 

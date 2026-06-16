@@ -3,6 +3,7 @@ package lazyview
 import (
 	"fmt"
 	"io"
+	"io/fs"
 	"strings"
 	"sync"
 )
@@ -10,6 +11,23 @@ import (
 // Engine renders one view file using a concrete template implementation.
 type Engine interface {
 	Render(ctx *Context, writer io.Writer, file string) error
+}
+
+// CacheContext is passed to engines that can precompile templates.
+type CacheContext struct {
+	FS        fs.FS
+	Extension string
+	Helpers   map[string]any
+}
+
+// CacheableEngine can build or rebuild a template cache after app setup.
+type CacheableEngine interface {
+	Cache(ctx CacheContext) error
+}
+
+// CacheClearer can discard cached templates when view configuration changes.
+type CacheClearer interface {
+	ClearCache()
 }
 
 // EngineFactory creates a fresh engine instance for one Views value.

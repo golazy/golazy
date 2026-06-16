@@ -25,6 +25,7 @@ func (v *Views) AddHelpers(helpers map[string]any) {
 		}
 		v.Helpers[name] = helper
 	}
+	v.clearCache()
 }
 
 // Helper adds one helper to the view set.
@@ -132,4 +133,15 @@ func helperResults(results []reflect.Value) (any, error) {
 	default:
 		return nil, fmt.Errorf("lazyview: helper returned too many values")
 	}
+}
+
+func copyHelpers(source map[string]any) map[string]any {
+	if len(source) == 0 {
+		return map[string]any{}
+	}
+	out := make(map[string]any, len(source))
+	for name, helper := range source {
+		out[name] = helper
+	}
+	return out
 }

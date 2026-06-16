@@ -55,6 +55,40 @@ func New(files fs.FS) (*Views, error) {
 	return views, nil
 }
 
+// Cache builds or rebuilds template caches for engines that support caching.
+//
+// Applications should register helpers before calling Cache. If helpers are
+// changed later, AddHelpers clears existing caches and Cache should be called
+// again before serving requests.
+func (v *Views) Cache() error {
+	if v == nil {
+		return fmt.Errorf("lazyview: views is nil")
+	}
+	helpers := copyHelpers(v.Helpers)
+	for extension, engine := range v.Engines {
+		cacheable, ok := engine.(CacheableEngine)
+		if !ok {
+			continue
+		}
+		if err := cacheable.Cache(CacheContext{
+			FS:        v.FS,
+			Extension: extension,
+			Helpers:   helpers,
+		}); err != nil {
+			return fmt.Errorf("lazyview: cache %s templates: %w", extension, err)
+		}
+	}
+	return nil
+}
+
+func (v *Views) clearCache() {
+	for _, engine := range v.Engines {
+		if clearer, ok := engine.(CacheClearer); ok {
+			clearer.ClearCache()
+		}
+	}
+}
+
 // Render renders a view and optionally wraps it with a layout.
 func (v *Views) Render(options Options) error {
 	if v == nil {

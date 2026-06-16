@@ -30,6 +30,7 @@ log.Fatal(app.ListenAndServe())
 - Creates the root `lazyroutes.Scope`.
 - Calls the route drawer.
 - Registers router helpers, asset helpers, and application helpers.
+- Caches views after helpers are registered.
 - Creates a `lazydispatch.Dispatcher`.
 - Installs route-only response buffering and ETag handling.
 - Installs application middleware.

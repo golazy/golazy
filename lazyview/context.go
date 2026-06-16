@@ -49,3 +49,12 @@ func (c *Context) HelperFuncs() map[string]any {
 	}
 	return helpers
 }
+
+// Helper returns one helper bound to the current render context.
+func (c *Context) Helper(name string) (any, bool) {
+	helper, ok := c.helpers[name]
+	if !ok {
+		return nil, false
+	}
+	return bindHelper(c, helper), true
+}

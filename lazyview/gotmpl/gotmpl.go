@@ -6,7 +6,10 @@ import (
 	"html/template"
 	"io"
 	"io/fs"
+	"path"
 	"reflect"
+	"strings"
+	"sync"
 
 	"golazy.dev/lazyview"
 )
@@ -18,21 +21,184 @@ func init() {
 }
 
 // Engine renders .tpl files with html/template.
-type Engine struct{}
+type Engine struct {
+	mu        sync.RWMutex
+	templates map[string]*cachedTemplate
+}
 
-// Render renders one template file.
-func (e *Engine) Render(ctx *lazyview.Context, writer io.Writer, file string) error {
-	data, err := fs.ReadFile(ctx.Views.FS, file)
+// Cache parses all templates for this engine's extension and replaces the cache.
+func (e *Engine) Cache(ctx lazyview.CacheContext) error {
+	templates := map[string]*cachedTemplate{}
+	extension := "." + strings.TrimPrefix(ctx.Extension, ".")
+	helpers := copyHelpers(ctx.Helpers)
+
+	err := fs.WalkDir(ctx.FS, ".", func(file string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() || path.Ext(file) != extension {
+			return nil
+		}
+
+		data, err := fs.ReadFile(ctx.FS, file)
+		if err != nil {
+			return err
+		}
+		tpl, err := newCachedTemplate(file, string(data), helpers)
+		if err != nil {
+			return err
+		}
+		templates[file] = tpl
+		return nil
+	})
 	if err != nil {
 		return err
 	}
-	tpl, err := template.New(file).
-		Funcs(templateHelpers(ctx.HelperFuncs())).
-		Parse(string(data))
+
+	e.mu.Lock()
+	e.templates = templates
+	e.mu.Unlock()
+	return nil
+}
+
+// ClearCache discards parsed templates.
+func (e *Engine) ClearCache() {
+	e.mu.Lock()
+	e.templates = nil
+	e.mu.Unlock()
+}
+
+// Render renders one template file.
+func (e *Engine) Render(ctx *lazyview.Context, writer io.Writer, file string) error {
+	if tpl, ok := e.cachedTemplate(file); ok {
+		return tpl.Execute(ctx, writer)
+	}
+	tpl, err := parseTemplate(ctx.Views.FS, file, templateHelpers(ctx.HelperFuncs()))
 	if err != nil {
 		return err
 	}
 	return tpl.Execute(writer, templateVariables(ctx.Variables))
+}
+
+func (e *Engine) cachedTemplate(file string) (*cachedTemplate, bool) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	if len(e.templates) == 0 {
+		return nil, false
+	}
+	tpl, ok := e.templates[file]
+	return tpl, ok
+}
+
+type cachedTemplate struct {
+	file    string
+	source  string
+	helpers map[string]any
+	pool    sync.Pool
+}
+
+type templateExecutor struct {
+	ctx *lazyview.Context
+	tpl *template.Template
+}
+
+func newCachedTemplate(file string, source string, helpers map[string]any) (*cachedTemplate, error) {
+	cached := &cachedTemplate{
+		file:    file,
+		source:  source,
+		helpers: helpers,
+	}
+	executor, err := cached.newExecutor()
+	if err != nil {
+		return nil, err
+	}
+	cached.pool.Put(executor)
+	return cached, nil
+}
+
+func (c *cachedTemplate) Execute(ctx *lazyview.Context, writer io.Writer) error {
+	executor, err := c.executor()
+	if err != nil {
+		return err
+	}
+	executor.ctx = ctx
+	err = executor.tpl.Execute(writer, templateVariables(ctx.Variables))
+	executor.ctx = nil
+	c.pool.Put(executor)
+	return err
+}
+
+func (c *cachedTemplate) executor() (*templateExecutor, error) {
+	value := c.pool.Get()
+	if value == nil {
+		return c.newExecutor()
+	}
+	return value.(*templateExecutor), nil
+}
+
+func (c *cachedTemplate) newExecutor() (*templateExecutor, error) {
+	executor := &templateExecutor{}
+	tpl, err := template.New(c.file).
+		Funcs(executor.templateHelpers(c.helpers)).
+		Parse(c.source)
+	if err != nil {
+		return nil, err
+	}
+	executor.tpl = tpl
+	return executor, nil
+}
+
+func (e *templateExecutor) templateHelpers(helpers map[string]any) template.FuncMap {
+	funcs := template.FuncMap{}
+	for name, helper := range helpers {
+		value := reflect.ValueOf(helper)
+		if !value.IsValid() || value.Kind() != reflect.Func {
+			continue
+		}
+		helperName := name
+		funcs[helperName] = func(args ...any) (any, error) {
+			return e.callHelper(helperName, args)
+		}
+	}
+	return funcs
+}
+
+func (e *templateExecutor) callHelper(name string, args []any) (any, error) {
+	if e.ctx == nil {
+		return nil, fmt.Errorf("gotmpl: helper %q called outside render", name)
+	}
+	helper, ok := e.ctx.Helper(name)
+	if !ok {
+		return nil, fmt.Errorf("gotmpl: helper %q is missing", name)
+	}
+	value := reflect.ValueOf(helper)
+	if !value.IsValid() || value.Kind() != reflect.Func {
+		return nil, fmt.Errorf("gotmpl: helper %q is not a function", name)
+	}
+	result, err := templateHelper(value)(args...)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func parseTemplate(files fs.FS, file string, helpers template.FuncMap) (*template.Template, error) {
+	data, err := fs.ReadFile(files, file)
+	if err != nil {
+		return nil, err
+	}
+	return template.New(file).Funcs(helpers).Parse(string(data))
+}
+
+func copyHelpers(helpers map[string]any) map[string]any {
+	if len(helpers) == 0 {
+		return map[string]any{}
+	}
+	out := make(map[string]any, len(helpers))
+	for name, helper := range helpers {
+		out[name] = helper
+	}
+	return out
 }
 
 func templateHelpers(helpers map[string]any) template.FuncMap {

@@ -26,6 +26,9 @@ func TestRenderUsesHelpersAndPartials(t *testing.T) {
 			return ctx.Route.Name
 		},
 	})
+	if err := views.Cache(); err != nil {
+		t.Fatal(err)
+	}
 
 	var out strings.Builder
 	err = views.Render(lazyview.Options{
@@ -41,6 +44,23 @@ func TestRenderUsesHelpersAndPartials(t *testing.T) {
 	}
 
 	if got, want := out.String(), `<main><p>Ada</p> hello Ada posts</main>`; got != want {
+		t.Fatalf("rendered body = %q, want %q", got, want)
+	}
+
+	out.Reset()
+	err = views.Render(lazyview.Options{
+		Writer:     &out,
+		Variables:  map[string]any{"name": "Ada"},
+		Route:      lazyview.Route{Name: "articles", Controller: "posts"},
+		Controller: "posts",
+		Action:     "index",
+		UseLayout:  true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got, want := out.String(), `<main><p>Ada</p> hello Ada articles</main>`; got != want {
 		t.Fatalf("rendered body = %q, want %q", got, want)
 	}
 }

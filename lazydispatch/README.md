@@ -4,8 +4,8 @@
 
 Most applications should not create a dispatcher directly. Configure dispatch
 through `lazyapp.Config`, and let `lazyapp.New` create the dispatcher, install the
-router middleware, install the public-file middleware, and return one
-application `http.Handler`.
+route-scoped response middleware, install the router middleware, install the
+asset fallback, and return one application `http.Handler`.
 
 ## Current Responsibilities
 
@@ -14,9 +14,11 @@ application `http.Handler`.
 - `Dispatcher`, the middleware runner and `http.Handler`.
 - The `Middleware` interface.
 - `MiddlewareFunc`, an adapter for ordinary functions.
+- `RouteOnly`, a route-table gate for middleware.
 - Router middleware.
-- Public static-file middleware.
-- `405 Method Not Allowed` for existing static files.
+- Response buffering for registered application routes.
+- Dynamic `ETag` handling for eligible route responses.
+- Low-level public static-file middleware for custom assemblies.
 - Final `404 Not Found` behavior.
 
 `lazydispatch` does not own:
@@ -27,8 +29,7 @@ application `http.Handler`.
 - Template rendering.
 - Application service initialization.
 
-Those stay in `lazyroutes`, `lazycontroller`, and the application until a later
-refactor moves more request behavior into dispatch.
+Those stay in `lazyroutes`, `lazycontroller`, `lazyassets`, and the application.
 
 ## Use With lazyapp
 
@@ -59,9 +60,9 @@ asset/public fallback middleware
 404 final handler
 ```
 
-Application middleware sees the request before route lookup and public-file
-fallback. Response buffering and dynamic ETags are gated by the route table, so
-public assets are not buffered by the app response layer.
+Application middleware sees the request before route lookup and asset fallback.
+Response buffering and dynamic ETags are gated by the route table, so public
+assets are not buffered by the app response layer.
 
 ## Middleware
 
@@ -120,7 +121,7 @@ dispatcher.Use(lazydispatch.RouteOnly(
 ```
 
 This is how `lazyapp` applies response buffering and ETag handling without
-buffering public static files.
+buffering public assets.
 
 ## ETag Responses
 
@@ -141,40 +142,42 @@ The 304 response keeps validator-related headers such as `ETag`,
 `Cache-Control`, `Expires`, `Last-Modified`, and `Vary`, and drops body headers
 such as `Content-Type`.
 
-## Static Files
+## Asset Fallback
 
-`lazyapp.New` installs static-file middleware when `lazyapp.Config.Public` is set:
+`lazyapp.New` registers public files with `lazyassets` when
+`lazyapp.Config.Public` is set:
 
 ```go
 Public: app.Public,
 ```
 
-The static middleware checks whether the requested file exists before handing
-the request to `http.FileServerFS`.
+The asset registry serves those files after route lookup with content type,
+`ETag`, cache policy, and permanent hashed URLs.
 
-For missing files, it calls the next handler. For existing files with
-unsupported methods, it returns:
+For missing files, it calls the next handler. For existing assets with
+unsupported methods, the asset fallback returns:
 
 ```text
 405 Method Not Allowed
-Allow: GET
+Allow: GET, HEAD
 ```
+
+The lower-level `Public` middleware remains available for tests or custom
+assemblies that intentionally want `http.FileServerFS` behavior without asset
+hashing, helpers, generated assets, or cache metadata.
 
 ## Planned Request Logic
 
 The dispatcher is the target package for request-wide behavior that should
 surround controller actions:
 
-- `Last-Modified` conditional responses.
 - Request monitoring and tracing.
 - Cookie lifecycle.
 - Session lifecycle.
 - Flash lifecycle.
 - `HEAD` response adaptation.
+- `Last-Modified` conditional responses.
 - Action error response conversion.
-
-Response buffering should land before features that depend on final response
-state, such as conditional responses and robust template failure handling.
 
 ## How to use without lazyapp
 
@@ -193,16 +196,32 @@ Register middleware manually:
 dispatcher.Use(middleware)
 ```
 
+Install route-only response middleware manually:
+
+```go
+dispatcher.Use(lazydispatch.RouteOnly(
+    router,
+    lazydispatch.ResponseBuffer(),
+    lazydispatch.ETag(),
+))
+```
+
 Install a router manually:
 
 ```go
 dispatcher.Use(lazydispatch.Router(router))
 ```
 
-Install public files manually:
+Install asset fallback manually:
 
 ```go
-dispatcher.Use(lazydispatch.Public(publicFS))
+assets := lazyassets.New()
+if err := assets.AddFS(publicFS); err != nil {
+    return err
+}
+dispatcher.Use(lazydispatch.MiddlewareFunc(func(next http.Handler) http.Handler {
+    return assets.Handler(next)
+}))
 ```
 
 Use the dispatcher as a handler:

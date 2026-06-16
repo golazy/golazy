@@ -5,7 +5,7 @@
 GoLazy is a convention-first web framework for Go. It keeps application code
 close to normal Go while providing the framework pieces that make server-rendered
 web applications pleasant to build: application assembly, routing, request-local
-controllers, rendering, helpers, and static file dispatch.
+controllers, rendering, helpers, and asset serving.
 
 The canonical module path is:
 
@@ -98,15 +98,20 @@ func New(ctx context.Context) (*PostsController, error) {
 
 func (c *PostsController) Index(_ http.ResponseWriter, _ *http.Request) error {
     c.Set("title", "Posts")
-    return c.Render("index")
+    return nil
 }
 ```
 
-Templates can use framework helpers registered by the app and router:
+Actions that return without writing a response render the matching
+controller/action view automatically.
+
+Templates can use framework helpers registered by the app, router, and asset
+registry:
 
 ```html
 <a href="{{path_for "posts"}}">Posts</a>
 <a href="{{path_for "post" .Post.Param}}">{{.Post.Title}}</a>
+<link rel="stylesheet" href="{{asset_path "/styles.css"}}">
 ```
 
 ## Routing
@@ -158,8 +163,10 @@ go build ./cmd/app
 ```
 
 Production builds embed views and public files, so the resulting binary is
-self-contained. Development helpers such as `lazy` may use build tags like
-`lazydev` to read views from disk while editing.
+self-contained. Public files are registered as assets with content-hashed
+permanent URLs, ETags, integrity values, and cache headers. Development helpers
+such as `lazy` may use build tags like `lazydev` to read views from disk while
+editing.
 
 ## Documentation
 

@@ -7,6 +7,30 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-06-16
+
+### Added
+
+- Automatic controller view rendering when an action returns without writing a
+  response or calling `Render` explicitly.
+- Route-scoped dynamic `ETag` responses for eligible `GET` and `HEAD`
+  application routes, including `If-None-Match` handling.
+- `golazy.dev/lazyassets` for registering filesystem and generated assets,
+  content hashing, permanent asset URLs, ETags, integrity values, cache
+  policies, and asset unpacking.
+- Asset view helpers: `asset_path`, `asset_integrity`, and compatibility
+  `permalink`.
+- CSS `url(...)` rewriting so stylesheet references can point at permanent
+  asset URLs.
+
+### Changed
+
+- `lazyapp` now serves configured public files through `lazyassets` after route
+  lookup instead of the raw static-file middleware.
+- Response buffering and dynamic route ETags are applied only to registered
+  application routes; public assets keep their own asset-specific validator and
+  cache policy.
+
 ## [0.1.4] - 2026-06-15
 
 ### Added
@@ -84,7 +108,8 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Route construction with embedded public-file fallback.
 - Method-not-allowed handling for application routes.
 
-[Unreleased]: https://github.com/golazy/golazy/compare/v0.1.4...HEAD
+[Unreleased]: https://github.com/golazy/golazy/compare/v0.1.5...HEAD
+[0.1.5]: https://github.com/golazy/golazy/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/golazy/golazy/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/golazy/golazy/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/golazy/golazy/compare/v0.1.1...v0.1.2

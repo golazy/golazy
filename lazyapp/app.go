@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 
 	"golazy.dev/lazyassets"
 	"golazy.dev/lazycontroller"
@@ -59,7 +60,7 @@ func New(config Config) *App {
 	if config.Sessions.Enabled() {
 		sessionConfig := config.Sessions
 		if sessionConfig.Name == "" && config.Name != "" {
-			sessionConfig.Name = config.Name + "_session"
+			sessionConfig.Name = derivedSessionName(config.Name)
 		}
 		var err error
 		sessions, err = lazysession.NewManager(sessionConfig)
@@ -189,4 +190,35 @@ func normalizeListenAddr(addr string) string {
 		return ":" + addr
 	}
 	return addr
+}
+
+func derivedSessionName(appName string) string {
+	var builder strings.Builder
+	lastUnderscore := false
+	for _, r := range appName {
+		if isSessionNameRune(r) {
+			builder.WriteRune(r)
+			lastUnderscore = false
+			continue
+		}
+		if !lastUnderscore {
+			builder.WriteByte('_')
+			lastUnderscore = true
+		}
+	}
+
+	name := strings.Trim(builder.String(), "_")
+	if name == "" {
+		return ""
+	}
+	return name + "_session"
+}
+
+func isSessionNameRune(r rune) bool {
+	return r == '.' ||
+		r == '-' ||
+		r == '_' ||
+		('0' <= r && r <= '9') ||
+		('A' <= r && r <= 'Z') ||
+		('a' <= r && r <= 'z')
 }

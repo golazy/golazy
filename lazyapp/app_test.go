@@ -128,6 +128,21 @@ func TestAppKeepsConfiguredSessionName(t *testing.T) {
 	}
 }
 
+func TestAppDerivesValidSessionNameFromModulePath(t *testing.T) {
+	app := New(Config{
+		Name: "example.com/release-smoke",
+		Sessions: lazysession.Config{
+			Key: "sample-cookie-01",
+		},
+	})
+	if app.Sessions == nil {
+		t.Fatal("app Sessions manager is nil")
+	}
+	if got, want := app.Sessions.Name(), "example.com_release-smoke_session"; got != want {
+		t.Fatalf("session name = %q, want %q", got, want)
+	}
+}
+
 func TestAppServesStatic500ForUserRouteErrors(t *testing.T) {
 	app := New(Config{
 		Name: "test",

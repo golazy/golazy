@@ -7,6 +7,41 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-06-17
+
+### Added
+
+- `golazy.dev/lazycookie` with signed and encrypted secure-cookie support.
+- `golazy.dev/lazysession` with cookie-backed session middleware and
+  `lazyapp.Config.Sessions` integration.
+- `lazyapp.App.ListenAndServe`, using `ADDR`, then `PORT`, then `:3000`.
+- `lazyapp.MustSub` for wiring embedded `views` and `public` directories.
+- Controller request lifecycle hooks for binding request state and running
+  request-time setup through `BeforeAction`.
+- `lazyview.Views.Cache` and template-engine cache hooks for precompiling
+  templates after application helpers are registered.
+- Controller action benchmarks covering direct writes and automatic rendering.
+
+### Changed
+
+- Controller constructors now run when routes are drawn. GoLazy keeps a
+  prototype and uses pooled request instances, rebinding writer, request,
+  route, and render state for each request.
+- `lazyapp.ListenAndServe` installs `app.Context` as the server base context so
+  request contexts inherit application dependencies.
+- The `gotmpl` engine caches parsed templates and uses pooled executors so
+  request-bound helpers still receive the current render context.
+- `lazyapp.Helpers` makes helper registration less map-shaped in application
+  configuration.
+
+### Fixed
+
+- Controller and route errors now route through framework error handling with
+  support for static status pages and dynamic error templates.
+- Automatic rendering is skipped when an action already called `Render`.
+- Default session names derived from module-path application names are
+  normalized into valid cookie names.
+
 ## [0.1.5] - 2026-06-16
 
 ### Added
@@ -108,7 +143,8 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Route construction with embedded public-file fallback.
 - Method-not-allowed handling for application routes.
 
-[Unreleased]: https://github.com/golazy/golazy/compare/v0.1.5...HEAD
+[Unreleased]: https://github.com/golazy/golazy/compare/v0.1.6...HEAD
+[0.1.6]: https://github.com/golazy/golazy/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/golazy/golazy/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/golazy/golazy/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/golazy/golazy/compare/v0.1.2...v0.1.3

@@ -18,3 +18,23 @@ func Router(router RouteHandler) Middleware {
 		})
 	})
 }
+
+// RouteOnly applies middlewares only to requests handled by router.
+func RouteOnly(router RouteHandler, middlewares ...Middleware) Middleware {
+	return MiddlewareFunc(func(next http.Handler) http.Handler {
+		if next == nil {
+			next = http.NotFoundHandler()
+		}
+		routed := next
+		for i := len(middlewares) - 1; i >= 0; i-- {
+			routed = middlewares[i].Handler(routed)
+		}
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if router != nil && router.HandlesPath(r.URL.Path) {
+				routed.ServeHTTP(w, r)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	})
+}

@@ -52,6 +52,7 @@ func App() *lazyapp.App {
 `lazyapp.New` builds this default chain:
 
 ```text
+route-only response buffer and ETag handling
 application middleware
 router middleware
 public static-file middleware
@@ -59,7 +60,8 @@ public static-file middleware
 ```
 
 Application middleware sees the request before route lookup and public-file
-fallback.
+fallback. Response buffering and dynamic ETags are gated by the route table, so
+public files are not buffered by the app response layer.
 
 ## Middleware
 
@@ -107,6 +109,38 @@ The middleware calls `HandlesPath` first. If the router owns the path, the
 router handles the request. If it does not, dispatch continues to the next
 middleware.
 
+Use `RouteOnly` to apply middleware only to routed application requests:
+
+```go
+dispatcher.Use(lazydispatch.RouteOnly(
+    router,
+    lazydispatch.ResponseBuffer(),
+    lazydispatch.ETag(),
+))
+```
+
+This is how `lazyapp` applies response buffering and ETag handling without
+buffering public static files.
+
+## ETag Responses
+
+`ETag` uses buffered response state to add a SHA-256 validator to eligible
+dynamic responses.
+
+It applies to `GET` and `HEAD` `200 OK` responses. It skips responses with
+`Cache-Control: no-store`, `Content-Encoding`, or `Set-Cookie`, and it honors an
+existing `ETag` header instead of replacing it.
+
+When `If-None-Match` matches, it resets the buffered response to:
+
+```text
+304 Not Modified
+```
+
+The 304 response keeps validator-related headers such as `ETag`,
+`Cache-Control`, `Expires`, `Last-Modified`, and `Vary`, and drops body headers
+such as `Content-Type`.
+
 ## Static Files
 
 `lazyapp.New` installs static-file middleware when `lazyapp.Config.Public` is set:
@@ -131,8 +165,7 @@ Allow: GET
 The dispatcher is the target package for request-wide behavior that should
 surround controller actions:
 
-- Response buffering.
-- `ETag` and `Last-Modified` conditional responses.
+- `Last-Modified` conditional responses.
 - Request monitoring and tracing.
 - Cookie lifecycle.
 - Session lifecycle.

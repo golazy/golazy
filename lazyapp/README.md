@@ -22,6 +22,7 @@ lazyapp.New(lazyapp.Config{
 - Creates the root `lazyroutes.Scope`.
 - Calls the route drawer.
 - Creates a `lazydispatch.Dispatcher`.
+- Installs route-only response buffering and ETag handling.
 - Installs application middleware.
 - Installs the router middleware.
 - Installs public static-file middleware.

@@ -61,7 +61,11 @@ func New(config Config) *App {
 	}
 
 	dispatcher := lazydispatch.NewDispatcher()
-	dispatcher.Use(lazydispatch.ResponseBuffer())
+	dispatcher.Use(lazydispatch.RouteOnly(
+		router,
+		lazydispatch.ResponseBuffer(),
+		lazydispatch.ETag(),
+	))
 	for _, middleware := range config.Middlewares {
 		dispatcher.Use(middleware)
 	}

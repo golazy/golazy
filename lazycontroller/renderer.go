@@ -16,9 +16,6 @@ import (
 type Renderer = lazyview.Views
 
 type rendererContextKey struct{}
-type writerContextKey struct{}
-type requestContextKey struct{}
-type routeContextKey struct{}
 
 func NewRenderer(views fs.FS) (*Renderer, error) {
 	return lazyview.New(views)
@@ -28,24 +25,14 @@ func WithRenderer(ctx context.Context, renderer *Renderer) context.Context {
 	return context.WithValue(ctx, rendererContextKey{}, renderer)
 }
 
-func WithWriter(ctx context.Context, writer http.ResponseWriter) context.Context {
-	return context.WithValue(ctx, writerContextKey{}, writer)
-}
-
-func WithRequest(ctx context.Context, request *http.Request) context.Context {
-	return context.WithValue(ctx, requestContextKey{}, request)
-}
-
-func WithRoute(ctx context.Context, route lazyview.Route) context.Context {
-	return context.WithValue(ctx, routeContextKey{}, route)
-}
-
 type Base struct {
+	appCtx     context.Context
 	ctx        context.Context
 	request    *http.Request
 	writer     http.ResponseWriter
 	renderer   *Renderer
 	route      lazyview.Route
+	viewPath   string
 	controller string
 	layout     string
 	data       map[string]any
@@ -57,32 +44,84 @@ func NewBase(ctx context.Context, viewPath ...string) (Base, error) {
 	if !ok {
 		return Base{}, fmt.Errorf("renderer is missing from application context")
 	}
-	writer, ok := ctx.Value(writerContextKey{}).(http.ResponseWriter)
-	if !ok {
-		return Base{}, fmt.Errorf("response writer is missing from controller context")
-	}
-	request, _ := ctx.Value(requestContextKey{}).(*http.Request)
-	route, _ := ctx.Value(routeContextKey{}).(lazyview.Route)
-
-	controller := route.Controller
+	controller := ""
 	if len(viewPath) > 0 && strings.TrimSpace(viewPath[0]) != "" {
-		controller = viewPath[0]
-	}
-	if controller == "" {
-		return Base{}, fmt.Errorf("controller route metadata is missing from controller context")
+		controller = strings.TrimSpace(viewPath[0])
 	}
 
 	return Base{
+		appCtx:     ctx,
 		ctx:        ctx,
-		request:    request,
-		writer:     writer,
 		renderer:   renderer,
-		route:      route,
+		viewPath:   controller,
 		controller: controller,
 		layout:     "app",
-		data:       make(map[string]any),
-		helpers:    make(map[string]any),
 	}, nil
+}
+
+func (b *Base) BindRequest(w http.ResponseWriter, r *http.Request, route lazyview.Route) error {
+	if w == nil {
+		return fmt.Errorf("response writer is missing from controller request")
+	}
+	if r == nil {
+		return fmt.Errorf("request is missing from controller request")
+	}
+	if b.renderer == nil {
+		return fmt.Errorf("controller renderer is not initialized")
+	}
+
+	controller := b.viewPath
+	if controller == "" {
+		controller = route.Controller
+	}
+	if controller == "" {
+		return fmt.Errorf("controller route metadata is missing from controller request")
+	}
+
+	requestContext := withAppContext(r.Context(), b.appCtx)
+	b.ctx = requestContext
+	b.request = r.WithContext(requestContext)
+	b.writer = w
+	b.route = route
+	b.controller = controller
+	if b.layout == "" {
+		b.layout = "app"
+	}
+	b.data = make(map[string]any)
+	b.helpers = make(map[string]any)
+	return nil
+}
+
+func (b *Base) ResetRequest() {
+	b.ctx = b.appCtx
+	b.request = nil
+	b.writer = nil
+	b.route = lazyview.Route{}
+	b.controller = b.viewPath
+	b.data = nil
+	b.helpers = nil
+}
+
+type appContext struct {
+	context.Context
+	app context.Context
+}
+
+func withAppContext(ctx context.Context, app context.Context) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if app == nil {
+		return ctx
+	}
+	return appContext{Context: ctx, app: app}
+}
+
+func (c appContext) Value(key any) any {
+	if value := c.Context.Value(key); value != nil {
+		return value
+	}
+	return c.app.Value(key)
 }
 
 func (b *Base) Set(name string, value any) {

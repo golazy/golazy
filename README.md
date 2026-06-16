@@ -108,7 +108,9 @@ func Draw(router *lazyroutes.Scope) {
 }
 ```
 
-Controllers are constructed once per request:
+Controllers are constructed when routes are drawn. GoLazy keeps a prototype and
+uses pooled request instances, binding the current `*http.Request` before the
+action runs:
 
 ```go
 func New(ctx context.Context) (*PostsController, error) {
@@ -124,6 +126,9 @@ func (c *PostsController) Index(_ http.ResponseWriter, _ *http.Request) error {
     return nil
 }
 ```
+
+If a controller needs request-time setup, implement `BeforeAction` on the
+controller or an embedded app base controller.
 
 Actions that return without writing a response render the matching
 controller/action view automatically.

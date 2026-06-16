@@ -24,10 +24,12 @@ func TestRenderEscapesDataAndComposesLayout(t *testing.T) {
 	}
 	response := httptest.NewRecorder()
 	ctx := WithRenderer(context.Background(), renderer)
-	ctx = WithWriter(ctx, response)
-	ctx = WithRoute(ctx, lazyview.Route{Controller: "posts"})
 	base, err := NewBase(ctx)
 	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodGet, "/posts", nil)
+	if err := base.BindRequest(response, request, lazyview.Route{Controller: "posts"}); err != nil {
 		t.Fatal(err)
 	}
 	base.Set("value", `<script>unsafe()</script>`)
@@ -50,10 +52,15 @@ func TestRenderMissingView(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := WithRenderer(context.Background(), renderer)
-	ctx = WithWriter(ctx, httptest.NewRecorder())
-	ctx = WithRoute(ctx, lazyview.Route{Controller: "posts"})
 	base, err := NewBase(ctx)
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := base.BindRequest(
+		httptest.NewRecorder(),
+		httptest.NewRequest(http.MethodGet, "/posts", nil),
+		lazyview.Route{Controller: "posts"},
+	); err != nil {
 		t.Fatal(err)
 	}
 	if err := base.Render("missing"); err == nil {
@@ -71,15 +78,18 @@ func TestBaseExposesRequest(t *testing.T) {
 	}
 	request := httptest.NewRequest(http.MethodGet, "/posts", nil)
 	ctx := WithRenderer(context.Background(), renderer)
-	ctx = WithWriter(ctx, httptest.NewRecorder())
-	ctx = WithRequest(ctx, request)
-	ctx = WithRoute(ctx, lazyview.Route{Controller: "posts"})
 	base, err := NewBase(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if base.Request() != request {
-		t.Fatal("base Request did not return controller request")
+	if err := base.BindRequest(httptest.NewRecorder(), request, lazyview.Route{Controller: "posts"}); err != nil {
+		t.Fatal(err)
+	}
+	if base.Request() == nil {
+		t.Fatal("base Request returned nil")
+	}
+	if base.Request().Method != request.Method || base.Request().URL.Path != request.URL.Path {
+		t.Fatalf("base Request = %s %s, want %s %s", base.Request().Method, base.Request().URL.Path, request.Method, request.URL.Path)
 	}
 }
 
@@ -92,13 +102,15 @@ func TestReturnFileWritesPublicFileWithStatus(t *testing.T) {
 	}
 	response := httptest.NewRecorder()
 	ctx := WithRenderer(context.Background(), renderer)
-	ctx = WithWriter(ctx, response)
-	ctx = WithRoute(ctx, lazyview.Route{Controller: "posts"})
 	ctx = WithErrorPages(ctx, fstest.MapFS{
 		"404.html": {Data: []byte("<h1>missing</h1>")},
 	})
 	base, err := NewBase(ctx)
 	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodGet, "/posts/missing", nil)
+	if err := base.BindRequest(response, request, lazyview.Route{Controller: "posts"}); err != nil {
 		t.Fatal(err)
 	}
 

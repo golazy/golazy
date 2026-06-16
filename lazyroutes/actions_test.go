@@ -12,7 +12,6 @@ import (
 
 	"golazy.dev/lazycontroller"
 	"golazy.dev/lazydispatch"
-	"golazy.dev/lazyview"
 	_ "golazy.dev/lazyview/gotmpl"
 )
 
@@ -31,6 +30,11 @@ func newAutoRenderController(ctx context.Context) (*autoRenderController, error)
 func (c *autoRenderController) Index(_ http.ResponseWriter, _ *http.Request) error {
 	c.Set("message", "hello")
 	return nil
+}
+
+func (c *autoRenderController) ManualRender(_ http.ResponseWriter, _ *http.Request) error {
+	c.Set("message", "manual")
+	return c.Render("index")
 }
 
 func (c *autoRenderController) Write(w http.ResponseWriter, _ *http.Request) error {
@@ -64,6 +68,21 @@ func TestControllerActionAutoRendersDefaultView(t *testing.T) {
 	}
 }
 
+func TestControllerActionSkipsAutoRenderWhenRenderWasCalled(t *testing.T) {
+	scope := newAutoRenderScope(t)
+	scope.Get("/manual", newAutoRenderController, (*autoRenderController).ManualRender)
+
+	response := httptest.NewRecorder()
+	scope.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/manual", nil))
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+	if got, want := response.Body.String(), "<main>index manual</main>"; got != want {
+		t.Fatalf("body = %q, want %q", got, want)
+	}
+}
+
 func TestControllerActionSkipsAutoRenderWhenResponseWasWritten(t *testing.T) {
 	scope := newAutoRenderScope(t)
 	scope.Get("/write", newAutoRenderController, (*autoRenderController).Write)
@@ -76,6 +95,55 @@ func TestControllerActionSkipsAutoRenderWhenResponseWasWritten(t *testing.T) {
 	}
 	if got, want := response.Body.String(), "direct"; got != want {
 		t.Fatalf("body = %q, want %q", got, want)
+	}
+}
+
+type pooledController struct {
+	lazycontroller.Base
+}
+
+func (c *pooledController) Index(_ http.ResponseWriter, r *http.Request) error {
+	if message := r.URL.Query().Get("message"); message != "" {
+		c.Set("message", message)
+	}
+	return nil
+}
+
+func TestControllerConstructorRunsOnceAndRequestStateIsReset(t *testing.T) {
+	renderer, err := lazycontroller.NewRenderer(fstest.MapFS{
+		"layouts/app.html.tpl": {Data: []byte(`{{.content}}`)},
+		"pooled/index.html.tpl": {
+			Data: []byte(`{{with .message}}{{.}}{{else}}empty{{end}}`),
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := lazycontroller.WithRenderer(context.Background(), renderer)
+	scope := New(ctx)
+	constructors := 0
+	scope.Get("/pooled", func(ctx context.Context) (*pooledController, error) {
+		constructors++
+		base, err := lazycontroller.NewBase(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return &pooledController{Base: base}, nil
+	}, (*pooledController).Index)
+
+	response := httptest.NewRecorder()
+	scope.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/pooled?message=first", nil))
+	if got, want := response.Body.String(), "first"; got != want {
+		t.Fatalf("first body = %q, want %q", got, want)
+	}
+
+	response = httptest.NewRecorder()
+	scope.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/pooled", nil))
+	if got, want := response.Body.String(), "empty"; got != want {
+		t.Fatalf("second body = %q, want %q", got, want)
+	}
+	if constructors != 1 {
+		t.Fatalf("constructors = %d, want 1", constructors)
 	}
 }
 
@@ -190,6 +258,5 @@ func newAutoRenderScope(t *testing.T) *Scope {
 		t.Fatal(err)
 	}
 	ctx := lazycontroller.WithRenderer(context.Background(), renderer)
-	ctx = lazycontroller.WithRoute(ctx, lazyview.Route{Controller: "auto_render"})
 	return New(ctx)
 }

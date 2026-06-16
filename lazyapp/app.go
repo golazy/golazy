@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net"
 	"net/http"
 	"os"
 	"strconv"
@@ -151,10 +152,18 @@ func (app *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	app.Dispatcher.ServeHTTP(w, r)
 }
 
+// ListenAndServe starts the app server on ADDR, PORT, or :3000.
+//
+// It installs app.Context as the server base context, so every request context
+// includes the dependencies initialized by New. When using a custom http.Server,
+// set BaseContext to return app.Context.
 func (app *App) ListenAndServe() error {
 	server := &http.Server{
 		Addr:    listenAddr(),
 		Handler: app,
+		BaseContext: func(_ net.Listener) context.Context {
+			return app.Context
+		},
 	}
 	if err := server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 		return err

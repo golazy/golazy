@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"sync"
 
 	"golazy.dev/lazycontroller"
 	"golazy.dev/lazyview"
@@ -35,6 +36,7 @@ func newControllerConstructor(controller any) controllerConstructor {
 		!constructorType.In(0).Implements(contextType) ||
 		constructorType.NumOut() != 2 ||
 		constructorType.Out(0).Kind() != reflect.Pointer ||
+		constructorType.Out(0).Elem().Kind() != reflect.Struct ||
 		!constructorType.Out(1).Implements(errorType) {
 		panic(fmt.Errorf("lazyroutes: controller must have signature func(context.Context) (*Controller, error)"))
 	}
@@ -47,57 +49,119 @@ func newControllerConstructor(controller any) controllerConstructor {
 
 func (c controllerConstructor) bind(ctx context.Context, action reflect.Value) http.Handler {
 	validateControllerAction(c.controllerType, action)
+	prototype, err := c.construct(ctx)
+	if err != nil {
+		panic(fmt.Errorf("lazyroutes: initialize controller: %w", err))
+	}
 
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w = ensureResponseState(w)
-		var controller any
-		defer func() {
-			if recovered := recover(); recovered != nil {
-				reportControllerError(ctx, w, r, controller, lazycontroller.PanicError(recovered))
+	binding := &controllerBinding{
+		ctx:       ctx,
+		action:    action,
+		prototype: prototype,
+	}
+	binding.pool = sync.Pool{
+		New: func() any {
+			instance := reflect.New(c.controllerType.Elem())
+			instance.Elem().Set(prototype.Elem())
+			return instance
+		},
+	}
+	return binding
+}
+
+func (c controllerConstructor) construct(ctx context.Context) (reflect.Value, error) {
+	values := c.value.Call([]reflect.Value{reflect.ValueOf(ctx)})
+	if !values[1].IsNil() {
+		return reflect.Value{}, values[1].Interface().(error)
+	}
+	if values[0].IsNil() {
+		return reflect.Value{}, fmt.Errorf("lazyroutes: controller constructor returned nil")
+	}
+	return values[0], nil
+}
+
+type controllerBinding struct {
+	ctx       context.Context
+	action    reflect.Value
+	prototype reflect.Value
+	pool      sync.Pool
+}
+
+func (b *controllerBinding) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w = ensureResponseState(w)
+	var controller any
+	var controllerValue reflect.Value
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			handleControllerError(b.ctx, w, r, controller, lazycontroller.PanicError(recovered))
+		}
+		if controller != nil {
+			if resetter, ok := controller.(lazycontroller.RequestResetter); ok {
+				resetter.ResetRequest()
 			}
-		}()
-
-		controllerContext := lazycontroller.WithWriter(ctx, w)
-		controllerContext = lazycontroller.WithRequest(controllerContext, r)
-		if route, params, ok := RouteFromRequest(r); ok {
-			controllerContext = lazycontroller.WithRoute(controllerContext, lazyview.Route{
-				Name:       route.Name,
-				Method:     route.Method,
-				Path:       route.Path,
-				Namespace:  route.Namespace,
-				Controller: route.Controller,
-				Action:     route.Action,
-				Params:     params,
-			})
 		}
+		if controllerValue.IsValid() {
+			controllerValue.Elem().Set(b.prototype.Elem())
+			b.pool.Put(controllerValue)
+		}
+	}()
 
-		values := c.value.Call([]reflect.Value{reflect.ValueOf(controllerContext)})
-		if !values[1].IsNil() {
-			reportControllerError(ctx, w, r, nil, values[1].Interface().(error))
+	controllerValue = b.pool.Get().(reflect.Value)
+	controllerValue.Elem().Set(b.prototype.Elem())
+	controller = controllerValue.Interface()
+	if binder, ok := controller.(lazycontroller.RequestBinder); ok {
+		if err := binder.BindRequest(w, r, routeForRequest(r)); err != nil {
+			handleControllerError(b.ctx, w, r, controller, err)
 			return
 		}
-
-		controller = values[0].Interface()
-		lazycontroller.ReportController(r, controller)
-		values = action.Call([]reflect.Value{
-			values[0],
-			reflect.ValueOf(w),
-			reflect.ValueOf(r),
-		})
-		if !values[0].IsNil() {
-			reportControllerError(ctx, w, r, controller, values[0].Interface().(error))
+	}
+	if requester, ok := controller.(interface{ Request() *http.Request }); ok {
+		if request := requester.Request(); request != nil {
+			r = request
+		}
+	}
+	lazycontroller.ReportController(r, controller)
+	if before, ok := controller.(lazycontroller.BeforeAction); ok {
+		if err := before.BeforeAction(); err != nil {
+			handleControllerError(b.ctx, w, r, controller, err)
 			return
 		}
+	}
 
-		if lazycontroller.WasResponseSent(w) {
-			return
-		}
-		if renderer, ok := controller.(interface{ Render(string) error }); ok {
-			if err := renderer.Render(""); err != nil {
-				reportControllerError(ctx, w, r, controller, err)
-			}
-		}
+	values := b.action.Call([]reflect.Value{
+		controllerValue,
+		reflect.ValueOf(w),
+		reflect.ValueOf(r),
 	})
+	if !values[0].IsNil() {
+		handleControllerError(b.ctx, w, r, controller, values[0].Interface().(error))
+		return
+	}
+
+	if lazycontroller.WasResponseSent(w) {
+		return
+	}
+	if renderer, ok := controller.(interface{ Render(string) error }); ok {
+		if err := renderer.Render(""); err != nil {
+			handleControllerError(b.ctx, w, r, controller, err)
+		}
+	}
+}
+
+func routeForRequest(r *http.Request) lazyview.Route {
+	route, params, ok := RouteFromRequest(r)
+	if !ok {
+		return lazyview.Route{}
+	}
+	return lazyview.Route{
+		Name:       route.Name,
+		Method:     route.Method,
+		Path:       route.Path,
+		Namespace:  route.Namespace,
+		Controller: route.Controller,
+		Action:     route.Action,
+		Params:     params,
+	}
 }
 
 func actionValue(action any) reflect.Value {
@@ -186,13 +250,6 @@ func (w *responseTracker) WasResponseSent() bool {
 
 func (w *responseTracker) Unwrap() http.ResponseWriter {
 	return w.ResponseWriter
-}
-
-func reportControllerError(ctx context.Context, w http.ResponseWriter, r *http.Request, controller any, err error) {
-	if lazycontroller.ReportError(r, controller, err) {
-		return
-	}
-	handleControllerError(ctx, w, r, controller, err)
 }
 
 func handleControllerError(ctx context.Context, w http.ResponseWriter, r *http.Request, controller any, err error) {

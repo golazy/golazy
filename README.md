@@ -211,6 +211,6 @@ The sample application is available at
 
 GoLazy is released under the MIT License. See [LICENSE](LICENSE).
 
-The `lazycookie` and `lazysession` packages include code adapted from Gorilla
-`securecookie` and Gorilla `sessions`. Those package directories retain the
-Gorilla BSD-style license notice.
+The `lazycookie`, `lazysession`, and `lazyschema` packages include code adapted
+from Gorilla `securecookie`, Gorilla `sessions`, and Gorilla `schema`. Those
+package directories retain the Gorilla BSD-style license notice.

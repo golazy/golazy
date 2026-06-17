@@ -21,6 +21,7 @@ type Resource struct {
 
 	paramSet bool
 
+	models []reflect.Type
 	custom []resourceRoute
 }
 
@@ -63,6 +64,17 @@ func (r *Resource) Plural(name string) *Resource {
 func (r *Resource) Param(name string) *Resource {
 	r.param = strings.Trim(name, "{}")
 	r.paramSet = true
+	return r
+}
+
+func (r *Resource) Model(models ...any) *Resource {
+	for _, model := range models {
+		t := modelType(model)
+		if t == nil {
+			panic(fmt.Errorf("lazyroutes: resource model must be a struct or pointer to struct"))
+		}
+		r.models = append(r.models, t)
+	}
 	return r
 }
 
@@ -150,6 +162,13 @@ func (r *Resource) draw() {
 		routeEntry.Path = path
 		routeEntry.Action = actionName(route.action)
 		r.scope.register(route.method, path, routeEntry, r.controller.bind(r.scope.Context, actionValue(route.action)))
+	}
+	for _, model := range r.models {
+		r.scope.rootScope().models[model] = ModelRoutes{
+			Create: r.namedRouteName("Create", r.path, false),
+			Update: r.namedRouteName("Update", r.memberPath(), true),
+			Delete: r.namedRouteName("Delete", r.memberPath(), true),
+		}
 	}
 }
 
@@ -254,4 +273,18 @@ func toRouteWord(name string) string {
 		out.WriteRune(r)
 	}
 	return out.String()
+}
+
+func modelType(model any) reflect.Type {
+	if model == nil {
+		return nil
+	}
+	t := reflect.TypeOf(model)
+	for t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+	if t.Kind() != reflect.Struct {
+		return nil
+	}
+	return t
 }

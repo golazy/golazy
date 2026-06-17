@@ -7,6 +7,32 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-06-17
+
+### Added
+
+- `stylesheet` and `importmap` asset helpers for rendering fingerprinted
+  stylesheet tags and inline import maps from registered assets.
+- `golazy.dev/lazyviews`, used by `lazydev` builds to resolve local disk views
+  from the running application tree.
+- `golazy.dev/lazyschema`, adapted from Gorilla `schema`, for form field naming
+  and bounded request-value decoding.
+- `golazy.dev/lazyforms` with `form_for`, typed field helpers,
+  `delete_button_for`, and automatic `lazyapp` helper registration.
+- `lazydispatch/middlewares.MethodOverride` for route-scoped form `_method`
+  handling and `CrossOriginProtection` for opt-in cross-origin request
+  rejection.
+- `lazyroutes.Resource.Model` to map model types to REST create, update, and
+  delete routes.
+
+### Changed
+
+- `lazyapp` switches view loading to `lazyviews` when applications run with the
+  `lazydev` build tag, keeping development view lookup in the framework instead
+  of generated applications.
+- `lazyview` partial rendering now accepts explicit render contexts, so helpers
+  like `form_for` can render partials with a prepared model/form context.
+
 ## [0.1.6] - 2026-06-17
 
 ### Added
@@ -143,7 +169,8 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Route construction with embedded public-file fallback.
 - Method-not-allowed handling for application routes.
 
-[Unreleased]: https://github.com/golazy/golazy/compare/v0.1.6...HEAD
+[Unreleased]: https://github.com/golazy/golazy/compare/v0.1.7...HEAD
+[0.1.7]: https://github.com/golazy/golazy/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/golazy/golazy/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/golazy/golazy/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/golazy/golazy/compare/v0.1.3...v0.1.4

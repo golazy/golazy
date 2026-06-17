@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -72,6 +73,30 @@ func TestAppRegistersGeneratedAssetSources(t *testing.T) {
 	}
 	if app.Assets == nil || app.Assets.Empty() {
 		t.Fatal("app Assets registry is empty")
+	}
+}
+
+func TestAppInstallsMethodOverrideForRoutes(t *testing.T) {
+	app := New(Config{
+		Name: "test",
+		Drawer: func(router *lazyroutes.Scope) {
+			router.HandleFunc(http.MethodPatch, "/cars/{car_id}", func(w http.ResponseWriter, r *http.Request) error {
+				_, _ = fmt.Fprintf(w, "patch %s", r.PathValue("car_id"))
+				return nil
+			})
+		},
+	})
+
+	request := httptest.NewRequest(http.MethodPost, "/cars/roadster", strings.NewReader("_method=patch&name=Ada"))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	response := httptest.NewRecorder()
+	app.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", response.Code, http.StatusOK, response.Body.String())
+	}
+	if response.Body.String() != "patch roadster" {
+		t.Fatalf("body = %q, want patch roadster", response.Body.String())
 	}
 }
 

@@ -149,6 +149,45 @@ func TestResourcesSupportsOverrides(t *testing.T) {
 	}
 }
 
+type articleModel struct {
+	Slug string
+}
+
+func (m articleModel) RouteParam() string {
+	return m.Slug
+}
+
+func TestResourcesMapModelsToRESTPaths(t *testing.T) {
+	scope := New(context.Background())
+	scope.Resources(newArticlesController, func(r *Resource) {
+		r.Model(articleModel{})
+	})
+
+	create, err := scope.PathForModel(articleModel{}, "create")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if create != "/articles" {
+		t.Fatalf("create path = %q, want /articles", create)
+	}
+
+	update, err := scope.PathForModel(articleModel{Slug: "hello world"}, "update")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if update != "/articles/hello%20world" {
+		t.Fatalf("update path = %q, want /articles/hello%%20world", update)
+	}
+
+	deletePath, err := scope.PathForModel(&articleModel{Slug: "hello"}, "delete")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deletePath != "/articles/hello" {
+		t.Fatalf("delete path = %q, want /articles/hello", deletePath)
+	}
+}
+
 func TestResourcesUseNamespaceScope(t *testing.T) {
 	scope := New(context.Background())
 

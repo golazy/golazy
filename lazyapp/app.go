@@ -14,6 +14,8 @@ import (
 	"golazy.dev/lazyassets"
 	"golazy.dev/lazycontroller"
 	"golazy.dev/lazydispatch"
+	"golazy.dev/lazydispatch/middlewares"
+	"golazy.dev/lazyforms"
 	"golazy.dev/lazyroutes"
 	"golazy.dev/lazysession"
 )
@@ -114,6 +116,7 @@ func New(config Config) *App {
 	if renderer != nil {
 		renderer.AddHelpers(router.RegisterHelpers())
 		renderer.AddHelpers(assets.Helpers())
+		renderer.AddHelpers(lazyforms.Helpers(router))
 		for _, helpers := range config.Helpers {
 			renderer.AddHelpers(helpers)
 		}
@@ -125,6 +128,7 @@ func New(config Config) *App {
 	dispatcher := lazydispatch.NewDispatcher()
 	dispatcher.Use(lazydispatch.RouteOnly(
 		router,
+		middlewares.MethodOverride(),
 		lazydispatch.ResponseBuffer(),
 		lazydispatch.MiddlewareFunc(lazycontroller.ErrorHandler(ctx)),
 		lazydispatch.ETag(),

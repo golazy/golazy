@@ -16,6 +16,7 @@ asset fallback, and return one application `http.Handler`.
 - `MiddlewareFunc`, an adapter for ordinary functions.
 - `RouteOnly`, a route-table gate for middleware.
 - Router middleware.
+- Form method override through `lazydispatch/middlewares`.
 - Response buffering for registered application routes.
 - Dynamic `ETag` handling for eligible route responses.
 - Low-level public static-file middleware for custom assemblies.
@@ -53,7 +54,7 @@ func App() *lazyapp.App {
 `lazyapp.New` builds this default chain:
 
 ```text
-route-only response buffer and ETag handling
+route-only method override, response buffer, and ETag handling
 application middleware
 router middleware
 asset/public fallback middleware
@@ -61,8 +62,8 @@ asset/public fallback middleware
 ```
 
 Application middleware sees the request before route lookup and asset fallback.
-Response buffering and dynamic ETags are gated by the route table, so public
-assets are not buffered by the app response layer.
+Method override, response buffering, and dynamic ETags are gated by the route
+table, so public assets are not buffered by the app response layer.
 
 ## Middleware
 

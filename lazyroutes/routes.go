@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"reflect"
 	"strings"
 )
 
@@ -19,6 +20,7 @@ type Scope struct {
 	pathPrefix string
 	namePrefix string
 	namespace  string
+	models     map[reflect.Type]ModelRoutes
 }
 
 // New builds a scope with the framework's public-file fallback already wired.
@@ -26,6 +28,7 @@ func New(ctx context.Context) *Scope {
 	scope := &Scope{
 		ServeMux: http.NewServeMux(),
 		Context:  ctx,
+		models:   map[reflect.Type]ModelRoutes{},
 	}
 	scope.root = scope
 	return scope

@@ -139,7 +139,7 @@ registry:
 ```html
 <a href="{{path_for "posts"}}">Posts</a>
 <a href="{{path_for "post" .Post.Param}}">{{.Post.Title}}</a>
-<link rel="stylesheet" href="{{asset_path "/styles.css"}}">
+{{stylesheet "/styles.css"}}
 ```
 
 ## Routing

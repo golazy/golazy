@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+
+	"golazy.dev/lazyview"
 )
 
 func TestRegistryServesFSAssets(t *testing.T) {
@@ -70,6 +72,22 @@ func TestRegistryUsesPermanentURLs(t *testing.T) {
 	}
 	if got := response.Header().Get("Cache-Control"); got != "public, max-age=31536000, immutable" {
 		t.Fatalf("Cache-Control = %q, want permanent cache policy", got)
+	}
+}
+
+func TestRegistryStylesheetHelper(t *testing.T) {
+	registry := newBasicRegistry(t)
+	helper := registry.Helpers()["stylesheet"].(func(string) (lazyview.Fragment, error))
+
+	fragment, err := helper("/styles.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fragment.ContentType != "text/html; charset=utf-8" {
+		t.Fatalf("ContentType = %q, want text/html; charset=utf-8", fragment.ContentType)
+	}
+	if !regexp.MustCompile(`^<link rel="stylesheet" href="/styles-[a-f0-9]{12}\.css">$`).MatchString(fragment.Body) {
+		t.Fatalf("Body = %q, want stylesheet link with permanent URL", fragment.Body)
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"io/fs"
 	"mime"
@@ -13,6 +14,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"golazy.dev/lazyview"
 )
 
 const (
@@ -338,6 +341,16 @@ func (r *Registry) Helpers() map[string]any {
 		},
 		"asset_integrity": func(path string) (string, error) {
 			return r.Integrity(path)
+		},
+		"stylesheet": func(path string) (lazyview.Fragment, error) {
+			permanent, err := r.Path(path)
+			if err != nil {
+				return lazyview.Fragment{}, err
+			}
+			return lazyview.Fragment{
+				ContentType: "text/html; charset=utf-8",
+				Body:        `<link rel="stylesheet" href="` + html.EscapeString(permanent) + `">`,
+			}, nil
 		},
 		"permalink": func(path string) (string, error) {
 			return r.Path(path)

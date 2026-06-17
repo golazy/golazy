@@ -72,7 +72,7 @@ func New(config Config) *App {
 
 	var renderer *lazycontroller.Renderer
 	if config.Views != nil {
-		views, err := config.Views()
+		views, err := openConfiguredViews(config.Views)
 		if err != nil {
 			panic(fmt.Errorf("open views: %w", err))
 		}

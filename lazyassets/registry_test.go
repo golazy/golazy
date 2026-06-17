@@ -91,6 +91,31 @@ func TestRegistryStylesheetHelper(t *testing.T) {
 	}
 }
 
+func TestRegistryImportmapHelper(t *testing.T) {
+	registry := New()
+	if err := registry.Add("/assets/importmap.json", []byte(`{"imports":{"library":"/assets/library.js","unsafe":"</script>"}}`)); err != nil {
+		t.Fatal(err)
+	}
+
+	helper := registry.Helpers()["importmap"].(func(string) (lazyview.Fragment, error))
+	fragment, err := helper("/assets/importmap.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fragment.ContentType != "text/html; charset=utf-8" {
+		t.Fatalf("ContentType = %q, want text/html; charset=utf-8", fragment.ContentType)
+	}
+	if !strings.HasPrefix(fragment.Body, `<script type="importmap">`) {
+		t.Fatalf("Body = %q, want importmap script", fragment.Body)
+	}
+	if strings.Contains(fragment.Body, "</script>") && !strings.HasSuffix(fragment.Body, "</script>") {
+		t.Fatalf("Body contains an unescaped closing script tag: %q", fragment.Body)
+	}
+	if !strings.Contains(fragment.Body, `\u003c/script\u003e`) {
+		t.Fatalf("Body = %q, want escaped JSON", fragment.Body)
+	}
+}
+
 func TestRegistryHandlesIfNoneMatch(t *testing.T) {
 	registry := newBasicRegistry(t)
 	first := fetchAsset(registry, http.MethodGet, "/styles.css", nil)

@@ -299,6 +299,34 @@ func (r *Registry) Integrity(assetPath string) (string, error) {
 	return asset.Integrity, nil
 }
 
+func (r *Registry) content(assetPath string) ([]byte, error) {
+	asset, ok := r.findLogical(assetPath)
+	if !ok {
+		return nil, fmt.Errorf("lazyassets: asset %q not found", assetPath)
+	}
+	if asset.content != nil {
+		return append([]byte(nil), asset.content...), nil
+	}
+	if asset.raw != nil {
+		return append([]byte(nil), asset.raw...), nil
+	}
+	if asset.open == nil {
+		return nil, nil
+	}
+
+	file, err := asset.open()
+	if err != nil {
+		return nil, fmt.Errorf("open %s: %w", assetPath, err)
+	}
+	defer file.Close()
+
+	data, err := readAsset(file, r.options.MaxAssetSize, r.options.OversizePolicy == OversizeAllow)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
 func (r *Registry) Manifest() Manifest {
 	manifest := Manifest{Assets: make([]Asset, 0, len(r.assets))}
 	for _, asset := range r.assets {
@@ -350,6 +378,21 @@ func (r *Registry) Helpers() map[string]any {
 			return lazyview.Fragment{
 				ContentType: "text/html; charset=utf-8",
 				Body:        `<link rel="stylesheet" href="` + html.EscapeString(permanent) + `">`,
+			}, nil
+		},
+		"importmap": func(path string) (lazyview.Fragment, error) {
+			data, err := r.content(path)
+			if err != nil {
+				return lazyview.Fragment{}, err
+			}
+			if !json.Valid(data) {
+				return lazyview.Fragment{}, fmt.Errorf("lazyassets: importmap %q is not valid JSON", path)
+			}
+			var escaped bytes.Buffer
+			json.HTMLEscape(&escaped, data)
+			return lazyview.Fragment{
+				ContentType: "text/html; charset=utf-8",
+				Body:        `<script type="importmap">` + escaped.String() + `</script>`,
 			}, nil
 		},
 		"permalink": func(path string) (string, error) {

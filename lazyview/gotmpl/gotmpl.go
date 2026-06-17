@@ -77,7 +77,7 @@ func (e *Engine) Render(ctx *lazyview.Context, writer io.Writer, file string) er
 	if err != nil {
 		return err
 	}
-	return tpl.Execute(writer, templateVariables(ctx.Variables))
+	return tpl.Execute(writer, templateData(ctx))
 }
 
 func (e *Engine) cachedTemplate(file string) (*cachedTemplate, bool) {
@@ -122,7 +122,7 @@ func (c *cachedTemplate) Execute(ctx *lazyview.Context, writer io.Writer) error 
 		return err
 	}
 	executor.ctx = ctx
-	err = executor.tpl.Execute(writer, templateVariables(ctx.Variables))
+	err = executor.tpl.Execute(writer, templateData(ctx))
 	executor.ctx = nil
 	c.pool.Put(executor)
 	return err
@@ -288,6 +288,16 @@ func templateVariables(variables map[string]any) map[string]any {
 		out[name] = templateValue(value)
 	}
 	return out
+}
+
+func templateData(ctx *lazyview.Context) any {
+	if ctx.Data == nil {
+		return templateVariables(ctx.Variables)
+	}
+	if variables, ok := ctx.Data.(map[string]any); ok {
+		return templateVariables(variables)
+	}
+	return templateValue(ctx.Data)
 }
 
 func templateValue(value any) any {

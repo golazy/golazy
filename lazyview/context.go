@@ -31,7 +31,9 @@ type Context struct {
 	Route Route
 
 	Variables map[string]any
-	helpers   map[string]any
+	// Data is the value used as dot while executing the current template.
+	Data    any
+	helpers map[string]any
 
 	Namespace  string
 	Controller string

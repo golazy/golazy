@@ -26,8 +26,10 @@ type Options struct {
 	Writer  io.Writer
 
 	Variables map[string]any
-	Helpers   map[string]any
-	Route     Route
+	// Data overrides the value used as dot while executing the template.
+	Data    any
+	Helpers map[string]any
+	Route   Route
 
 	Namespace  string
 	Controller string
@@ -126,6 +128,7 @@ func (v *Views) Render(options Options) error {
 		Body:        content.String(),
 		ContentType: contentTypeForFormat(renderContext.Format),
 	}
+	layoutContext.Data = layoutContext.Variables
 
 	setContentType(options.Writer, renderContext.Format)
 	return v.renderTemplate(&layoutContext, options.Writer, layoutFile)
@@ -155,6 +158,10 @@ func (v *Views) renderContext(options Options) *Context {
 		layout = "app"
 	}
 	variables := copyVariables(options.Variables)
+	data := options.Data
+	if data == nil {
+		data = variables
+	}
 	helpers := make(map[string]any, len(v.Helpers)+len(options.Helpers))
 	for name, helper := range v.Helpers {
 		helpers[name] = helper
@@ -169,6 +176,7 @@ func (v *Views) renderContext(options Options) *Context {
 		Views:      v,
 		Route:      options.Route,
 		Variables:  variables,
+		Data:       data,
 		helpers:    helpers,
 		Namespace:  firstNonEmpty(options.Namespace, options.Route.Namespace),
 		Controller: firstNonEmpty(options.Controller, options.Route.Controller),
@@ -268,13 +276,17 @@ func (ctx *Context) partial(args ...any) (Fragment, error) {
 	}
 
 	variables := copyVariables(ctx.Variables)
+	data := ctx.Data
+	if data == nil {
+		data = variables
+	}
 	if len(args) > 1 {
-		locals, ok := args[1].(map[string]any)
-		if !ok {
-			return Fragment{}, fmt.Errorf("lazyview: partial locals must be map[string]any")
+		if len(args) > 2 {
+			return Fragment{}, fmt.Errorf("lazyview: partial expects at most 2 arguments")
 		}
-		for key, value := range locals {
-			variables[key] = value
+		data = args[1]
+		if locals, ok := data.(map[string]any); ok {
+			variables = copyVariables(locals)
 		}
 	}
 
@@ -282,6 +294,7 @@ func (ctx *Context) partial(args ...any) (Fragment, error) {
 		Context:    ctx.Context,
 		Request:    ctx.Request,
 		Variables:  variables,
+		Data:       data,
 		Helpers:    ctx.helpers,
 		Route:      ctx.Route,
 		Namespace:  ctx.Namespace,

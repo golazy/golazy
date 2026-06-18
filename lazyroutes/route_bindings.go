@@ -33,11 +33,12 @@ func (s *Scope) controllerAction(method string, path string, controller any, act
 	}
 	controllerConstructor := newControllerConstructor(controller)
 	actionValue := actionValue(action)
+	routePath := s.scopedPath(path)
 	route := Route{
 		Action:     actionName(action),
 		Controller: controllerNameFromType(controllerConstructor.controllerType),
 	}
-	s.register(method, path, route, controllerConstructor.bind(s.Context, actionValue))
+	s.register(method, path, route, controllerConstructor.bind(s.Context, routePath, actionValue))
 }
 
 func actionName(v any) string {

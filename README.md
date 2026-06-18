@@ -127,6 +127,14 @@ func (c *PostsController) Index(_ http.ResponseWriter, _ *http.Request) error {
 }
 ```
 
+Actions can also receive generated arguments while still returning `error`:
+
+```go
+func (c *PostsController) Show(postID int) error
+func (c *PostsController) Create(input PostInput) error
+func (c *PostsController) GenPostInput(r *http.Request) (PostInput, error)
+```
+
 If a controller needs request-time setup, implement `BeforeAction` on the
 controller or an embedded app base controller.
 

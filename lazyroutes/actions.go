@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"sync"
 
+	"golazy.dev/internal/actioncall"
 	"golazy.dev/lazycontroller"
 	"golazy.dev/lazyview"
 )
@@ -47,17 +48,20 @@ func newControllerConstructor(controller any) controllerConstructor {
 	}
 }
 
-func (c controllerConstructor) bind(ctx context.Context, action reflect.Value) http.Handler {
-	validateControllerAction(c.controllerType, action)
+func (c controllerConstructor) bind(ctx context.Context, routePath string, action reflect.Value) http.Handler {
+	actionPlan, err := actioncall.Compile(c.controllerType, action, actioncall.Options{RoutePath: routePath})
+	if err != nil {
+		panic(fmt.Errorf("lazyroutes: bind controller action: %w", err))
+	}
 	prototype, err := c.construct(ctx)
 	if err != nil {
 		panic(fmt.Errorf("lazyroutes: initialize controller: %w", err))
 	}
 
 	binding := &controllerBinding{
-		ctx:       ctx,
-		action:    action,
-		prototype: prototype,
+		ctx:        ctx,
+		actionPlan: actionPlan,
+		prototype:  prototype,
 	}
 	binding.pool = sync.Pool{
 		New: func() any {
@@ -81,10 +85,10 @@ func (c controllerConstructor) construct(ctx context.Context) (reflect.Value, er
 }
 
 type controllerBinding struct {
-	ctx       context.Context
-	action    reflect.Value
-	prototype reflect.Value
-	pool      sync.Pool
+	ctx        context.Context
+	actionPlan *actioncall.Plan
+	prototype  reflect.Value
+	pool       sync.Pool
 }
 
 func (b *controllerBinding) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -128,13 +132,8 @@ func (b *controllerBinding) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	values := b.action.Call([]reflect.Value{
-		controllerValue,
-		reflect.ValueOf(w),
-		reflect.ValueOf(r),
-	})
-	if !values[0].IsNil() {
-		handleControllerError(b.ctx, w, r, controller, values[0].Interface().(error))
+	if err := b.actionPlan.Call(controllerValue, w, r); err != nil {
+		handleControllerError(b.ctx, w, r, controller, err)
 		return
 	}
 
@@ -173,23 +172,6 @@ func actionValue(action any) reflect.Value {
 		panic("lazyroutes: controller action is nil")
 	}
 	return actionValue
-}
-
-func validateControllerAction(controllerType reflect.Type, actionValue reflect.Value) {
-	actionType := actionValue.Type()
-	errorType := reflect.TypeOf((*error)(nil)).Elem()
-	writerType := reflect.TypeOf((*http.ResponseWriter)(nil)).Elem()
-	requestType := reflect.TypeOf((*http.Request)(nil))
-
-	if actionType.Kind() != reflect.Func ||
-		actionType.NumIn() != 3 ||
-		!controllerType.AssignableTo(actionType.In(0)) ||
-		!actionType.In(1).Implements(writerType) ||
-		actionType.In(2) != requestType ||
-		actionType.NumOut() != 1 ||
-		!actionType.Out(0).Implements(errorType) {
-		panic(fmt.Errorf("lazyroutes: controller action must have signature func(*Controller, http.ResponseWriter, *http.Request) error"))
-	}
 }
 
 func Handle(action Action) http.Handler {

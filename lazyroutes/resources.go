@@ -161,13 +161,13 @@ func (r *Resource) draw() {
 		routeEntry.Method = route.method
 		routeEntry.Path = path
 		routeEntry.Action = actionName(route.action)
-		r.scope.register(route.method, path, routeEntry, r.controller.bind(r.scope.Context, actionValue(route.action)))
+		r.scope.register(route.method, path, routeEntry, r.controller.bind(r.scope.Context, r.scope.scopedPath(path), actionValue(route.action)))
 	}
 	for _, model := range r.models {
 		r.scope.rootScope().models[model] = ModelRoutes{
-			Create: r.namedRouteName("Create", r.path, false),
-			Update: r.namedRouteName("Update", r.memberPath(), true),
-			Delete: r.namedRouteName("Delete", r.memberPath(), true),
+			Create: r.scope.scopedName(r.namedRouteName("Create", r.path, false)),
+			Update: r.scope.scopedName(r.namedRouteName("Update", r.memberPath(), true)),
+			Delete: r.scope.scopedName(r.namedRouteName("Delete", r.memberPath(), true)),
 		}
 	}
 }
@@ -179,7 +179,7 @@ func (r *Resource) memberPath() string {
 func (r *Resource) registerAction(method string, path string, actionName string) {
 	if action, ok := methodAction(r.controller.controllerType, actionName); ok {
 		route := r.routeMetadata(actionName, path, false)
-		r.scope.register(method, path, route, r.controller.bind(r.scope.Context, action))
+		r.scope.register(method, path, route, r.controller.bind(r.scope.Context, r.scope.scopedPath(path), action))
 	}
 }
 
@@ -237,18 +237,6 @@ func methodAction(controllerType reflect.Type, name string) (reflect.Value, bool
 	if !ok {
 		return reflect.Value{}, false
 	}
-
-	errorType := reflect.TypeOf((*error)(nil)).Elem()
-	writerType := reflect.TypeOf((*http.ResponseWriter)(nil)).Elem()
-	requestType := reflect.TypeOf((*http.Request)(nil))
-	if method.Type.NumIn() != 3 ||
-		!method.Type.In(1).Implements(writerType) ||
-		method.Type.In(2) != requestType ||
-		method.Type.NumOut() != 1 ||
-		!method.Type.Out(0).Implements(errorType) {
-		panic(fmt.Errorf("lazyroutes: %s must have signature func(http.ResponseWriter, *http.Request) error", name))
-	}
-
 	return method.Func, true
 }
 

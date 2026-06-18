@@ -56,6 +56,7 @@ func (s *Scope) As(name string, draw ...func(*Scope)) *Scope {
 }
 
 func (s *Scope) register(method, path string, route Route, handler http.Handler) {
+	namePath := path
 	path = s.scopedPath(path)
 	if route.Path == "" {
 		route.Path = path
@@ -67,9 +68,12 @@ func (s *Scope) register(method, path string, route Route, handler http.Handler)
 		route.Method = http.MethodGet
 	}
 	if route.Name == "" {
-		route.Name = inferRouteName(route.Method, route.Path)
+		if s.namePrefix == "" {
+			namePath = route.Path
+		}
+		route.Name = inferRouteName(route.Method, namePath)
 	}
-	route.Name = joinRoutePart("_", s.namePrefix, route.Name)
+	route.Name = s.scopedName(route.Name)
 	if route.Namespace == "" {
 		route.Namespace = s.namespace
 	}
@@ -164,6 +168,10 @@ func (s *Scope) scopedPath(path string) string {
 		return normalizePath(s.pathPrefix)
 	}
 	return normalizePath(joinRoutePart("/", s.pathPrefix, path))
+}
+
+func (s *Scope) scopedName(name string) string {
+	return joinRoutePart("_", s.namePrefix, name)
 }
 
 func joinRoutePart(separator string, parts ...string) string {

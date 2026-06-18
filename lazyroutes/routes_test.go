@@ -137,6 +137,24 @@ func TestScopeNamespacePrefixesPathNameAndRouteContext(t *testing.T) {
 	}
 }
 
+func TestScopeNamespacePrefixesRootRouteName(t *testing.T) {
+	scope := New(context.Background())
+
+	scope.Namespace("admin", func(admin *Scope) {
+		admin.HandleFunc("GET", "/", func(w http.ResponseWriter, _ *http.Request) error {
+			w.WriteHeader(http.StatusOK)
+			return nil
+		})
+	})
+
+	if len(scope.Routes) != 1 {
+		t.Fatalf("len(scope.Routes) = %d, want 1", len(scope.Routes))
+	}
+	if route := scope.Routes[0]; route.Name != "admin_root" {
+		t.Fatalf("route.Name = %q, want %q", route.Name, "admin_root")
+	}
+}
+
 func TestScopePathAndAsComposeRouteMetadata(t *testing.T) {
 	scope := New(context.Background())
 

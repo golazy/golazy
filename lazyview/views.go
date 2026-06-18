@@ -205,26 +205,29 @@ func (v *Views) findView(ctx *Context) (string, error) {
 		return "", fmt.Errorf("lazyview: action or partial is required")
 	}
 
-	directories := []string{}
-	if ctx.Namespace != "" && ctx.Controller != "" {
-		directories = append(directories, path.Join(ctx.Namespace, ctx.Controller))
-	}
-	if ctx.Controller != "" {
-		directories = append(directories, ctx.Controller)
-	}
-	if ctx.Namespace != "" {
-		directories = append(directories, ctx.Namespace)
-	}
-	directories = append(directories, "app")
-
 	var tried []string
-	for _, directory := range directories {
+	for _, directory := range viewDirectories(ctx) {
 		file, ok := v.findFile(directory, name, ctx.Format, &tried)
 		if ok {
 			return file, nil
 		}
 	}
 	return "", fmt.Errorf("lazyview: view not found. Tried: %s", strings.Join(tried, ", "))
+}
+
+func viewDirectories(ctx *Context) []string {
+	var directories []string
+	if ctx.Controller != "" {
+		controller := strings.Trim(ctx.Controller, "/")
+		namespace := strings.Trim(ctx.Namespace, "/")
+		if namespace != "" && !strings.HasPrefix(controller, namespace+"/") {
+			controller = path.Join(namespace, controller)
+		}
+		directories = append(directories, controller)
+	} else if ctx.Namespace != "" {
+		directories = append(directories, strings.Trim(ctx.Namespace, "/"))
+	}
+	return append(directories, "app")
 }
 
 func (v *Views) findLayout(ctx *Context) (string, error) {

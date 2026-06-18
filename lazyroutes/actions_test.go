@@ -68,6 +68,57 @@ func TestControllerActionAutoRendersDefaultView(t *testing.T) {
 	}
 }
 
+func TestControllerActionAutoRendersNamespacedView(t *testing.T) {
+	renderer, err := lazycontroller.NewRenderer(fstest.MapFS{
+		"layouts/app.html.tpl":             {Data: []byte(`<main>{{.content}}</main>`)},
+		"auto_render/index.html.tpl":       {Data: []byte(`wrong {{.message}}`)},
+		"admin/auto_render/index.html.tpl": {Data: []byte(`admin {{.message}}`)},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := lazycontroller.WithRenderer(context.Background(), renderer)
+	scope := New(ctx)
+	scope.Namespace("admin", func(admin *Scope) {
+		admin.Get("/posts", newAutoRenderController, (*autoRenderController).Index)
+	})
+
+	response := httptest.NewRecorder()
+	scope.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/admin/posts", nil))
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+	if got, want := response.Body.String(), "<main>admin hello</main>"; got != want {
+		t.Fatalf("body = %q, want %q", got, want)
+	}
+}
+
+func TestControllerActionDoesNotFallbackToNonNamespacedControllerView(t *testing.T) {
+	renderer, err := lazycontroller.NewRenderer(fstest.MapFS{
+		"layouts/app.html.tpl":       {Data: []byte(`<main>{{.content}}</main>`)},
+		"auto_render/index.html.tpl": {Data: []byte(`wrong {{.message}}`)},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := lazycontroller.WithRenderer(context.Background(), renderer)
+	scope := New(ctx)
+	scope.Namespace("admin", func(admin *Scope) {
+		admin.Get("/posts", newAutoRenderController, (*autoRenderController).Index)
+	})
+
+	response := httptest.NewRecorder()
+	scope.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/admin/posts", nil))
+
+	if response.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusInternalServerError)
+	}
+	if strings.Contains(response.Body.String(), "wrong hello") {
+		t.Fatalf("body used non-namespaced fallback: %q", response.Body.String())
+	}
+}
+
 func TestControllerActionSkipsAutoRenderWhenRenderWasCalled(t *testing.T) {
 	scope := newAutoRenderScope(t)
 	scope.Get("/manual", newAutoRenderController, (*autoRenderController).ManualRender)

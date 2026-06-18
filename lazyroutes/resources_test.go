@@ -192,7 +192,9 @@ func TestResourcesUseNamespaceScope(t *testing.T) {
 	scope := New(context.Background())
 
 	scope.Namespace("admin", func(admin *Scope) {
-		admin.Resources(newArticlesController)
+		admin.Resources(newArticlesController, func(articles *Resource) {
+			articles.Model(articleModel{})
+		})
 	})
 
 	response := httptest.NewRecorder()
@@ -214,6 +216,13 @@ func TestResourcesUseNamespaceScope(t *testing.T) {
 			}
 			if !route.NamedParams["article_id"] {
 				t.Fatalf("route.NamedParams = %#v, want article_id", route.NamedParams)
+			}
+			path, err := scope.PathForModel(articleModel{Slug: "hello"}, "update")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if path != "/admin/articles/hello" {
+				t.Fatalf("PathForModel update = %q, want /admin/articles/hello", path)
 			}
 			return
 		}

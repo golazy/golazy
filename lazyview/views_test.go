@@ -229,3 +229,64 @@ func TestRenderFallsBackToAppViews(t *testing.T) {
 		t.Fatalf("rendered body = %q, want %q", got, want)
 	}
 }
+
+func TestNamespacedRenderUsesNestedControllerView(t *testing.T) {
+	views, err := lazyview.New(fstest.MapFS{
+		"layouts/app.html.tpl":       {Data: []byte(`<main>{{.content}}</main>`)},
+		"posts/index.html.tpl":       {Data: []byte(`wrong`)},
+		"admin/posts/index.html.tpl": {Data: []byte(`admin`)},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var out strings.Builder
+	err = views.Render(lazyview.Options{
+		Writer:     &out,
+		Namespace:  "admin",
+		Controller: "posts",
+		Action:     "index",
+		UseLayout:  true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got, want := out.String(), `<main>admin</main>`; got != want {
+		t.Fatalf("rendered body = %q, want %q", got, want)
+	}
+}
+
+func TestNamespacedRenderDoesNotFallbackToControllerView(t *testing.T) {
+	views, err := lazyview.New(fstest.MapFS{
+		"layouts/app.html.tpl": {Data: []byte(`<main>{{.content}}</main>`)},
+		"posts/index.html.tpl": {Data: []byte(`wrong`)},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var out strings.Builder
+	err = views.Render(lazyview.Options{
+		Writer:     &out,
+		Namespace:  "admin",
+		Controller: "posts",
+		Action:     "index",
+		UseLayout:  true,
+	})
+	if err == nil {
+		t.Fatal("Render succeeded, want missing namespaced view")
+	}
+	message := err.Error()
+	if strings.Contains(message, "Tried: posts/index.html.tpl") || strings.Contains(message, ", posts/index.html.tpl") {
+		t.Fatalf("error = %q, should not try non-namespaced controller view", message)
+	}
+	for _, expected := range []string{
+		"admin/posts/index.html.tpl",
+		"app/index.html.tpl",
+	} {
+		if !strings.Contains(message, expected) {
+			t.Fatalf("error = %q, want tried path %q", message, expected)
+		}
+	}
+}

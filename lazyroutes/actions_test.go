@@ -42,6 +42,10 @@ func (c *autoRenderController) Write(w http.ResponseWriter, _ *http.Request) err
 	return err
 }
 
+func (c *autoRenderController) Redirect(_ http.ResponseWriter, _ *http.Request) error {
+	return c.RedirectTo("/posts")
+}
+
 func (c *autoRenderController) Broken(w http.ResponseWriter, _ *http.Request) error {
 	_, _ = fmt.Fprint(w, "partial")
 	return lazycontroller.Error(http.StatusNotFound, errors.New("missing post"))
@@ -146,6 +150,24 @@ func TestControllerActionSkipsAutoRenderWhenResponseWasWritten(t *testing.T) {
 	}
 	if got, want := response.Body.String(), "direct"; got != want {
 		t.Fatalf("body = %q, want %q", got, want)
+	}
+}
+
+func TestControllerActionSkipsAutoRenderWhenRedirecting(t *testing.T) {
+	scope := newAutoRenderScope(t)
+	scope.Get("/redirect", newAutoRenderController, (*autoRenderController).Redirect)
+
+	response := httptest.NewRecorder()
+	scope.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/redirect", nil))
+
+	if response.Code != http.StatusFound {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusFound)
+	}
+	if got, want := response.Header().Get("Location"), "/posts"; got != want {
+		t.Fatalf("Location = %q, want %q", got, want)
+	}
+	if strings.Contains(response.Body.String(), "index") {
+		t.Fatalf("body contains auto-rendered view: %q", response.Body.String())
 	}
 }
 

@@ -141,6 +141,18 @@ controller or an embedded app base controller.
 Actions that return without writing a response render the matching
 controller/action view automatically.
 
+Redirects are controller responses, so they also skip automatic rendering:
+
+```go
+func (c *PostsController) Create(input PostInput) error {
+    post, err := c.posts.Create(input.Title)
+    if err != nil {
+        return err
+    }
+    return c.RedirectTo("/posts/"+post.Param, http.StatusSeeOther)
+}
+```
+
 Templates can use framework helpers registered by the app, router, and asset
 registry:
 

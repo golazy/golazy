@@ -110,6 +110,8 @@ func New(config Config) *App {
 	}
 
 	router := lazyroutes.New(ctx)
+	ctx = lazycontroller.WithPathFor(ctx, router.PathFor)
+	router.Context = ctx
 	if config.Drawer != nil {
 		config.Drawer(router)
 	}

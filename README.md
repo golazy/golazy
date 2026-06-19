@@ -149,7 +149,11 @@ func (c *PostsController) Create(input PostInput) error {
     if err != nil {
         return err
     }
-    return c.RedirectTo("/posts/"+post.Param, http.StatusSeeOther)
+    path, err := c.PathFor("post", post.Param)
+    if err != nil {
+        return err
+    }
+    return c.RedirectTo(path, http.StatusSeeOther)
 }
 ```
 

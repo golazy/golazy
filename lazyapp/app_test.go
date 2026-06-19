@@ -1,6 +1,7 @@
 package lazyapp
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -11,8 +12,10 @@ import (
 	"testing/fstest"
 
 	"golazy.dev/lazyassets"
+	"golazy.dev/lazycontroller"
 	"golazy.dev/lazyroutes"
 	"golazy.dev/lazysession"
+	_ "golazy.dev/lazyview/gotmpl"
 )
 
 func TestAppAddsDynamicETagToRoutesAndAssetETagToPublicFiles(t *testing.T) {
@@ -134,6 +137,51 @@ func TestAppInstallsSessionManager(t *testing.T) {
 	}
 	if cookies[0].Name != "test_session" {
 		t.Fatalf("cookie name = %q, want test_session", cookies[0].Name)
+	}
+}
+
+type pathForController struct {
+	lazycontroller.Base
+}
+
+func newPathForController(ctx context.Context) (*pathForController, error) {
+	base, err := lazycontroller.NewBase(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &pathForController{Base: base}, nil
+}
+
+func (c *pathForController) Show(w http.ResponseWriter, _ *http.Request) error {
+	path, err := c.PathFor("posts", "hello world")
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprint(w, path)
+	return err
+}
+
+func TestAppWiresRoutePathHelpersIntoControllers(t *testing.T) {
+	app := New(Config{
+		Name: "test",
+		Views: func() (fs.FS, error) {
+			return fstest.MapFS{
+				"layouts/app.html.tpl": {Data: []byte("{{.content}}")},
+			}, nil
+		},
+		Drawer: func(router *lazyroutes.Scope) {
+			router.Get("/posts/{post_id}", newPathForController, (*pathForController).Show)
+		},
+	})
+
+	response := httptest.NewRecorder()
+	app.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/posts/current", nil))
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+	if got, want := response.Body.String(), "/posts/hello%20world"; got != want {
+		t.Fatalf("body = %q, want %q", got, want)
 	}
 }
 

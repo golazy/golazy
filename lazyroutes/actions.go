@@ -7,8 +7,8 @@ import (
 	"reflect"
 	"sync"
 
-	"golazy.dev/internal/actioncall"
 	"golazy.dev/lazycontroller"
+	"golazy.dev/lazyroutes/actioncall"
 	"golazy.dev/lazyview"
 )
 

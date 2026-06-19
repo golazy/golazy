@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"golazy.dev/lazysse"
 )
 
 func TestETagAddsValidatorToBufferedOKResponse(t *testing.T) {
@@ -158,6 +160,29 @@ func TestETagCanRunWithoutSeparateResponseBuffer(t *testing.T) {
 	}
 	if got, want := response.Header().Get("ETag"), testETag("hello"); got != want {
 		t.Fatalf("ETag = %q, want %q", got, want)
+	}
+}
+
+func TestETagSkipsStreamingResponses(t *testing.T) {
+	handler := ResponseBuffer().Handler(ETag().Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		stream, err := lazysse.Start(w, r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer stream.Close()
+		if err := stream.Send(lazysse.Event{Data: []string{"hello"}}); err != nil {
+			t.Fatal(err)
+		}
+	})))
+
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	if got := response.Header().Get("ETag"); got != "" {
+		t.Fatalf("ETag = %q, want empty", got)
+	}
+	if got, want := response.Body.String(), "data: hello\n\n"; got != want {
+		t.Fatalf("body = %q, want %q", got, want)
 	}
 }
 

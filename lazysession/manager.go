@@ -151,6 +151,17 @@ func (w *responseSaver) Unwrap() http.ResponseWriter {
 	return w.ResponseWriter
 }
 
+func (w *responseSaver) StartStream(status int) (http.ResponseWriter, error) {
+	w.save()
+	if starter, ok := w.ResponseWriter.(interface {
+		StartStream(int) (http.ResponseWriter, error)
+	}); ok {
+		return starter.StartStream(status)
+	}
+	w.ResponseWriter.WriteHeader(status)
+	return w.ResponseWriter, nil
+}
+
 // WithManager stores manager in ctx.
 func WithManager(ctx context.Context, manager *Manager) context.Context {
 	return context.WithValue(ctx, managerContextKey{}, manager)

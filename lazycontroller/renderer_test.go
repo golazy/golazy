@@ -68,6 +68,110 @@ func TestRenderMissingView(t *testing.T) {
 	}
 }
 
+func TestRenderUsesResponseHelpers(t *testing.T) {
+	views := fstest.MapFS{
+		"layouts/app.html.tpl": {Data: []byte(`layout {{.content}}`)},
+		"posts/create.html.tpl": {
+			Data: []byte(`created`),
+		},
+	}
+	renderer, err := NewRenderer(views)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := httptest.NewRecorder()
+	ctx := WithRenderer(context.Background(), renderer)
+	base, err := NewBase(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "/posts", nil)
+	if err := base.BindRequest(response, request, lazyview.Route{Controller: "posts"}); err != nil {
+		t.Fatal(err)
+	}
+	base.Status(http.StatusCreated)
+	base.Header().Set("Cache-Control", "no-store")
+	base.ContentType("text/plain; charset=utf-8")
+
+	if err := base.Render("create"); err != nil {
+		t.Fatal(err)
+	}
+
+	if response.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusCreated)
+	}
+	if got, want := response.Header().Get("Cache-Control"), "no-store"; got != want {
+		t.Fatalf("Cache-Control = %q, want %q", got, want)
+	}
+	if got, want := response.Header().Get("Content-Type"), "text/plain; charset=utf-8"; got != want {
+		t.Fatalf("Content-Type = %q, want %q", got, want)
+	}
+	if got, want := response.Body.String(), "layout created"; got != want {
+		t.Fatalf("body = %q, want %q", got, want)
+	}
+}
+
+func TestRenderSelectsLayout(t *testing.T) {
+	views := fstest.MapFS{
+		"layouts/app.html.tpl":   {Data: []byte(`app {{.content}}`)},
+		"layouts/admin.html.tpl": {Data: []byte(`admin {{.content}}`)},
+		"posts/index.html.tpl":   {Data: []byte(`posts`)},
+	}
+	renderer, err := NewRenderer(views)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := httptest.NewRecorder()
+	ctx := WithRenderer(context.Background(), renderer)
+	base, err := NewBase(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodGet, "/posts", nil)
+	if err := base.BindRequest(response, request, lazyview.Route{Controller: "posts"}); err != nil {
+		t.Fatal(err)
+	}
+	base.Layout("admin")
+
+	if err := base.Render("index"); err != nil {
+		t.Fatal(err)
+	}
+
+	if got, want := response.Body.String(), "admin posts"; got != want {
+		t.Fatalf("body = %q, want %q", got, want)
+	}
+}
+
+func TestRenderCanSkipLayout(t *testing.T) {
+	views := fstest.MapFS{
+		"layouts/app.html.tpl": {Data: []byte(`layout {{.content}}`)},
+		"posts/index.html.tpl": {Data: []byte(`posts`)},
+	}
+	renderer, err := NewRenderer(views)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := httptest.NewRecorder()
+	ctx := WithRenderer(context.Background(), renderer)
+	base, err := NewBase(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodGet, "/posts", nil)
+	if err := base.BindRequest(response, request, lazyview.Route{Controller: "posts"}); err != nil {
+		t.Fatal(err)
+	}
+	base.NoLayout()
+
+	if err := base.Render("index"); err != nil {
+		t.Fatal(err)
+	}
+
+	if got, want := response.Body.String(), "posts"; got != want {
+		t.Fatalf("body = %q, want %q", got, want)
+	}
+}
+
 func TestBaseExposesRequest(t *testing.T) {
 	views := fstest.MapFS{
 		"layouts/app.html.tpl": {Data: []byte(`{{.content}}`)},

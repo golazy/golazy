@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"testing"
+
+	"golazy.dev/lazycontroller"
 )
 
 func TestScopeRegistersRouteMetadataAndContext(t *testing.T) {
@@ -92,6 +94,64 @@ func TestScopeRegistersRouteMetadataWithMultipleParams(t *testing.T) {
 
 	response := httptest.NewRecorder()
 	scope.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/articles/42/comments/99", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+}
+
+func TestScopeStripsFormatSuffixBeforeRouting(t *testing.T) {
+	scope := New(context.Background())
+
+	scope.HandleFunc("GET", "/articles/{article_id}", func(w http.ResponseWriter, r *http.Request) error {
+		route, values, ok := RouteFromRequest(r)
+		if !ok {
+			t.Fatalf("route not found in request context")
+		}
+		if got, want := r.URL.Path, "/articles/42"; got != want {
+			t.Fatalf("URL.Path = %q, want %q", got, want)
+		}
+		if got, want := r.PathValue("article_id"), "42"; got != want {
+			t.Fatalf("PathValue(article_id) = %q, want %q", got, want)
+		}
+		if got, want := values["article_id"], "42"; got != want {
+			t.Fatalf("route value article_id = %q, want %q", got, want)
+		}
+		if got, want := lazycontroller.FormatFromRequest(r), lazycontroller.JSON; got != want {
+			t.Fatalf("FormatFromRequest = %q, want %q", got, want)
+		}
+		if route.Path != "/articles/{article_id}" {
+			t.Fatalf("route.Path = %q, want %q", route.Path, "/articles/{article_id}")
+		}
+		w.WriteHeader(http.StatusOK)
+		return nil
+	})
+
+	response := httptest.NewRecorder()
+	scope.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/articles/42.json", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+}
+
+func TestScopeHandlesCollectionFormatSuffix(t *testing.T) {
+	scope := New(context.Background())
+	scope.HandleFunc("GET", "/articles", func(w http.ResponseWriter, r *http.Request) error {
+		if got, want := r.URL.Path, "/articles"; got != want {
+			t.Fatalf("URL.Path = %q, want %q", got, want)
+		}
+		if got, want := lazycontroller.FormatFromRequest(r), lazycontroller.HTML; got != want {
+			t.Fatalf("FormatFromRequest = %q, want %q", got, want)
+		}
+		w.WriteHeader(http.StatusOK)
+		return nil
+	})
+
+	if !scope.HandlesPath("/articles.html") {
+		t.Fatalf("scope should handle /articles.html")
+	}
+
+	response := httptest.NewRecorder()
+	scope.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/articles.html", nil))
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
 	}

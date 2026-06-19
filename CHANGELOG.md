@@ -7,6 +7,39 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.9] - 2026-06-19
+
+### Added
+
+- Controller format negotiation with registered response formats, Accept
+  handling, path suffixes such as `.html`, `.json`, and `.md`, and
+  Turbo-frame-aware rendering.
+- `lazyturbo` frame helpers and controller Turbo frame rendering support for
+  server-rendered Hotwire interactions.
+- Controller redirect helpers: `Redirect`, `RedirectTo`, `RedirectBackOrTo`,
+  `RedirectBack`, and same-host `URLFrom` validation.
+- Controller path helpers through `PathFor`, using the current application
+  route table from controller actions.
+- Controller response metadata helpers: `Status`, `Header`, `ContentType`,
+  `Layout`, and `NoLayout`.
+- `golazy.dev/lazysse` for Server-Sent Events, including event sends, JSON
+  events, comments, heartbeats, source subscriptions, and `Last-Event-ID`
+  access.
+- `lazycontroller.Base.SSEStream` for starting SSE streams from controller
+  actions.
+
+### Changed
+
+- Controller rendering is buffered before commit, so status, headers, layout
+  selection, and render errors can be coordinated consistently.
+- `lazyroutes.Scope` recognizes registered format suffixes and dispatches the
+  underlying route with the requested format in request context.
+- Long-lived streaming responses bypass dynamic route ETag generation and
+  response-buffer rewrites.
+- Cookie session middleware saves pending session changes before a streaming
+  response is committed.
+- The route action-call planner now lives under `lazyroutes/actioncall`.
+
 ## [0.1.8] - 2026-06-19
 
 ### Added
@@ -186,7 +219,8 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Route construction with embedded public-file fallback.
 - Method-not-allowed handling for application routes.
 
-[Unreleased]: https://github.com/golazy/golazy/compare/v0.1.8...HEAD
+[Unreleased]: https://github.com/golazy/golazy/compare/v0.1.9...HEAD
+[0.1.9]: https://github.com/golazy/golazy/compare/v0.1.8...v0.1.9
 [0.1.8]: https://github.com/golazy/golazy/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/golazy/golazy/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/golazy/golazy/compare/v0.1.5...v0.1.6

@@ -4,8 +4,11 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"path"
 	"reflect"
 	"strings"
+
+	"golazy.dev/lazycontroller"
 )
 
 // Scope is the routing DSL entrypoint used by application routes.
@@ -99,6 +102,22 @@ func (s *Scope) HandleFunc(method, path string, handlerAction Action) {
 }
 
 func (s *Scope) HandlesPath(path string) bool {
+	if s.handlesPath(path) {
+		return true
+	}
+	strippedPath, _, ok := formatPath(path)
+	return ok && s.handlesPath(strippedPath)
+}
+
+func (s *Scope) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	root := s.rootScope()
+	if strippedPath, format, ok := formatPath(r.URL.Path); ok && root.handlesPath(strippedPath) {
+		r = requestWithFormat(r, strippedPath, format)
+	}
+	root.ServeMux.ServeHTTP(w, r)
+}
+
+func (s *Scope) handlesPath(path string) bool {
 	root := s.rootScope()
 	for _, route := range root.Routes {
 		if routePathMatches(route.Path, path) {
@@ -106,6 +125,28 @@ func (s *Scope) HandlesPath(path string) bool {
 		}
 	}
 	return false
+}
+
+func formatPath(requestPath string) (string, lazycontroller.Format, bool) {
+	suffix := path.Ext(requestPath)
+	format, ok := lazycontroller.FormatFromSuffix(suffix)
+	if !ok {
+		return "", "", false
+	}
+	strippedPath := strings.TrimSuffix(requestPath, suffix)
+	if strippedPath == "" {
+		strippedPath = "/"
+	}
+	return strippedPath, format, true
+}
+
+func requestWithFormat(r *http.Request, path string, format lazycontroller.Format) *http.Request {
+	clone := r.Clone(lazycontroller.WithFormat(r.Context(), format))
+	url := *clone.URL
+	url.Path = path
+	url.RawPath = ""
+	clone.URL = &url
+	return clone
 }
 
 func routeContextMiddleware(handler http.Handler, route Route) http.Handler {

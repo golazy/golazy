@@ -57,6 +57,9 @@ func applyETag(w *BufferedResponseWriter, r *http.Request) {
 }
 
 func etagEligible(w *BufferedResponseWriter, r *http.Request) bool {
+	if w.stream {
+		return false
+	}
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		return false
 	}

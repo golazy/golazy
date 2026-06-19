@@ -8,6 +8,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"golazy.dev/lazydispatch"
+	"golazy.dev/lazysse"
 )
 
 func TestManagerMiddlewareSavesDefaultSession(t *testing.T) {
@@ -65,6 +68,47 @@ func TestManagerMiddlewareSavesDefaultSession(t *testing.T) {
 	read.ServeHTTP(response, request)
 	if response.Body.String() != "hello" {
 		t.Fatalf("body = %q, want hello", response.Body.String())
+	}
+}
+
+func TestManagerMiddlewareSavesBeforeStreaming(t *testing.T) {
+	manager, err := NewManager(Config{
+		Name: "test_session",
+		KeyPairs: [][]byte{
+			[]byte("0123456789abcdef0123456789abcdef"),
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	handler := lazydispatch.ResponseBuffer().Handler(manager.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		session, err := Get(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		session.Values["stream"] = "saved"
+		stream, err := lazysse.Start(w, r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer stream.Close()
+		if err := stream.Send(lazysse.Event{Data: []string{"ok"}}); err != nil {
+			t.Fatal(err)
+		}
+	})))
+
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+	if got, want := response.Body.String(), "data: ok\n\n"; got != want {
+		t.Fatalf("body = %q, want %q", got, want)
+	}
+	if cookies := response.Result().Cookies(); len(cookies) != 1 {
+		t.Fatalf("cookies = %d, want 1", len(cookies))
 	}
 }
 

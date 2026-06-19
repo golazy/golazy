@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"golazy.dev/lazysse"
 )
 
 func TestResponseBufferFlushesAfterHandlerReturns(t *testing.T) {
@@ -55,5 +57,35 @@ func TestResponseBufferCanResetResponse(t *testing.T) {
 	}
 	if response.Header().Get("X-Test") != "fresh" {
 		t.Fatalf("X-Test = %q, want fresh", response.Header().Get("X-Test"))
+	}
+}
+
+func TestResponseBufferCanStartStreaming(t *testing.T) {
+	handler := ResponseBuffer().Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Test", "stream")
+		_, _ = fmt.Fprint(w, "discarded")
+		stream, err := lazysse.Start(w, r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer stream.Close()
+		if err := stream.Send(lazysse.Event{Event: "ready", Data: []string{"ok"}}); err != nil {
+			t.Fatal(err)
+		}
+		w.(interface{ Reset() }).Reset()
+		_, _ = fmt.Fprint(w, "late error body")
+	}))
+
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+	if got, want := response.Header().Get("X-Test"), "stream"; got != want {
+		t.Fatalf("X-Test = %q, want %q", got, want)
+	}
+	if got, want := response.Body.String(), "event: ready\ndata: ok\n\n"; got != want {
+		t.Fatalf("body = %q, want %q", got, want)
 	}
 }

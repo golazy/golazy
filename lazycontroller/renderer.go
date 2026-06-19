@@ -36,6 +36,8 @@ type Base struct {
 	viewPath   string
 	controller string
 	layout     string
+	useLayout  bool
+	status     int
 	data       map[string]any
 	helpers    map[string]any
 	frameOpts  []lazyturbo.FrameOption
@@ -58,6 +60,7 @@ func NewBase(ctx context.Context, viewPath ...string) (Base, error) {
 		viewPath:   controller,
 		controller: controller,
 		layout:     "app",
+		useLayout:  true,
 	}, nil
 }
 
@@ -89,6 +92,8 @@ func (b *Base) BindRequest(w http.ResponseWriter, r *http.Request, route lazyvie
 	if b.layout == "" {
 		b.layout = "app"
 	}
+	b.useLayout = true
+	b.status = 0
 	b.data = make(map[string]any)
 	b.helpers = make(map[string]any)
 	b.frameOpts = nil
@@ -101,6 +106,8 @@ func (b *Base) ResetRequest() {
 	b.writer = nil
 	b.route = lazyview.Route{}
 	b.controller = b.viewPath
+	b.useLayout = true
+	b.status = 0
 	b.data = nil
 	b.helpers = nil
 	b.frameOpts = nil
@@ -135,8 +142,17 @@ func (b *Base) Set(name string, value any) {
 	b.data[name] = value
 }
 
-func (b *Base) SetLayout(layout string) {
+func (b *Base) Layout(layout string) {
 	b.layout = layout
+	b.useLayout = true
+}
+
+func (b *Base) SetLayout(layout string) {
+	b.Layout(layout)
+}
+
+func (b *Base) NoLayout() {
+	b.useLayout = false
 }
 
 func (b *Base) Helper(name string, helper any) {
@@ -183,7 +199,7 @@ func (b *Base) Render(view string) error {
 		Controller: b.controller,
 		Action:     view,
 		Layout:     b.layout,
-		UseLayout:  true,
+		UseLayout:  b.useLayout,
 	})
 }
 
@@ -227,8 +243,10 @@ func (b *Base) renderTurboFrame(id string, opts []lazyturbo.FrameOption) error {
 	if b.writer.Header().Get("Content-Type") == "" {
 		b.writer.Header().Set("Content-Type", frame.ContentType)
 	}
-	_, err = b.writer.Write([]byte(frame.Body))
-	return err
+	buffer := newBufferedResponse()
+	copyHeaders(buffer.Header(), b.writer.Header())
+	_, _ = buffer.Write([]byte(frame.Body))
+	return b.writeBufferedResponse(buffer)
 }
 
 func (b *Base) renderView(options lazyview.Options) error {
@@ -239,7 +257,14 @@ func (b *Base) renderView(options lazyview.Options) error {
 	if options.Format != string(HTML) {
 		options.UseLayout = false
 	}
-	return b.renderer.Render(options)
+
+	buffer := newBufferedResponse()
+	copyHeaders(buffer.Header(), b.writer.Header())
+	options.Writer = buffer
+	if err := b.renderer.Render(options); err != nil {
+		return err
+	}
+	return b.writeBufferedResponse(buffer)
 }
 
 func (b *Base) HandleError(w http.ResponseWriter, r *http.Request, err error) error {
@@ -316,6 +341,7 @@ func (b *Base) returnFile(w http.ResponseWriter, r *http.Request, file string, s
 type bufferedResponse struct {
 	header http.Header
 	body   bytes.Buffer
+	status int
 	sent   bool
 }
 
@@ -340,7 +366,32 @@ func (w *bufferedResponse) WriteHeader(status int) {
 	if w.sent {
 		return
 	}
+	w.status = status
 	w.sent = true
+}
+
+func (b *Base) writeBufferedResponse(buffer *bufferedResponse) error {
+	if buffer == nil {
+		return fmt.Errorf("controller response buffer is missing")
+	}
+	status := buffer.status
+	if b.status != 0 {
+		status = b.status
+	}
+	if status == 0 {
+		status = http.StatusOK
+	}
+	if status < 100 || status > 999 {
+		return fmt.Errorf("lazycontroller: invalid response status %d", status)
+	}
+
+	copyHeaders(b.writer.Header(), buffer.Header())
+	b.writer.WriteHeader(status)
+	if buffer.body.Len() == 0 {
+		return nil
+	}
+	_, err := b.writer.Write(buffer.body.Bytes())
+	return err
 }
 
 func copyHeaders(target http.Header, source http.Header) {

@@ -34,6 +34,7 @@ type BufferedResponseWriter struct {
 	body   bytes.Buffer
 	status int
 	sent   bool
+	stream bool
 }
 
 func NewBufferedResponseWriter(w http.ResponseWriter) *BufferedResponseWriter {
@@ -48,6 +49,9 @@ func (w *BufferedResponseWriter) Header() http.Header {
 }
 
 func (w *BufferedResponseWriter) Write(data []byte) (int, error) {
+	if w.stream {
+		return len(data), nil
+	}
 	if !w.sent {
 		w.WriteHeader(http.StatusOK)
 	}
@@ -67,6 +71,9 @@ func (w *BufferedResponseWriter) WasResponseSent() bool {
 }
 
 func (w *BufferedResponseWriter) Reset() {
+	if w.stream {
+		return
+	}
 	w.header = make(http.Header)
 	w.body.Reset()
 	w.status = 0
@@ -74,6 +81,9 @@ func (w *BufferedResponseWriter) Reset() {
 }
 
 func (w *BufferedResponseWriter) Flush() error {
+	if w.stream {
+		return nil
+	}
 	if !w.sent && len(w.header) == 0 {
 		return nil
 	}
@@ -94,4 +104,22 @@ func (w *BufferedResponseWriter) Flush() error {
 
 func (w *BufferedResponseWriter) Unwrap() http.ResponseWriter {
 	return w.writer
+}
+
+// StartStream commits the buffered headers and lets callers write directly to
+// the wrapped response writer.
+func (w *BufferedResponseWriter) StartStream(status int) (http.ResponseWriter, error) {
+	if status == 0 {
+		status = http.StatusOK
+	}
+	for key, values := range w.header {
+		w.writer.Header().Del(key)
+		w.writer.Header()[key] = append([]string(nil), values...)
+	}
+	w.body.Reset()
+	w.status = status
+	w.sent = true
+	w.stream = true
+	w.writer.WriteHeader(status)
+	return w.writer, nil
 }

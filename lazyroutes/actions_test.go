@@ -12,6 +12,7 @@ import (
 
 	"golazy.dev/lazycontroller"
 	"golazy.dev/lazydispatch"
+	"golazy.dev/lazysse"
 	_ "golazy.dev/lazyview/gotmpl"
 )
 
@@ -32,6 +33,13 @@ func (c *autoRenderController) Index(_ http.ResponseWriter, _ *http.Request) err
 	return nil
 }
 
+func (c *autoRenderController) Created(_ http.ResponseWriter, _ *http.Request) error {
+	c.Status(http.StatusCreated)
+	c.Header().Set("X-Controller", "auto-render")
+	c.Set("message", "created")
+	return nil
+}
+
 func (c *autoRenderController) ManualRender(_ http.ResponseWriter, _ *http.Request) error {
 	c.Set("message", "manual")
 	return c.Render("index")
@@ -44,6 +52,27 @@ func (c *autoRenderController) Write(w http.ResponseWriter, _ *http.Request) err
 
 func (c *autoRenderController) Redirect(_ http.ResponseWriter, _ *http.Request) error {
 	return c.RedirectTo("/posts")
+}
+
+func (c *autoRenderController) Stream(_ http.ResponseWriter, _ *http.Request) error {
+	stream, err := c.SSEStream()
+	if err != nil {
+		return err
+	}
+	defer stream.Close()
+	return stream.Send(lazysse.Event{Event: "ready", Data: []string{"ok"}})
+}
+
+func (c *autoRenderController) BrokenStream(_ http.ResponseWriter, _ *http.Request) error {
+	stream, err := c.SSEStream()
+	if err != nil {
+		return err
+	}
+	defer stream.Close()
+	if err := stream.Send(lazysse.Event{Data: []string{"partial"}}); err != nil {
+		return err
+	}
+	return lazycontroller.Error(http.StatusInternalServerError, errors.New("stream failed"))
 }
 
 func (c *autoRenderController) Broken(w http.ResponseWriter, _ *http.Request) error {
@@ -68,6 +97,25 @@ func TestControllerActionAutoRendersDefaultView(t *testing.T) {
 		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
 	}
 	if got, want := response.Body.String(), "<main>index hello</main>"; got != want {
+		t.Fatalf("body = %q, want %q", got, want)
+	}
+}
+
+func TestControllerActionAutoRenderUsesResponseHelpers(t *testing.T) {
+	scope := newAutoRenderScope(t)
+	scope.Post("/posts", newAutoRenderController, (*autoRenderController).Created)
+	handler := lazydispatch.ResponseBuffer().Handler(scope)
+
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/posts", nil))
+
+	if response.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusCreated)
+	}
+	if got, want := response.Header().Get("X-Controller"), "auto-render"; got != want {
+		t.Fatalf("X-Controller = %q, want %q", got, want)
+	}
+	if got, want := response.Body.String(), "<main>created created</main>"; got != want {
 		t.Fatalf("body = %q, want %q", got, want)
 	}
 }
@@ -168,6 +216,44 @@ func TestControllerActionSkipsAutoRenderWhenRedirecting(t *testing.T) {
 	}
 	if strings.Contains(response.Body.String(), "index") {
 		t.Fatalf("body contains auto-rendered view: %q", response.Body.String())
+	}
+}
+
+func TestControllerActionSkipsAutoRenderWhenStreaming(t *testing.T) {
+	scope := newAutoRenderScope(t)
+	scope.Get("/stream", newAutoRenderController, (*autoRenderController).Stream)
+	handler := lazydispatch.ResponseBuffer().Handler(lazydispatch.ETag().Handler(scope))
+
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/stream", nil))
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+	if got, want := response.Header().Get("Content-Type"), "text/event-stream"; got != want {
+		t.Fatalf("Content-Type = %q, want %q", got, want)
+	}
+	if got := response.Header().Get("ETag"); got != "" {
+		t.Fatalf("ETag = %q, want empty", got)
+	}
+	if got, want := response.Body.String(), "event: ready\ndata: ok\n\n"; got != want {
+		t.Fatalf("body = %q, want %q", got, want)
+	}
+}
+
+func TestControllerErrorAfterStreamingDoesNotRenderErrorBody(t *testing.T) {
+	scope := newAutoRenderScope(t)
+	scope.Get("/stream", newAutoRenderController, (*autoRenderController).BrokenStream)
+	handler := lazydispatch.ResponseBuffer().Handler(scope)
+
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/stream", nil))
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+	if got, want := response.Body.String(), "data: partial\n\n"; got != want {
+		t.Fatalf("body = %q, want %q", got, want)
 	}
 }
 
@@ -324,6 +410,9 @@ func newAutoRenderScope(t *testing.T) *Scope {
 		"layouts/app.html.tpl": {Data: []byte(`<main>{{.content}}</main>`)},
 		"auto_render/index.html.tpl": {
 			Data: []byte(`index {{.message}}`),
+		},
+		"auto_render/created.html.tpl": {
+			Data: []byte(`created {{.message}}`),
 		},
 		"app/error.html.tpl": {Data: []byte(`error {{.status}} {{.statusText}} {{.error}}`)},
 	})

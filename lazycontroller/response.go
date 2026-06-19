@@ -52,3 +52,24 @@ func WriteError(w http.ResponseWriter, _ *http.Request, err error) {
 	status := StatusCode(err)
 	http.Error(w, http.StatusText(status), status)
 }
+
+// Status sets the HTTP status code used by the next controller render.
+//
+// It does not write the response immediately, so actions can still rely on
+// automatic rendering after setting a non-200 status.
+func (b *Base) Status(code int) {
+	b.status = code
+}
+
+// Header returns the response header map for the current controller request.
+func (b *Base) Header() http.Header {
+	if b == nil || b.writer == nil {
+		return http.Header{}
+	}
+	return b.writer.Header()
+}
+
+// ContentType sets the response Content-Type header.
+func (b *Base) ContentType(value string) {
+	b.Header().Set("Content-Type", value)
+}

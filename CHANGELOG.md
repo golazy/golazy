@@ -7,6 +7,23 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.8] - 2026-06-19
+
+### Added
+
+- Controller actions can receive route parameter arguments and generated
+  request values from `GenX` controller methods. Generators may depend on
+  standard action arguments and other generated values, and generated values
+  are cached for the current request.
+- `lazyroutes.Scope.Namespace` now prefixes route paths, route names, route
+  metadata, resource routes, and root route names such as `admin_root`.
+
+### Changed
+
+- Namespaced controller routes render from matching nested view directories
+  such as `views/admin/posts`, without falling back to the non-namespaced
+  controller view.
+
 ## [0.1.7] - 2026-06-17
 
 ### Added
@@ -169,7 +186,8 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Route construction with embedded public-file fallback.
 - Method-not-allowed handling for application routes.
 
-[Unreleased]: https://github.com/golazy/golazy/compare/v0.1.7...HEAD
+[Unreleased]: https://github.com/golazy/golazy/compare/v0.1.8...HEAD
+[0.1.8]: https://github.com/golazy/golazy/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/golazy/golazy/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/golazy/golazy/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/golazy/golazy/compare/v0.1.4...v0.1.5

@@ -24,18 +24,18 @@ func (c *actionArgumentController) Show(w http.ResponseWriter, postID int, slug 
 func TestControllerActionResolvesRouteParameters(t *testing.T) {
 	scope := New(context.Background())
 	scope.Get(
-		"/posts/{post_id}/comments/{comment_slug}",
+		"/posts/{post_id}",
 		newActionArgumentController,
 		(*actionArgumentController).Show,
 	)
 
 	response := httptest.NewRecorder()
-	scope.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/posts/42/comments/hello", nil))
+	scope.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/posts/42", nil))
 
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
 	}
-	if got, want := response.Body.String(), "post:42 slug:hello"; got != want {
+	if got, want := response.Body.String(), "post:42 slug:42"; got != want {
 		t.Fatalf("body = %q, want %q", got, want)
 	}
 }

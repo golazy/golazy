@@ -52,6 +52,11 @@ func (c *Context) HelperFuncs() map[string]any {
 	return helpers
 }
 
+// Helpers returns a copy of the unbound helpers for nested render operations.
+func (c *Context) Helpers() map[string]any {
+	return copyHelpers(c.helpers)
+}
+
 // Helper returns one helper bound to the current render context.
 func (c *Context) Helper(name string) (any, bool) {
 	helper, ok := c.helpers[name]

@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"golazy.dev/lazyturbo"
 	"golazy.dev/lazyview"
 )
 
@@ -37,6 +38,7 @@ type Base struct {
 	layout     string
 	data       map[string]any
 	helpers    map[string]any
+	frameOpts  []lazyturbo.FrameOption
 }
 
 func NewBase(ctx context.Context, viewPath ...string) (Base, error) {
@@ -89,6 +91,7 @@ func (b *Base) BindRequest(w http.ResponseWriter, r *http.Request, route lazyvie
 	}
 	b.data = make(map[string]any)
 	b.helpers = make(map[string]any)
+	b.frameOpts = nil
 	return nil
 }
 
@@ -100,6 +103,7 @@ func (b *Base) ResetRequest() {
 	b.controller = b.viewPath
 	b.data = nil
 	b.helpers = nil
+	b.frameOpts = nil
 }
 
 type appContext struct {
@@ -163,7 +167,12 @@ func (b *Base) Render(view string) error {
 		return fmt.Errorf("view name is required")
 	}
 
-	return b.renderer.Render(lazyview.Options{
+	addVary(b.writer.Header(), "Accept")
+	if b.IsTurboFrame() {
+		return b.renderTurboFrame(lazyturbo.FrameID(b.request), b.frameOpts)
+	}
+
+	return b.renderView(lazyview.Options{
 		Context:    b.ctx,
 		Request:    b.request,
 		Writer:     b.writer,
@@ -176,6 +185,61 @@ func (b *Base) Render(view string) error {
 		Layout:     b.layout,
 		UseLayout:  true,
 	})
+}
+
+func (b *Base) SetTurboFrameOptions(opts ...lazyturbo.FrameOption) {
+	b.frameOpts = append([]lazyturbo.FrameOption(nil), opts...)
+}
+
+func (b *Base) RenderTurboFrame(id string, opts ...lazyturbo.FrameOption) error {
+	if b.writer == nil || b.renderer == nil {
+		return fmt.Errorf("controller base is not initialized")
+	}
+	return b.renderTurboFrame(id, opts)
+}
+
+func (b *Base) renderTurboFrame(id string, opts []lazyturbo.FrameOption) error {
+	id = strings.TrimSpace(id)
+	if err := lazyturbo.ValidateFrameID(id); err != nil {
+		return err
+	}
+	addVary(b.writer.Header(), "Accept", "Turbo-Frame")
+
+	body, err := b.renderer.RenderString(lazyview.Options{
+		Context:    b.ctx,
+		Request:    b.request,
+		Variables:  b.data,
+		Helpers:    b.helpers,
+		Route:      b.route,
+		Namespace:  b.route.Namespace,
+		Controller: b.controller,
+		Partial:    id + "_frame",
+		Format:     string(HTML),
+		UseLayout:  false,
+	})
+	if err != nil {
+		return err
+	}
+	frame, err := lazyturbo.FrameTag(id, body, opts...)
+	if err != nil {
+		return err
+	}
+	if b.writer.Header().Get("Content-Type") == "" {
+		b.writer.Header().Set("Content-Type", frame.ContentType)
+	}
+	_, err = b.writer.Write([]byte(frame.Body))
+	return err
+}
+
+func (b *Base) renderView(options lazyview.Options) error {
+	options.Format = string(b.Format())
+	if b.IsTurboFrame() {
+		options.Format = string(HTML)
+	}
+	if options.Format != string(HTML) {
+		options.UseLayout = false
+	}
+	return b.renderer.Render(options)
 }
 
 func (b *Base) HandleError(w http.ResponseWriter, r *http.Request, err error) error {
@@ -283,5 +347,28 @@ func copyHeaders(target http.Header, source http.Header) {
 	for key, values := range source {
 		target.Del(key)
 		target[key] = append([]string(nil), values...)
+	}
+}
+
+func addVary(header http.Header, values ...string) {
+	if header == nil {
+		return
+	}
+	existing := map[string]bool{}
+	for _, value := range header.Values("Vary") {
+		for _, part := range strings.Split(value, ",") {
+			part = strings.TrimSpace(part)
+			if part != "" {
+				existing[strings.ToLower(part)] = true
+			}
+		}
+	}
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || existing[strings.ToLower(value)] {
+			continue
+		}
+		header.Add("Vary", value)
+		existing[strings.ToLower(value)] = true
 	}
 }

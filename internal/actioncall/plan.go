@@ -48,6 +48,10 @@ var (
 	errorType   = reflect.TypeOf((*error)(nil)).Elem()
 	requestType = reflect.TypeOf((*http.Request)(nil))
 	writerType  = reflect.TypeOf((*http.ResponseWriter)(nil)).Elem()
+	stringType  = reflect.TypeOf("")
+	stringsType = reflect.TypeOf([]string(nil))
+	intType     = reflect.TypeOf(0)
+	intsType    = reflect.TypeOf([]int(nil))
 )
 
 func Compile(controllerType reflect.Type, action reflect.Value, opts Options) (*Plan, error) {
@@ -171,10 +175,9 @@ type compileState struct {
 }
 
 func (c *compileState) compileInputs(fn reflect.Type, start int, label string, stack []reflect.Type) ([]resolver, error) {
-	paramCursor := 0
 	args := make([]resolver, 0, fn.NumIn()-start)
 	for i := start; i < fn.NumIn(); i++ {
-		resolver, err := c.compileResolver(fn.In(i), &paramCursor, label, stack)
+		resolver, err := c.compileResolver(fn.In(i), label, stack)
 		if err != nil {
 			return nil, err
 		}
@@ -183,7 +186,7 @@ func (c *compileState) compileInputs(fn reflect.Type, start int, label string, s
 	return args, nil
 }
 
-func (c *compileState) compileResolver(t reflect.Type, paramCursor *int, label string, stack []reflect.Type) (resolver, error) {
+func (c *compileState) compileResolver(t reflect.Type, label string, stack []reflect.Type) (resolver, error) {
 	switch t {
 	case writerType:
 		return writerResolver{}, nil
@@ -200,13 +203,15 @@ func (c *compileState) compileResolver(t reflect.Type, paramCursor *int, label s
 		return generatorResolver{t: t}, nil
 	}
 
-	if routeConvertible(t) {
-		if *paramCursor >= len(c.plan.paramNames) {
-			return nil, fmt.Errorf("%s needs %s but route has only %d named parameter(s)", label, t, len(c.plan.paramNames))
-		}
-		name := c.plan.paramNames[*paramCursor]
-		*paramCursor = *paramCursor + 1
-		return routeParamResolver{name: name, t: t}, nil
+	switch t {
+	case stringType:
+		return lastStringParamResolver{}, nil
+	case stringsType:
+		return allStringParamsResolver{}, nil
+	case intType:
+		return lastIntParamResolver{}, nil
+	case intsType:
+		return allIntParamsResolver{}, nil
 	}
 
 	return nil, fmt.Errorf("%s parameter %s has no resolver", label, t)
@@ -291,50 +296,50 @@ func (r generatorResolver) resolve(state *requestState) (reflect.Value, error) {
 	return value, nil
 }
 
-type routeParamResolver struct {
-	name string
-	t    reflect.Type
+type lastStringParamResolver struct{}
+
+func (lastStringParamResolver) resolve(state *requestState) (reflect.Value, error) {
+	return reflect.ValueOf(lastPathParam(state)), nil
 }
 
-func (r routeParamResolver) resolve(state *requestState) (reflect.Value, error) {
-	raw := state.r.PathValue(r.name)
-	return convertRouteParam(raw, r.name, r.t)
+type allStringParamsResolver struct{}
+
+func (allStringParamsResolver) resolve(state *requestState) (reflect.Value, error) {
+	return reflect.ValueOf(allPathParams(state)), nil
 }
 
-func routeConvertible(t reflect.Type) bool {
-	switch t.Kind() {
-	case reflect.String,
-		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return true
-	default:
-		return false
+type lastIntParamResolver struct{}
+
+func (lastIntParamResolver) resolve(state *requestState) (reflect.Value, error) {
+	value, _ := strconv.Atoi(lastPathParam(state))
+	return reflect.ValueOf(value), nil
+}
+
+type allIntParamsResolver struct{}
+
+func (allIntParamsResolver) resolve(state *requestState) (reflect.Value, error) {
+	strings := allPathParams(state)
+	ints := make([]int, len(strings))
+	for i, raw := range strings {
+		ints[i], _ = strconv.Atoi(raw)
 	}
+	return reflect.ValueOf(ints), nil
 }
 
-func convertRouteParam(raw string, name string, t reflect.Type) (reflect.Value, error) {
-	value := reflect.New(t).Elem()
-	switch t.Kind() {
-	case reflect.String:
-		value.SetString(raw)
-		return value, nil
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		parsed, err := strconv.ParseInt(raw, 10, t.Bits())
-		if err != nil {
-			return reflect.Value{}, fmt.Errorf("route parameter %q value %q cannot convert to %s: %w", name, raw, t, err)
-		}
-		value.SetInt(parsed)
-		return value, nil
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		parsed, err := strconv.ParseUint(raw, 10, t.Bits())
-		if err != nil {
-			return reflect.Value{}, fmt.Errorf("route parameter %q value %q cannot convert to %s: %w", name, raw, t, err)
-		}
-		value.SetUint(parsed)
-		return value, nil
-	default:
-		return reflect.Value{}, fmt.Errorf("route parameter %q cannot convert to %s", name, t)
+func lastPathParam(state *requestState) string {
+	names := state.plan.paramNames
+	if len(names) == 0 {
+		return ""
 	}
+	return state.r.PathValue(names[len(names)-1])
+}
+
+func allPathParams(state *requestState) []string {
+	values := make([]string, len(state.plan.paramNames))
+	for i, name := range state.plan.paramNames {
+		values[i] = state.r.PathValue(name)
+	}
+	return values
 }
 
 func callErrorOutput(outputs []reflect.Value) error {

@@ -18,6 +18,7 @@ import (
 	"golazy.dev/lazyforms"
 	"golazy.dev/lazyroutes"
 	"golazy.dev/lazysession"
+	"golazy.dev/lazyturbo"
 )
 
 type Helpers []map[string]any
@@ -117,6 +118,7 @@ func New(config Config) *App {
 		renderer.AddHelpers(router.RegisterHelpers())
 		renderer.AddHelpers(assets.Helpers())
 		renderer.AddHelpers(lazyforms.Helpers(router))
+		renderer.AddHelpers(lazyturbo.Helpers())
 		for _, helpers := range config.Helpers {
 			renderer.AddHelpers(helpers)
 		}

@@ -340,6 +340,8 @@ func contentTypeForFormat(format string) string {
 	switch format {
 	case "json":
 		return "application/json; charset=utf-8"
+	case "turbo_stream":
+		return "text/vnd.turbo-stream.html; charset=utf-8"
 	default:
 		return "text/html; charset=utf-8"
 	}

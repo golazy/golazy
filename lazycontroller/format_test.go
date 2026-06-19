@@ -38,6 +38,31 @@ func TestFormatFromRequest(t *testing.T) {
 			},
 			want: TurboFrame,
 		},
+		{
+			name:   "png accept",
+			header: http.Header{"Accept": {"image/png"}},
+			want:   PNG,
+		},
+		{
+			name:   "jpeg accept",
+			header: http.Header{"Accept": {"image/jpeg"}},
+			want:   JPEG,
+		},
+		{
+			name:   "gif accept",
+			header: http.Header{"Accept": {"image/gif"}},
+			want:   GIF,
+		},
+		{
+			name:   "generic image accept",
+			header: http.Header{"Accept": {"image/webp"}},
+			want:   Image,
+		},
+		{
+			name:   "sse accept",
+			header: http.Header{"Accept": {"text/event-stream"}},
+			want:   SSE,
+		},
 	}
 
 	for _, tt := range tests {
@@ -107,6 +132,34 @@ func TestRenderUsesTurboFrameHeader(t *testing.T) {
 	}
 }
 
+func TestWantsUsesSelectedFormat(t *testing.T) {
+	base, response := newRenderTestBase(t, fstest.MapFS{
+		"layouts/app.html.tpl": {Data: []byte(`{{.content}}`)},
+	})
+	request := httptest.NewRequest(http.MethodGet, "/", nil)
+	request.Header.Set("Accept", "application/json")
+	if err := base.BindRequest(response, request, lazyview.Route{Controller: "posts", Action: "Show"}); err != nil {
+		t.Fatal(err)
+	}
+
+	err := base.Wants(Formats{
+		HTML: func() error {
+			response.Write([]byte("html"))
+			return nil
+		},
+		JSON: func() error {
+			response.Write([]byte("json"))
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := response.Body.String(), "json"; got != want {
+		t.Fatalf("body = %q, want %q", got, want)
+	}
+}
+
 func TestRespondUsesSelectedFormat(t *testing.T) {
 	base, response := newRenderTestBase(t, fstest.MapFS{
 		"layouts/app.html.tpl": {Data: []byte(`{{.content}}`)},
@@ -132,6 +185,186 @@ func TestRespondUsesSelectedFormat(t *testing.T) {
 	}
 	if got, want := response.Body.String(), "json"; got != want {
 		t.Fatalf("body = %q, want %q", got, want)
+	}
+}
+
+func TestWantsFallsBackFromTurboFrameToHTML(t *testing.T) {
+	base, response := newRenderTestBase(t, fstest.MapFS{
+		"layouts/app.html.tpl": {Data: []byte(`{{.content}}`)},
+	})
+	request := httptest.NewRequest(http.MethodGet, "/", nil)
+	request.Header.Set("Turbo-Frame", "car")
+	if err := base.BindRequest(response, request, lazyview.Route{Controller: "posts", Action: "Show"}); err != nil {
+		t.Fatal(err)
+	}
+
+	err := base.Wants(Formats{
+		HTML: func() error {
+			response.Write([]byte("html"))
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := response.Body.String(), "html"; got != want {
+		t.Fatalf("body = %q, want %q", got, want)
+	}
+}
+
+func TestWantsUsesLaterAcceptedFormatWhenPreferredIsUnavailable(t *testing.T) {
+	base, response := newRenderTestBase(t, fstest.MapFS{
+		"layouts/app.html.tpl": {Data: []byte(`{{.content}}`)},
+	})
+	request := httptest.NewRequest(http.MethodGet, "/", nil)
+	request.Header.Set("Accept", "application/json, text/html")
+	if err := base.BindRequest(response, request, lazyview.Route{Controller: "posts", Action: "Show"}); err != nil {
+		t.Fatal(err)
+	}
+
+	err := base.Wants(Formats{
+		HTML: func() error {
+			response.Write([]byte("html"))
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := response.Body.String(), "html"; got != want {
+		t.Fatalf("body = %q, want %q", got, want)
+	}
+}
+
+func TestWantsUsesWildcardAccept(t *testing.T) {
+	base, response := newRenderTestBase(t, fstest.MapFS{
+		"layouts/app.html.tpl": {Data: []byte(`{{.content}}`)},
+	})
+	request := httptest.NewRequest(http.MethodGet, "/", nil)
+	request.Header.Set("Accept", "*/*")
+	if err := base.BindRequest(response, request, lazyview.Route{Controller: "posts", Action: "Show"}); err != nil {
+		t.Fatal(err)
+	}
+
+	err := base.Wants(Formats{
+		JSON: func() error {
+			response.Write([]byte("json"))
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := response.Body.String(), "json"; got != want {
+		t.Fatalf("body = %q, want %q", got, want)
+	}
+}
+
+func TestWantsFallsBackFromConcreteImageToImage(t *testing.T) {
+	base, response := newRenderTestBase(t, fstest.MapFS{
+		"layouts/app.html.tpl": {Data: []byte(`{{.content}}`)},
+	})
+	request := httptest.NewRequest(http.MethodGet, "/", nil)
+	request.Header.Set("Accept", "image/png")
+	if err := base.BindRequest(response, request, lazyview.Route{Controller: "posts", Action: "Show"}); err != nil {
+		t.Fatal(err)
+	}
+
+	err := base.Wants(Formats{
+		Image: func() error {
+			response.Write([]byte("image"))
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := response.Body.String(), "image"; got != want {
+		t.Fatalf("body = %q, want %q", got, want)
+	}
+}
+
+func TestWantsUsesConcreteImageForImageWildcard(t *testing.T) {
+	base, response := newRenderTestBase(t, fstest.MapFS{
+		"layouts/app.html.tpl": {Data: []byte(`{{.content}}`)},
+	})
+	request := httptest.NewRequest(http.MethodGet, "/", nil)
+	request.Header.Set("Accept", "image/*")
+	if err := base.BindRequest(response, request, lazyview.Route{Controller: "posts", Action: "Show"}); err != nil {
+		t.Fatal(err)
+	}
+
+	err := base.Wants(Formats{
+		PNG: func() error {
+			response.Write([]byte("png"))
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := response.Body.String(), "png"; got != want {
+		t.Fatalf("body = %q, want %q", got, want)
+	}
+}
+
+func TestWantsReturnsNotAcceptableForUnavailableFormat(t *testing.T) {
+	base, response := newRenderTestBase(t, fstest.MapFS{
+		"layouts/app.html.tpl": {Data: []byte(`{{.content}}`)},
+	})
+	request := httptest.NewRequest(http.MethodGet, "/", nil)
+	request.Header.Set("Accept", "application/json")
+	if err := base.BindRequest(response, request, lazyview.Route{Controller: "posts", Action: "Show"}); err != nil {
+		t.Fatal(err)
+	}
+
+	err := base.Wants(Formats{
+		HTML: func() error { return nil },
+	})
+	if err == nil {
+		t.Fatal("Wants returned nil, want error")
+	}
+	if got, want := StatusCode(err), http.StatusNotAcceptable; got != want {
+		t.Fatalf("StatusCode = %d, want %d", got, want)
+	}
+}
+
+func TestNewFormatRegistersContentTypeAndSuffix(t *testing.T) {
+	format := NewFormat(
+		"application/x-golazy-format-test",
+		As("golazy_format_test"),
+		Suffix("glft"),
+	)
+
+	got, ok := FormatFromContentType("application/x-golazy-format-test; charset=utf-8")
+	if !ok {
+		t.Fatal("FormatFromContentType did not resolve custom format")
+	}
+	if got != format {
+		t.Fatalf("FormatFromContentType = %q, want %q", got, format)
+	}
+
+	got, ok = FormatFromSuffix(".glft")
+	if !ok {
+		t.Fatal("FormatFromSuffix did not resolve custom format")
+	}
+	if got != format {
+		t.Fatalf("FormatFromSuffix = %q, want %q", got, format)
+	}
+}
+
+func TestNewFormatDerivesNameAndSuffix(t *testing.T) {
+	format := NewFormat("application/x-golazy-derived-test")
+	if got, want := format, Format("x_golazy_derived_test"); got != want {
+		t.Fatalf("NewFormat = %q, want %q", got, want)
+	}
+
+	got, ok := FormatFromSuffix("x_golazy_derived_test")
+	if !ok {
+		t.Fatal("FormatFromSuffix did not resolve derived suffix")
+	}
+	if got != format {
+		t.Fatalf("FormatFromSuffix = %q, want %q", got, format)
 	}
 }
 

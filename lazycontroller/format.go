@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"mime"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"unicode"
 
 	"golazy.dev/lazyturbo"
 )
@@ -20,6 +22,11 @@ const (
 	JSON        Format = "json"
 	TurboFrame  Format = "turbo_frame"
 	TurboStream Format = "turbo_stream"
+	PNG         Format = "png"
+	JPEG        Format = "jpeg"
+	GIF         Format = "gif"
+	Image       Format = "image"
+	SSE         Format = "sse"
 )
 
 type formatContextKey struct{}
@@ -28,11 +35,69 @@ var globalFormats = newFormatRegistry()
 
 func init() {
 	RegisterFormat(HTML, "text/html", "application/xhtml+xml")
-	RegisterFormat(JSON, "application/json")
+	RegisterFormat(JSON, "application/json", "application/problem+json")
 	RegisterFormat(TurboStream, lazyturbo.StreamMIME)
+	RegisterFormat(PNG, "image/png")
+	RegisterFormat(JPEG, "image/jpeg", "image/pjpeg")
+	RegisterFormat(GIF, "image/gif")
+	RegisterFormat(Image, "image/*")
+	RegisterFormat(SSE, "text/event-stream")
 	RegisterFormatSuffix(HTML, "html")
 	RegisterFormatSuffix(JSON, "json")
 	RegisterFormatSuffix(TurboStream, "turbo_stream")
+	RegisterFormatSuffix(PNG, "png")
+	RegisterFormatSuffix(JPEG, "jpg", "jpeg", "jpe", "pjpeg")
+	RegisterFormatSuffix(GIF, "gif")
+	RegisterFormatSuffix(SSE, "sse", "event_stream")
+}
+
+type newFormatOptions struct {
+	name     string
+	suffixes []string
+}
+
+// FormatOption configures a custom format created by NewFormat.
+type FormatOption func(*newFormatOptions)
+
+// As sets the symbolic format name returned by NewFormat.
+func As(name string) FormatOption {
+	return func(options *newFormatOptions) {
+		options.name = name
+	}
+}
+
+// Suffix registers one or more URL suffixes for a custom format.
+func Suffix(suffixes ...string) FormatOption {
+	return func(options *newFormatOptions) {
+		options.suffixes = append(options.suffixes, suffixes...)
+	}
+}
+
+// NewFormat registers a custom MIME type and returns its symbolic format.
+func NewFormat(contentType string, options ...FormatOption) Format {
+	mediaType, err := parseMediaType(contentType)
+	if err != nil {
+		panic(fmt.Sprintf("lazycontroller: invalid content type %q: %v", contentType, err))
+	}
+	config := newFormatOptions{
+		name: deriveFormatName(mediaType),
+	}
+	for _, option := range options {
+		if option != nil {
+			option(&config)
+		}
+	}
+	format := Format(normalizeFormatName(config.name))
+	if format == "" {
+		panic("lazycontroller: format name is required")
+	}
+	RegisterFormat(format, mediaType)
+	if len(config.suffixes) == 0 {
+		RegisterFormatSuffix(format, string(format))
+	} else {
+		RegisterFormatSuffix(format, config.suffixes...)
+	}
+	return format
 }
 
 // RegisterFormat maps one or more content types to a controller format.
@@ -77,29 +142,83 @@ func FormatFromRequest(r *http.Request) Format {
 	return HTML
 }
 
-type Responses map[Format]func() error
+type Formats map[Format]func() error
+
+type Responses = Formats
+
+// Wants runs the response handler matching the request format.
+func (b *Base) Wants(formats Formats) error {
+	return b.respondTo(formats)
+}
 
 // Respond runs the response handler matching the request format.
 func (b *Base) Respond(responses Responses) error {
-	if len(responses) == 0 {
+	return b.respondTo(Formats(responses))
+}
+
+func (b *Base) respondTo(formats Formats) error {
+	if len(formats) == 0 {
 		return Error(http.StatusNotAcceptable, fmt.Errorf("no response formats are available"))
 	}
-	format := b.Format()
+	format, ok := b.negotiateFormat(formats)
+	if !ok {
+		return Error(http.StatusNotAcceptable, fmt.Errorf("format %q is not available", b.Format()))
+	}
 	if b.writer != nil {
 		addVary(b.writer.Header(), "Accept")
 		if format == TurboFrame {
 			addVary(b.writer.Header(), "Turbo-Frame")
 		}
 	}
-	if response := responses[format]; response != nil {
+	if response := formats[format]; response != nil {
 		return response()
 	}
-	if format == TurboFrame {
-		if response := responses[HTML]; response != nil {
-			return response()
+	return Error(http.StatusNotAcceptable, fmt.Errorf("format %q is not available", format))
+}
+
+func (b *Base) negotiateFormat(formats Formats) (Format, bool) {
+	if b.request != nil && lazyturbo.IsFrameRequest(b.request) {
+		if _, ok := formats[TurboFrame]; ok {
+			return TurboFrame, true
+		}
+		if _, ok := formats[HTML]; ok {
+			return HTML, true
+		}
+		return "", false
+	}
+	if b.request != nil {
+		if format, ok := b.request.Context().Value(formatContextKey{}).(Format); ok && format != "" {
+			return selectFormat(formats, format)
+		}
+		accept := b.request.Header.Get("Accept")
+		preferences := acceptPreferences(accept)
+		if len(preferences) > 0 {
+			for _, preference := range preferences {
+				if preference.mediaType == "*/*" {
+					return firstAvailableFormat(formats)
+				}
+				for _, format := range formatsForMediaType(preference.mediaType) {
+					if selected, ok := selectFormat(formats, format); ok {
+						return selected, true
+					}
+				}
+			}
+			return "", false
 		}
 	}
-	return Error(http.StatusNotAcceptable, fmt.Errorf("format %q is not available", format))
+	return selectFormat(formats, HTML)
+}
+
+func selectFormat(formats Formats, format Format) (Format, bool) {
+	if _, ok := formats[format]; ok {
+		return format, true
+	}
+	if imageFormat(format) {
+		if _, ok := formats[Image]; ok {
+			return Image, true
+		}
+	}
+	return "", false
 }
 
 // Format returns the negotiated response format for the current request.
@@ -126,6 +245,26 @@ func (b *Base) IsTurboFrame() bool {
 
 func (b *Base) IsTurboStream() bool {
 	return b.Is(TurboStream)
+}
+
+func (b *Base) IsPNG() bool {
+	return b.Is(PNG)
+}
+
+func (b *Base) IsJPEG() bool {
+	return b.Is(JPEG)
+}
+
+func (b *Base) IsGIF() bool {
+	return b.Is(GIF)
+}
+
+func (b *Base) IsImage() bool {
+	return b.Is(Image)
+}
+
+func (b *Base) IsSSE() bool {
+	return b.Is(SSE)
 }
 
 type formatRegistry struct {
@@ -172,14 +311,31 @@ func (r *formatRegistry) registerSuffixes(format Format, suffixes ...string) {
 }
 
 func (r *formatRegistry) formatForContentType(contentType string) (Format, bool) {
-	contentType = normalizeContentType(contentType)
-	if contentType == "" {
+	formats := r.formatsForContentType(contentType)
+	if len(formats) == 0 {
 		return "", false
 	}
+	return formats[0], true
+}
+
+func (r *formatRegistry) formatsForContentType(contentType string) []Format {
+	contentType = normalizeContentType(contentType)
+	if contentType == "" {
+		return nil
+	}
+	wildcard := wildcardContentType(contentType)
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	format, ok := r.contentTypes[contentType]
-	return format, ok
+	var formats []Format
+	if format, ok := r.contentTypes[contentType]; ok {
+		formats = appendFormat(formats, format)
+	}
+	if wildcard != "" {
+		if format, ok := r.contentTypes[wildcard]; ok {
+			formats = appendFormat(formats, format)
+		}
+	}
+	return formats
 }
 
 func (r *formatRegistry) formatForSuffix(suffix string) (Format, bool) {
@@ -194,8 +350,25 @@ func (r *formatRegistry) formatForSuffix(suffix string) (Format, bool) {
 }
 
 func formatFromAccept(accept string) (Format, bool) {
-	var selected Format
-	selectedQ := -1.0
+	for _, preference := range acceptPreferences(accept) {
+		if preference.mediaType == "*/*" {
+			return HTML, true
+		}
+		for _, format := range formatsForMediaType(preference.mediaType) {
+			return format, true
+		}
+	}
+	return "", false
+}
+
+type acceptPreference struct {
+	mediaType string
+	q         float64
+	index     int
+}
+
+func acceptPreferences(accept string) []acceptPreference {
+	var preferences []acceptPreference
 	for _, item := range strings.Split(accept, ",") {
 		item = strings.TrimSpace(item)
 		if item == "" {
@@ -213,23 +386,33 @@ func formatFromAccept(accept string) (Format, bool) {
 			}
 			q = parsed
 		}
-		if q <= 0 || q <= selectedQ {
+		if q <= 0 {
 			continue
 		}
-		if format, ok := FormatFromContentType(mediaType); ok {
-			selected = format
-			selectedQ = q
-			continue
-		}
-		if mediaType == "*/*" {
-			selected = HTML
-			selectedQ = q
-		}
+		preferences = append(preferences, acceptPreference{
+			mediaType: normalizeContentType(mediaType),
+			q:         q,
+			index:     len(preferences),
+		})
 	}
-	if selected == "" {
-		return "", false
+	sort.SliceStable(preferences, func(i, j int) bool {
+		if preferences[i].q == preferences[j].q {
+			return preferences[i].index < preferences[j].index
+		}
+		return preferences[i].q > preferences[j].q
+	})
+	return preferences
+}
+
+func formatsForMediaType(mediaType string) []Format {
+	mediaType = normalizeContentType(mediaType)
+	formats := globalFormats.formatsForContentType(mediaType)
+	if mediaType == "image/*" {
+		formats = appendFormat(formats, PNG)
+		formats = appendFormat(formats, JPEG)
+		formats = appendFormat(formats, GIF)
 	}
-	return selected, true
+	return formats
 }
 
 func normalizeContentType(contentType string) string {
@@ -246,4 +429,93 @@ func normalizeContentType(contentType string) string {
 
 func normalizeSuffix(suffix string) string {
 	return strings.Trim(strings.ToLower(strings.TrimSpace(suffix)), ".")
+}
+
+func parseMediaType(contentType string) (string, error) {
+	mediaType, _, err := mime.ParseMediaType(strings.TrimSpace(contentType))
+	if err != nil {
+		return "", err
+	}
+	mediaType = strings.ToLower(mediaType)
+	if !strings.Contains(mediaType, "/") {
+		return "", fmt.Errorf("missing slash")
+	}
+	return mediaType, nil
+}
+
+func wildcardContentType(contentType string) string {
+	mediaType, err := parseMediaType(contentType)
+	if err != nil || strings.HasSuffix(mediaType, "/*") {
+		return ""
+	}
+	mediaTypeType, _, ok := strings.Cut(mediaType, "/")
+	if !ok || mediaTypeType == "" {
+		return ""
+	}
+	return mediaTypeType + "/*"
+}
+
+func deriveFormatName(mediaType string) string {
+	_, subtype, ok := strings.Cut(mediaType, "/")
+	if !ok {
+		return ""
+	}
+	return normalizeFormatName(subtype)
+}
+
+func normalizeFormatName(name string) string {
+	name = strings.TrimSpace(strings.ToLower(name))
+	var builder strings.Builder
+	previousUnderscore := false
+	for _, r := range name {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			builder.WriteRune(r)
+			previousUnderscore = false
+			continue
+		}
+		if !previousUnderscore {
+			builder.WriteByte('_')
+			previousUnderscore = true
+		}
+	}
+	return strings.Trim(builder.String(), "_")
+}
+
+func imageFormat(format Format) bool {
+	switch format {
+	case PNG, JPEG, GIF:
+		return true
+	default:
+		return false
+	}
+}
+
+func firstAvailableFormat(formats Formats) (Format, bool) {
+	preferred := []Format{HTML, JSON, TurboStream, PNG, JPEG, GIF, Image, SSE}
+	for _, format := range preferred {
+		if _, ok := formats[format]; ok {
+			return format, true
+		}
+	}
+	var custom []string
+	for format := range formats {
+		custom = append(custom, string(format))
+	}
+	sort.Strings(custom)
+	if len(custom) == 0 {
+		return "", false
+	}
+	return Format(custom[0]), true
+}
+
+func appendFormat(formats []Format, format Format) []Format {
+	if format == "" {
+		return formats
+	}
+	for _, existing := range formats {
+		if existing == format {
+			return formats
+		}
+	}
+	return append(formats, format)
 }

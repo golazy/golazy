@@ -85,9 +85,11 @@ func App() *lazyapp.App {
 ```
 
 When `Sessions.Name` is omitted, `lazyapp` uses the application name followed
-by `_session`. `lazysession.Config.Key` is deterministically expanded before it
-is passed to the cookie signer, so templates can use a short development key and
-production apps can load a stable value from `SECURE_COOKIE_KEY`.
+by `_session`. If `Name` is a module path such as `github.com/acme/my_app`, the
+session cookie uses the last path segment: `my_app_session`.
+`lazysession.Config.Key` is deterministically expanded before it is passed to
+the cookie signer, so templates can use a short development key and production
+apps can load a stable value from `SECURE_COOKIE_KEY`.
 
 The command entrypoint can then stay small:
 
@@ -155,6 +157,16 @@ func (c *PostsController) Create(input PostInput) error {
     }
     return c.RedirectTo(path, http.StatusSeeOther)
 }
+```
+
+When a route path needs query parameters, pass trailing
+`lazycontroller.URLParams`. Use `MustPathFor` for route names and parameters
+that are application invariants:
+
+```go
+adminPath := c.MustPathFor("admin_post", post.Param, lazycontroller.URLParams{
+    "token": post.AdminToken,
+})
 ```
 
 Templates can use framework helpers registered by the app, router, and asset

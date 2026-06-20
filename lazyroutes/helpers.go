@@ -5,6 +5,8 @@ import (
 	"net/url"
 	"reflect"
 	"strings"
+
+	"golazy.dev/lazypath"
 )
 
 type ModelRoutes struct {
@@ -27,17 +29,18 @@ func (s *Scope) PathFor(name string, values ...any) (string, error) {
 		return "", fmt.Errorf("lazyroutes: route %q not found", name)
 	}
 
+	routeValues, queryParams := lazypath.SplitValues(values)
 	params := namedParamNamesFromPath(route.Path)
-	if len(values) != len(params) {
-		return "", fmt.Errorf("lazyroutes: route %q requires %d params, got %d", name, len(params), len(values))
+	if len(routeValues) != len(params) {
+		return "", fmt.Errorf("lazyroutes: route %q requires %d params, got %d", name, len(params), len(routeValues))
 	}
 
 	path := route.Path
 	for index, param := range params {
-		value := url.PathEscape(fmt.Sprint(values[index]))
+		value := url.PathEscape(fmt.Sprint(routeValues[index]))
 		path = strings.ReplaceAll(path, "{"+param+"}", value)
 	}
-	return path, nil
+	return lazypath.AppendURLParams(path, queryParams), nil
 }
 
 func (s *Scope) ModelRoutesFor(model any) (ModelRoutes, bool) {

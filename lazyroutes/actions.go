@@ -140,8 +140,8 @@ func (b *controllerBinding) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if lazycontroller.WasResponseSent(w) {
 		return
 	}
-	if renderer, ok := controller.(interface{ Render(string) error }); ok {
-		if err := renderer.Render(""); err != nil {
+	if renderer, ok := controller.(interface{ RenderHTML(string) error }); ok {
+		if err := renderer.RenderHTML(""); err != nil {
 			handleControllerError(b.ctx, w, r, controller, err)
 		}
 	}

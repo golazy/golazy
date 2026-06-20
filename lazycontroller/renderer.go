@@ -41,6 +41,7 @@ type Base struct {
 	data       map[string]any
 	helpers    map[string]any
 	frameOpts  []lazyturbo.FrameOption
+	format     Format
 }
 
 func NewBase(ctx context.Context, viewPath ...string) (Base, error) {
@@ -173,6 +174,14 @@ func (b *Base) Helpers(helpers map[string]any) {
 }
 
 func (b *Base) Render(view string) error {
+	return b.render(view, b.Format())
+}
+
+func (b *Base) RenderHTML(view string) error {
+	return b.render(view, HTML)
+}
+
+func (b *Base) render(view string, format Format) error {
 	if b.writer == nil || b.renderer == nil {
 		return fmt.Errorf("controller base is not initialized")
 	}
@@ -200,7 +209,7 @@ func (b *Base) Render(view string) error {
 		Action:     view,
 		Layout:     b.layout,
 		UseLayout:  b.useLayout,
-	})
+	}, format)
 }
 
 func (b *Base) SetTurboFrameOptions(opts ...lazyturbo.FrameOption) {
@@ -249,8 +258,8 @@ func (b *Base) renderTurboFrame(id string, opts []lazyturbo.FrameOption) error {
 	return b.writeBufferedResponse(buffer)
 }
 
-func (b *Base) renderView(options lazyview.Options) error {
-	options.Format = string(b.Format())
+func (b *Base) renderView(options lazyview.Options, format Format) error {
+	options.Format = string(format)
 	if b.IsTurboFrame() {
 		options.Format = string(HTML)
 	}

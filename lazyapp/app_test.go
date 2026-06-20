@@ -211,7 +211,22 @@ func TestAppDerivesValidSessionNameFromModulePath(t *testing.T) {
 	if app.Sessions == nil {
 		t.Fatal("app Sessions manager is nil")
 	}
-	if got, want := app.Sessions.Name(), "example.com_release-smoke_session"; got != want {
+	if got, want := app.Sessions.Name(), "release-smoke_session"; got != want {
+		t.Fatalf("session name = %q, want %q", got, want)
+	}
+}
+
+func TestAppDerivesSessionNameFromModulePathBase(t *testing.T) {
+	app := New(Config{
+		Name: "github.com/golazy/letsvotefast",
+		Sessions: lazysession.Config{
+			Key: "sample-cookie-01",
+		},
+	})
+	if app.Sessions == nil {
+		t.Fatal("app Sessions manager is nil")
+	}
+	if got, want := app.Sessions.Name(), "letsvotefast_session"; got != want {
 		t.Fatalf("session name = %q, want %q", got, want)
 	}
 }
@@ -246,6 +261,34 @@ func TestAppServesStatic500ForUserRouteErrors(t *testing.T) {
 		if got, want := response.Body.String(), "<h1>static 500</h1>"; got != want {
 			t.Fatalf("%s body = %q, want %q", path, got, want)
 		}
+	}
+}
+
+func TestAppCanForceDetailErrors(t *testing.T) {
+	app := New(Config{
+		Name:              "test",
+		ForceDetailErrors: true,
+		Drawer: func(router *lazyroutes.Scope) {
+			router.HandleFunc(http.MethodGet, "/returned", func(w http.ResponseWriter, _ *http.Request) error {
+				_, _ = fmt.Fprint(w, "partial")
+				return errors.New("broken")
+			})
+		},
+		Public: func() (fs.FS, error) {
+			return fstest.MapFS{
+				"500.html": {Data: []byte("<h1>static 500</h1>")},
+			}, nil
+		},
+	})
+
+	response := httptest.NewRecorder()
+	app.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/returned", nil))
+
+	if response.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusInternalServerError)
+	}
+	if got := response.Body.String(); !strings.Contains(got, "broken") {
+		t.Fatalf("body = %q, want detail error", got)
 	}
 }
 

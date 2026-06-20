@@ -230,6 +230,74 @@ func TestResourcesUseNamespaceScope(t *testing.T) {
 	t.Fatalf("admin article route not found in %#v", scope.Routes)
 }
 
+type votesController struct{}
+
+func newVotesController(context.Context) (*votesController, error) {
+	return &votesController{}, nil
+}
+
+func (c *votesController) Create(w http.ResponseWriter, r *http.Request) error {
+	_, err := fmt.Fprintf(w, "vote %s", r.PathValue("article_id"))
+	return err
+}
+
+func (c *votesController) Show(w http.ResponseWriter, r *http.Request) error {
+	_, err := fmt.Fprintf(w, "vote %s %s", r.PathValue("article_id"), r.PathValue("vote_id"))
+	return err
+}
+
+func TestResourcesSupportsNestedResources(t *testing.T) {
+	scope := New(context.Background())
+	scope.Resources(newArticlesController, func(articles *Resource) {
+		articles.Resources(newVotesController)
+	})
+
+	tests := []struct {
+		method    string
+		path      string
+		routePath string
+		body      string
+		name      string
+	}{
+		{http.MethodPost, "/articles/hello/votes", "/articles/{article_id}/votes", "vote hello", "votes_article"},
+		{http.MethodGet, "/articles/hello/votes/99", "/articles/{article_id}/votes/{vote_id}", "vote hello 99", "vote_article"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.method+" "+tt.path, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			scope.ServeHTTP(response, httptest.NewRequest(tt.method, tt.path, nil))
+			if response.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+			}
+			if response.Body.String() != tt.body {
+				t.Fatalf("body = %q, want %q", response.Body.String(), tt.body)
+			}
+
+			for _, route := range scope.Routes {
+				if route.Method == tt.method && route.Path == tt.routePath {
+					if route.Name != tt.name {
+						t.Fatalf("route.Name = %q, want %q", route.Name, tt.name)
+					}
+					if !route.NamedParams["article_id"] {
+						t.Fatalf("route.NamedParams = %#v, want article_id", route.NamedParams)
+					}
+					return
+				}
+			}
+			t.Fatalf("route %s %s not found in %#v", tt.method, tt.path, scope.Routes)
+		})
+	}
+
+	path, err := scope.PathFor("votes_article", "hello")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if path != "/articles/hello/votes" {
+		t.Fatalf("PathFor votes_article = %q, want /articles/hello/votes", path)
+	}
+}
+
 func TestHandleConvertsHTTPErrorStatus(t *testing.T) {
 	handler := Handle(func(http.ResponseWriter, *http.Request) error {
 		return lazycontroller.Error(http.StatusTeapot, errors.New("short and stout"))

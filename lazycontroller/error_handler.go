@@ -2,7 +2,9 @@ package lazycontroller
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"os"
 )
 
 type requestErrorStateKey struct{}
@@ -73,6 +75,7 @@ func errorStateFromRequest(r *http.Request) (*requestErrorState, bool) {
 }
 
 func handleReportedError(ctx context.Context, w http.ResponseWriter, r *http.Request, controller any, err error) {
+	logReportedError(r, err)
 	ResetResponse(w)
 	if handler, ok := controller.(controllerErrorHandler); ok {
 		handleErr := callControllerErrorHandler(handler, w, r, err)
@@ -82,10 +85,25 @@ func handleReportedError(ctx context.Context, w http.ResponseWriter, r *http.Req
 		err = handleErr
 		ResetResponse(w)
 	}
+	if DetailErrors(ctx) {
+		WriteErrorDetail(w, r, err)
+		return
+	}
 	if WriteErrorFallback(ctx, w, r) {
 		return
 	}
 	WriteError(w, r, err)
+}
+
+func logReportedError(r *http.Request, err error) {
+	if err == nil {
+		return
+	}
+	if r == nil {
+		fmt.Fprintf(os.Stderr, "lazycontroller: error: %v\n", err)
+		return
+	}
+	fmt.Fprintf(os.Stderr, "lazycontroller: %s %s: %v\n", r.Method, r.URL.RequestURI(), err)
 }
 
 func callControllerErrorHandler(handler controllerErrorHandler, w http.ResponseWriter, r *http.Request, err error) (handleErr error) {

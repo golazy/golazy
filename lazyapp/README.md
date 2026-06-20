@@ -56,8 +56,9 @@ log.Fatal(server.ListenAndServe())
 ```
 
 When sessions are enabled and `Sessions.Name` is empty, the cookie name defaults
-to the application name followed by `_session`. `lazysession.Config.Key` is
-expanded deterministically before the cookie store is created.
+to the application name followed by `_session`. If the application name is a
+module path, the cookie name uses the last path segment. `lazysession.Config.Key`
+is expanded deterministically before the cookie store is created.
 
 For embedded application files, `MustSub` converts an embedded root filesystem
 into the function shape expected by `Config`:

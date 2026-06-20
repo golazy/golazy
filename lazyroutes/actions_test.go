@@ -13,6 +13,7 @@ import (
 	"golazy.dev/lazycontroller"
 	"golazy.dev/lazydispatch"
 	"golazy.dev/lazysse"
+	"golazy.dev/lazyturbo"
 	_ "golazy.dev/lazyview/gotmpl"
 )
 
@@ -98,6 +99,27 @@ func TestControllerActionAutoRendersDefaultView(t *testing.T) {
 	}
 	if got, want := response.Body.String(), "<main>index hello</main>"; got != want {
 		t.Fatalf("body = %q, want %q", got, want)
+	}
+}
+
+func TestControllerActionAutoRenderUsesHTMLEvenWhenTurboStreamAccepted(t *testing.T) {
+	scope := newAutoRenderScope(t)
+	scope.Get("/posts", newAutoRenderController, (*autoRenderController).Index)
+	handler := lazydispatch.ResponseBuffer().Handler(scope)
+
+	request := httptest.NewRequest(http.MethodGet, "/posts", nil)
+	request.Header.Set("Accept", lazyturbo.StreamMIME+", text/html, application/xhtml+xml")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", response.Code, http.StatusOK, response.Body.String())
+	}
+	if got, want := response.Body.String(), "<main>index hello</main>"; got != want {
+		t.Fatalf("body = %q, want %q", got, want)
+	}
+	if got := response.Header().Get("Content-Type"); !strings.Contains(got, "text/html") {
+		t.Fatalf("Content-Type = %q, want HTML", got)
 	}
 }
 
@@ -410,6 +432,9 @@ func newAutoRenderScope(t *testing.T) *Scope {
 		"layouts/app.html.tpl": {Data: []byte(`<main>{{.content}}</main>`)},
 		"auto_render/index.html.tpl": {
 			Data: []byte(`index {{.message}}`),
+		},
+		"auto_render/index.turbo_stream.tpl": {
+			Data: []byte(`<turbo-stream action="replace" target="post"></turbo-stream>`),
 		},
 		"auto_render/created.html.tpl": {
 			Data: []byte(`created {{.message}}`),

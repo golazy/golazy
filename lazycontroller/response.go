@@ -53,6 +53,12 @@ func WriteError(w http.ResponseWriter, _ *http.Request, err error) {
 	http.Error(w, http.StatusText(status), status)
 }
 
+func WriteErrorDetail(w http.ResponseWriter, _ *http.Request, err error) {
+	ResetResponse(w)
+	status := StatusCode(err)
+	http.Error(w, err.Error(), status)
+}
+
 // Status sets the HTTP status code used by the next controller render.
 //
 // It does not write the response immediately, so actions can still rely on

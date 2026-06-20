@@ -100,6 +100,31 @@ func TestRenderUsesJSONFormatWithoutLayout(t *testing.T) {
 	}
 }
 
+func TestRenderUsesTurboStreamForTurboStreamAccept(t *testing.T) {
+	base, response := newRenderTestBase(t, fstest.MapFS{
+		"layouts/app.html.tpl":        {Data: []byte(`layout {{.content}}`)},
+		"posts/show.html.tpl":         {Data: []byte(`<p>{{.title}}</p>`)},
+		"posts/show.turbo_stream.tpl": {Data: []byte(`<turbo-stream action="replace" target="post"></turbo-stream>`)},
+	})
+	request := httptest.NewRequest(http.MethodGet, "/posts/1", nil)
+	request.Header.Set("Accept", lazyturbo.StreamMIME+", text/html, application/xhtml+xml")
+	if err := base.BindRequest(response, request, lazyview.Route{Controller: "posts", Action: "Show"}); err != nil {
+		t.Fatal(err)
+	}
+	base.Set("title", "Hello")
+
+	if err := base.Render("show"); err != nil {
+		t.Fatal(err)
+	}
+
+	if got, want := response.Body.String(), `<turbo-stream action="replace" target="post"></turbo-stream>`; got != want {
+		t.Fatalf("body = %q, want %q", got, want)
+	}
+	if got := response.Header().Get("Content-Type"); !strings.Contains(got, lazyturbo.StreamMIME) {
+		t.Fatalf("Content-Type = %q, want Turbo Stream", got)
+	}
+}
+
 func TestRenderUsesTurboFrameHeader(t *testing.T) {
 	base, response := newRenderTestBase(t, fstest.MapFS{
 		"layouts/app.html.tpl":      {Data: []byte(`layout {{.content}}`)},
@@ -326,6 +351,39 @@ func TestWantsReturnsNotAcceptableForUnavailableFormat(t *testing.T) {
 	}
 	if got, want := StatusCode(err), http.StatusNotAcceptable; got != want {
 		t.Fatalf("StatusCode = %d, want %d", got, want)
+	}
+}
+
+func TestWantsSelectedFormatControlsRender(t *testing.T) {
+	base, response := newRenderTestBase(t, fstest.MapFS{
+		"layouts/app.html.tpl":        {Data: []byte(`layout {{.content}}`)},
+		"posts/show.html.tpl":         {Data: []byte(`<p>{{.title}}</p>`)},
+		"posts/show.turbo_stream.tpl": {Data: []byte(`<turbo-stream action="replace" target="post"></turbo-stream>`)},
+	})
+	request := httptest.NewRequest(http.MethodGet, "/posts/1", nil)
+	request.Header.Set("Accept", lazyturbo.StreamMIME+", text/html, application/xhtml+xml")
+	if err := base.BindRequest(response, request, lazyview.Route{Controller: "posts", Action: "Show"}); err != nil {
+		t.Fatal(err)
+	}
+	base.Set("title", "Hello")
+
+	err := base.Wants(Formats{
+		HTML: func() error {
+			return base.Render("show")
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got, want := response.Body.String(), `layout <p>Hello</p>`; got != want {
+		t.Fatalf("body = %q, want %q", got, want)
+	}
+	if got := response.Header().Get("Content-Type"); !strings.Contains(got, "text/html") {
+		t.Fatalf("Content-Type = %q, want HTML", got)
+	}
+	if got := base.Format(); got != TurboStream {
+		t.Fatalf("Format after Wants = %q, want request format %q", got, TurboStream)
 	}
 }
 

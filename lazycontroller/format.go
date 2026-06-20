@@ -171,6 +171,11 @@ func (b *Base) respondTo(formats Formats) error {
 		}
 	}
 	if response := formats[format]; response != nil {
+		previous := b.format
+		b.format = format
+		defer func() {
+			b.format = previous
+		}()
 		return response()
 	}
 	return Error(http.StatusNotAcceptable, fmt.Errorf("format %q is not available", format))
@@ -223,6 +228,9 @@ func selectFormat(formats Formats, format Format) (Format, bool) {
 
 // Format returns the negotiated response format for the current request.
 func (b *Base) Format() Format {
+	if b.format != "" {
+		return b.format
+	}
 	return FormatFromRequest(b.request)
 }
 

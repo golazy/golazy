@@ -23,6 +23,7 @@ type Resource struct {
 
 	models []reflect.Type
 	custom []resourceRoute
+	parent *Resource
 }
 
 type resourceRoute struct {
@@ -34,6 +35,16 @@ type resourceRoute struct {
 
 func (s *Scope) Resources(controller any, configure ...func(*Resource)) *Resource {
 	resource := newResource(s, controller)
+	for _, fn := range configure {
+		fn(resource)
+	}
+	resource.draw()
+	return resource
+}
+
+func (r *Resource) Resources(controller any, configure ...func(*Resource)) *Resource {
+	resource := newResource(r.scope, controller)
+	resource.parent = r
 	for _, fn := range configure {
 		fn(resource)
 	}
@@ -143,9 +154,9 @@ func (r *Resource) add(method string, path string, member bool, action any) {
 }
 
 func (r *Resource) draw() {
-	r.registerAction(http.MethodGet, r.path, "Index")
-	r.registerAction(http.MethodGet, r.path+"/new", "New")
-	r.registerAction(http.MethodPost, r.path, "Create")
+	r.registerAction(http.MethodGet, r.basePath(), "Index")
+	r.registerAction(http.MethodGet, r.basePath()+"/new", "New")
+	r.registerAction(http.MethodPost, r.basePath(), "Create")
 	r.registerAction(http.MethodGet, r.memberPath(), "Show")
 	r.registerAction(http.MethodGet, r.memberPath()+"/edit", "Edit")
 	r.registerAction(http.MethodPatch, r.memberPath(), "Update")
@@ -153,7 +164,7 @@ func (r *Resource) draw() {
 	r.registerAction(http.MethodDelete, r.memberPath(), "Delete")
 
 	for _, route := range r.custom {
-		path := r.path + "/" + route.path
+		path := r.basePath() + "/" + route.path
 		if route.member {
 			path = r.memberPath() + "/" + route.path
 		}
@@ -165,15 +176,22 @@ func (r *Resource) draw() {
 	}
 	for _, model := range r.models {
 		r.scope.rootScope().models[model] = ModelRoutes{
-			Create: r.scope.scopedName(r.namedRouteName("Create", r.path, false)),
+			Create: r.scope.scopedName(r.namedRouteName("Create", r.basePath(), false)),
 			Update: r.scope.scopedName(r.namedRouteName("Update", r.memberPath(), true)),
 			Delete: r.scope.scopedName(r.namedRouteName("Delete", r.memberPath(), true)),
 		}
 	}
 }
 
+func (r *Resource) basePath() string {
+	if r.parent == nil {
+		return r.path
+	}
+	return r.parent.memberPath() + r.path
+}
+
 func (r *Resource) memberPath() string {
-	return r.path + "/{" + r.param + "}"
+	return r.basePath() + "/{" + r.param + "}"
 }
 
 func (r *Resource) registerAction(method string, path string, actionName string) {
@@ -197,25 +215,32 @@ func (r *Resource) routeMetadata(actionName string, path string, member bool) Ro
 func (r *Resource) namedRouteName(actionName string, path string, member bool) string {
 	switch actionName {
 	case "Index":
-		return r.plural
+		return r.withParentName(r.plural)
 	case "New":
-		return "new_" + r.singular
+		return r.withParentName("new_" + r.singular)
 	case "Create":
-		return r.plural
+		return r.withParentName(r.plural)
 	case "Show":
-		return r.singular
+		return r.withParentName(r.singular)
 	case "Edit":
-		return "edit_" + r.singular
+		return r.withParentName("edit_" + r.singular)
 	case "Update":
-		return r.singular
+		return r.withParentName(r.singular)
 	case "Delete":
-		return r.singular
+		return r.withParentName(r.singular)
 	}
 
 	if member {
-		return pathToName(path) + "_" + r.singular
+		return r.withParentName(pathToName(path) + "_" + r.singular)
 	}
-	return pathToName(path) + "_" + r.plural
+	return r.withParentName(pathToName(path) + "_" + r.plural)
+}
+
+func (r *Resource) withParentName(name string) string {
+	if r.parent == nil {
+		return name
+	}
+	return name + "_" + r.parent.singular
 }
 
 func pathToName(path string) string {

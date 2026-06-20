@@ -24,16 +24,17 @@ import (
 type Helpers []map[string]any
 
 type Config struct {
-	Name         string
-	Drawer       func(*lazyroutes.Scope)
-	Public       func() (fs.FS, error)
-	Views        func() (fs.FS, error)
-	Context      func(context.Context) context.Context
-	Helpers      Helpers
-	Assets       []lazyassets.Source
-	AssetOptions []lazyassets.Option
-	Sessions     lazysession.Config
-	Middlewares  []lazydispatch.Middleware
+	Name              string
+	Drawer            func(*lazyroutes.Scope)
+	Public            func() (fs.FS, error)
+	Views             func() (fs.FS, error)
+	Context           func(context.Context) context.Context
+	Helpers           Helpers
+	Assets            []lazyassets.Source
+	AssetOptions      []lazyassets.Option
+	Sessions          lazysession.Config
+	Middlewares       []lazydispatch.Middleware
+	ForceDetailErrors bool
 }
 
 type App struct {
@@ -87,6 +88,9 @@ func New(config Config) *App {
 	}
 	if config.Context != nil {
 		ctx = config.Context(ctx)
+	}
+	if config.ForceDetailErrors {
+		ctx = lazycontroller.WithDetailErrors(ctx)
 	}
 
 	assets := lazyassets.New(config.AssetOptions...)
@@ -201,6 +205,11 @@ func normalizeListenAddr(addr string) string {
 }
 
 func derivedSessionName(appName string) string {
+	appName = strings.TrimSpace(appName)
+	if index := strings.LastIndex(appName, "/"); index >= 0 {
+		appName = appName[index+1:]
+	}
+
 	var builder strings.Builder
 	lastUnderscore := false
 	for _, r := range appName {

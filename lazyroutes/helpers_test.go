@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 	"testing"
+
+	"golazy.dev/lazypath"
 )
 
 func TestPathForBuildsNamedRoutePaths(t *testing.T) {
@@ -25,5 +27,13 @@ func TestPathForBuildsNamedRoutePaths(t *testing.T) {
 	}
 	if post != "/posts/hello%20world" {
 		t.Fatalf("post path = %q, want /posts/hello%%20world", post)
+	}
+
+	admin, err := scope.PathFor("posts", "hello world", lazypath.URLParams{"token": "secret token"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if admin != "/posts/hello%20world?token=secret+token" {
+		t.Fatalf("admin path = %q, want query params", admin)
 	}
 }

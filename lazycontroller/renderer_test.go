@@ -8,7 +8,10 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+	"time"
 
+	"golazy.dev/lazyseo"
+	"golazy.dev/lazyseo/jsonld"
 	"golazy.dev/lazyview"
 	_ "golazy.dev/lazyview/gotmpl"
 )
@@ -40,6 +43,187 @@ func TestRenderEscapesDataAndComposesLayout(t *testing.T) {
 	body := response.Body.String()
 	if !strings.Contains(body, `<main><p>&lt;script&gt;unsafe()&lt;/script&gt;</p></main>`) {
 		t.Fatalf("unexpected body: %s", body)
+	}
+}
+
+func TestRenderUsesSEOControllerHelpers(t *testing.T) {
+	views := fstest.MapFS{
+		"layouts/app.html.tpl": {Data: []byte(`<html lang="{{seo_lang}}"><head>{{seo}}</head><main>{{.content}}</main></html>`)},
+		"posts/show.html.tpl":  {Data: []byte(`post`)},
+	}
+	renderer, err := NewRenderer(views)
+	if err != nil {
+		t.Fatal(err)
+	}
+	renderer.AddHelpers(lazyseo.Helpers(lazyseo.SiteName("GoLazy")))
+	response := httptest.NewRecorder()
+	ctx := WithRenderer(context.Background(), renderer)
+	base, err := NewBase(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodGet, "/posts/hello", nil)
+	if err := base.BindRequest(response, request, lazyview.Route{Controller: "posts"}); err != nil {
+		t.Fatal(err)
+	}
+
+	base.Title("Hello")
+	base.Description("A post")
+	base.Language("en")
+	base.Canonical("https://golazy.dev/posts/hello")
+	base.Alternate("de", "https://golazy.dev/de/posts/hello")
+	base.SEOImage("https://golazy.dev/posts/hello.png")
+	base.Kind(lazyseo.Article)
+	base.JSONLD(jsonld.NewArticle("Hello"))
+
+	if err := base.Render("show"); err != nil {
+		t.Fatal(err)
+	}
+
+	body := response.Body.String()
+	for _, expected := range []string{
+		`<html lang="en">`,
+		`<title>Hello - GoLazy</title>`,
+		`<meta name="description" content="A post">`,
+		`<link rel="canonical" href="https://golazy.dev/posts/hello">`,
+		`<link rel="alternate" hreflang="de" href="https://golazy.dev/de/posts/hello">`,
+		`<meta property="og:type" content="article">`,
+		`<meta property="og:image" content="https://golazy.dev/posts/hello.png">`,
+		`<script type="application/ld+json">{"@context":"https://schema.org","@type":"Article","headline":"Hello"}</script>`,
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("body does not contain %q:\n%s", expected, body)
+		}
+	}
+}
+
+type metadataPost struct{}
+
+func (metadataPost) Title() string {
+	return "Metadata Post"
+}
+
+func (metadataPost) Description() string {
+	return "Base description"
+}
+
+func (metadataPost) Canonical() string {
+	return "https://golazy.dev/posts/metadata"
+}
+
+func (metadataPost) Image() string {
+	return "https://golazy.dev/posts/metadata.png"
+}
+
+func (metadataPost) Kind() lazyseo.PageKind {
+	return lazyseo.Article
+}
+
+func (metadataPost) LastUpdated() time.Time {
+	return time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+}
+
+func (metadataPost) OpenGraph() lazyseo.OpenGraph {
+	return lazyseo.OpenGraph{
+		Description: "Open Graph description",
+		Image:       "https://golazy.dev/posts/metadata-og.png",
+	}
+}
+
+func (metadataPost) TwitterCard() lazyseo.TwitterCard {
+	return lazyseo.TwitterCard{
+		Card:        "summary_large_image",
+		Description: "Twitter description",
+		Image:       "https://golazy.dev/posts/metadata-twitter.png",
+	}
+}
+
+func TestRenderUsesMetadataModelInterfaces(t *testing.T) {
+	views := fstest.MapFS{
+		"layouts/app.html.tpl": {Data: []byte(`<head>{{seo}}</head><main>{{.content}}</main>`)},
+		"posts/show.html.tpl":  {Data: []byte(`post`)},
+	}
+	renderer, err := NewRenderer(views)
+	if err != nil {
+		t.Fatal(err)
+	}
+	renderer.AddHelpers(lazyseo.Helpers(lazyseo.SiteName("GoLazy")))
+	response := httptest.NewRecorder()
+	ctx := WithRenderer(context.Background(), renderer)
+	base, err := NewBase(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodGet, "/posts/metadata", nil)
+	if err := base.BindRequest(response, request, lazyview.Route{Controller: "posts"}); err != nil {
+		t.Fatal(err)
+	}
+
+	base.Metadata(metadataPost{})
+	base.Alternate("de", "https://golazy.dev/de/posts/metadata")
+
+	if err := base.Render("show"); err != nil {
+		t.Fatal(err)
+	}
+
+	body := response.Body.String()
+	for _, expected := range []string{
+		`<title>Metadata Post - GoLazy</title>`,
+		`<meta name="description" content="Base description">`,
+		`<meta property="og:description" content="Open Graph description">`,
+		`<meta property="og:image" content="https://golazy.dev/posts/metadata-og.png">`,
+		`<meta name="twitter:card" content="summary_large_image">`,
+		`<meta name="twitter:description" content="Twitter description">`,
+		`<meta name="twitter:image" content="https://golazy.dev/posts/metadata-twitter.png">`,
+		`<link rel="alternate" hreflang="de" href="https://golazy.dev/de/posts/metadata">`,
+		`<script type="application/ld+json">{"@context":"https://schema.org","@type":"Article","headline":"Metadata Post","description":"Base description","url":"https://golazy.dev/posts/metadata","image":"https://golazy.dev/posts/metadata.png","dateModified":"2026-06-20"}</script>`,
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("body does not contain %q:\n%s", expected, body)
+		}
+	}
+}
+
+func TestRenderSVGStringUsesVariants(t *testing.T) {
+	views := fstest.MapFS{
+		"layouts/app.html.tpl":       {Data: []byte(`{{.content}}`)},
+		"posts/show.svg+square.tpl":  {Data: []byte(`<svg>{{.title}} square</svg>`)},
+		"posts/show.svg.tpl":         {Data: []byte(`<svg>{{.title}}</svg>`)},
+		"posts/preview.svg+wide.tpl": {Data: []byte(`<svg>{{.title}} wide</svg>`)},
+		"posts/preview.svg.tpl":      {Data: []byte(`<svg>{{.title}} preview</svg>`)},
+	}
+	renderer, err := NewRenderer(views)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := WithRenderer(context.Background(), renderer)
+	base, err := NewBase(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := base.BindRequest(
+		httptest.NewRecorder(),
+		httptest.NewRequest(http.MethodGet, "/posts/hello", nil),
+		lazyview.Route{Controller: "posts", Action: "Show"},
+	); err != nil {
+		t.Fatal(err)
+	}
+	base.Set("title", "Hello")
+
+	body, err := base.RenderSVGString("", "square")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := body, `<svg>Hello square</svg>`; got != want {
+		t.Fatalf("svg = %q, want %q", got, want)
+	}
+
+	body, err = base.RenderSVGString("preview", "wide")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := body, `<svg>Hello wide</svg>`; got != want {
+		t.Fatalf("svg = %q, want %q", got, want)
 	}
 }
 

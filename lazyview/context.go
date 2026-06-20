@@ -40,6 +40,7 @@ type Context struct {
 	Action     string
 	Partial    string
 	Format     string
+	Variants   []string
 	Layout     string
 }
 

@@ -7,6 +7,26 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `golazy.dev/lazyseo`, an optional helper package for request-local document
+  metadata with `{{seo}}` and `{{seo_lang}}` view helpers for title, document
+  language, canonical URLs, alternates, JSON-LD, description, Open Graph,
+  Twitter card, and related tags. Common schema.org values live in
+  `golazy.dev/lazyseo/jsonld`.
+- Controller SEO helpers on `lazycontroller.Base`, including `Metadata`,
+  `Title`, `Description`, `Language`, `Canonical`, `Alternate`, `OpenGraph`,
+  `TwitterCard`, `JSONLD`, `SEOImage`, `Kind`, `Type`, `SchemaType`, `Locale`,
+  and `TwitterCardType`, plus shared `lazyseo.PageKind` constants for paired
+  Open Graph and schema.org names.
+- Rails-style view variants such as `show.svg+square.tpl`, tried before the
+  non-variant template for the same format.
+- `lazycontroller.Base.RenderSVGString`, which renders SVG templates with
+  optional variants for social-image generation workflows.
+- Generated `/robots.txt` and `/sitemap.xml` through `lazyapp.Config`, with
+  permissive robots defaults, configurable crawler rules, sitemap entries and
+  sources, alternate URLs, `<lastmod>`, and `Last-Modified` cache validation.
+
 ## [0.1.10] - 2026-06-20
 
 ### Added

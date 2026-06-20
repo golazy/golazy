@@ -48,6 +48,7 @@ golazy.dev/lazycontroller          Request-local controllers and render state
 golazy.dev/lazycookie              Signed and encrypted secure cookies
 golazy.dev/lazydispatch            HTTP dispatch and middleware
 golazy.dev/lazyroutes              Route DSL, resources, scopes, and route table
+golazy.dev/lazyseo                 Optional SEO metadata view helpers
 golazy.dev/lazysession             Cookie sessions and session middleware
 golazy.dev/lazyview                View rendering and helper registry
 golazy.dev/lazyview/gotmpl         html/template engine for lazyview

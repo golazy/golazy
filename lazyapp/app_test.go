@@ -10,10 +10,12 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"golazy.dev/lazyassets"
 	"golazy.dev/lazycontroller"
 	"golazy.dev/lazyroutes"
+	"golazy.dev/lazyseo"
 	"golazy.dev/lazysession"
 	_ "golazy.dev/lazyview/gotmpl"
 )
@@ -54,6 +56,188 @@ func TestAppAddsDynamicETagToRoutesAndAssetETagToPublicFiles(t *testing.T) {
 	if got := response.Header().Get("Cache-Control"); got != "public, max-age=0, must-revalidate" {
 		t.Fatalf("public Cache-Control = %q, want asset logical cache policy", got)
 	}
+}
+
+func TestAppServesDefaultRobotsAndSitemap(t *testing.T) {
+	updated := time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+	app := New(Config{
+		Sitemap: SitemapConfig{
+			BaseURL: "https://example.com",
+			URLs: []SitemapURL{
+				{
+					Location:    "/",
+					LastUpdated: updated,
+					ChangeFreq:  "daily",
+					Priority:    1,
+				},
+			},
+		},
+	})
+
+	response := httptest.NewRecorder()
+	app.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/robots.txt", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("robots status = %d, want %d", response.Code, http.StatusOK)
+	}
+	robots := response.Body.String()
+	for _, expected := range []string{
+		"User-agent: *\n",
+		"Allow: /\n",
+		"Sitemap: https://example.com/sitemap.xml\n",
+	} {
+		if !strings.Contains(robots, expected) {
+			t.Fatalf("robots.txt does not contain %q:\n%s", expected, robots)
+		}
+	}
+
+	response = httptest.NewRecorder()
+	app.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/sitemap.xml", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("sitemap status = %d, want %d", response.Code, http.StatusOK)
+	}
+	if got, want := response.Header().Get("Last-Modified"), updated.Format(http.TimeFormat); got != want {
+		t.Fatalf("Last-Modified = %q, want %q", got, want)
+	}
+	sitemap := response.Body.String()
+	for _, expected := range []string{
+		`<loc>https://example.com/</loc>`,
+		`<lastmod>2026-06-20</lastmod>`,
+		`<changefreq>daily</changefreq>`,
+		`<priority>1</priority>`,
+	} {
+		if !strings.Contains(sitemap, expected) {
+			t.Fatalf("sitemap.xml does not contain %q:\n%s", expected, sitemap)
+		}
+	}
+
+	request := httptest.NewRequest(http.MethodGet, "/sitemap.xml", nil)
+	request.Header.Set("If-Modified-Since", updated.Format(http.TimeFormat))
+	response = httptest.NewRecorder()
+	app.ServeHTTP(response, request)
+	if response.Code != http.StatusNotModified {
+		t.Fatalf("conditional sitemap status = %d, want %d", response.Code, http.StatusNotModified)
+	}
+}
+
+func TestAppServesConfiguredRobotsAndSitemapAlternates(t *testing.T) {
+	app := New(Config{
+		Robots: RobotsConfig{
+			Rules: []RobotsRule{{
+				UserAgent: "ExampleBot",
+				Disallow:  []string{"/admin"},
+			}},
+			Sitemaps: []string{"https://cdn.example.com/site.xml"},
+		},
+		Sitemap: SitemapConfig{
+			BaseURL: "https://example.com",
+			Sources: []SitemapSource{
+				SitemapSourceFunc(func() ([]SitemapURL, error) {
+					return []SitemapURL{{
+						Location: "/posts/hello",
+						Alternates: []SitemapAlternate{
+							{Language: "de", Location: "/de/posts/hello"},
+						},
+					}}, nil
+				}),
+			},
+		},
+	})
+
+	response := httptest.NewRecorder()
+	app.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/robots.txt", nil))
+	if got := response.Body.String(); !strings.Contains(got, "User-agent: ExampleBot\nDisallow: /admin\n") ||
+		!strings.Contains(got, "Sitemap: https://cdn.example.com/site.xml\n") {
+		t.Fatalf("unexpected robots.txt:\n%s", got)
+	}
+
+	response = httptest.NewRecorder()
+	app.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/sitemap.xml", nil))
+	sitemap := response.Body.String()
+	for _, expected := range []string{
+		`<loc>https://example.com/posts/hello</loc>`,
+		`<xhtml:link rel="alternate" hreflang="de" href="https://example.com/de/posts/hello"></xhtml:link>`,
+	} {
+		if !strings.Contains(sitemap, expected) {
+			t.Fatalf("sitemap.xml does not contain %q:\n%s", expected, sitemap)
+		}
+	}
+}
+
+func TestAppCanDisableMetadataFiles(t *testing.T) {
+	app := New(Config{
+		Robots:  RobotsConfig{Disabled: true},
+		Sitemap: SitemapConfig{Disabled: true},
+	})
+
+	for _, path := range []string{"/robots.txt", "/sitemap.xml"} {
+		response := httptest.NewRecorder()
+		app.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+		if response.Code != http.StatusNotFound {
+			t.Fatalf("%s status = %d, want %d", path, response.Code, http.StatusNotFound)
+		}
+	}
+}
+
+func TestAppRegistersSEOHelpers(t *testing.T) {
+	app := New(Config{
+		Views: func() (fs.FS, error) {
+			return fstest.MapFS{
+				"pages/show.html.tpl":          {Data: []byte(`{{seo}}`)},
+				"layouts/app.html.tpl":         {Data: []byte(`<html lang="{{seo_lang}}"><head>{{.content}}</head></html>`)},
+				"layouts/turbo_frame.html.tpl": {Data: []byte(`{{.content}}`)},
+			}, nil
+		},
+		Drawer: func(router *lazyroutes.Scope) {
+			router.Get("/", newSEOTestController, (*seoTestController).Show)
+		},
+		SEO: []lazyseo.Option{
+			lazyseo.SiteName("Example"),
+			lazyseo.Language("de"),
+			lazyseo.TwitterCardType("summary"),
+		},
+	})
+
+	response := httptest.NewRecorder()
+	app.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/", nil))
+	body := response.Body.String()
+	for _, expected := range []string{
+		`<html lang="de">`,
+		`<title>Hello - Example</title>`,
+		`<meta name="description" content="Page description">`,
+		`<meta name="twitter:card" content="summary">`,
+		`"@type":"WebPage"`,
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("response does not contain %q:\n%s", expected, body)
+		}
+	}
+}
+
+type seoTestController struct {
+	lazycontroller.Base
+}
+
+func newSEOTestController(ctx context.Context) (*seoTestController, error) {
+	base, err := lazycontroller.NewBase(ctx, "pages")
+	if err != nil {
+		return nil, err
+	}
+	return &seoTestController{Base: base}, nil
+}
+
+func (c *seoTestController) Show() error {
+	c.Metadata(testPageMetadata{})
+	return nil
+}
+
+type testPageMetadata struct{}
+
+func (testPageMetadata) Title() string {
+	return "Hello"
+}
+
+func (testPageMetadata) Description() string {
+	return "Page description"
 }
 
 func TestAppRegistersGeneratedAssetSources(t *testing.T) {

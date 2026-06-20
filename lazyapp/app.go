@@ -17,6 +17,7 @@ import (
 	"golazy.dev/lazydispatch/middlewares"
 	"golazy.dev/lazyforms"
 	"golazy.dev/lazyroutes"
+	"golazy.dev/lazyseo"
 	"golazy.dev/lazysession"
 	"golazy.dev/lazyturbo"
 )
@@ -30,8 +31,11 @@ type Config struct {
 	Views             func() (fs.FS, error)
 	Context           func(context.Context) context.Context
 	Helpers           Helpers
+	SEO               []lazyseo.Option
 	Assets            []lazyassets.Source
 	AssetOptions      []lazyassets.Option
+	Robots            RobotsConfig
+	Sitemap           SitemapConfig
 	Sessions          lazysession.Config
 	Middlewares       []lazydispatch.Middleware
 	ForceDetailErrors bool
@@ -124,6 +128,7 @@ func New(config Config) *App {
 		renderer.AddHelpers(router.RegisterHelpers())
 		renderer.AddHelpers(assets.Helpers())
 		renderer.AddHelpers(lazyforms.Helpers(router))
+		renderer.AddHelpers(lazyseo.Helpers(config.SEO...))
 		renderer.AddHelpers(lazyturbo.Helpers())
 		for _, helpers := range config.Helpers {
 			renderer.AddHelpers(helpers)
@@ -147,6 +152,11 @@ func New(config Config) *App {
 	for _, middleware := range config.Middlewares {
 		dispatcher.Use(middleware)
 	}
+	metadata, err := newMetadataFiles(config.Robots, config.Sitemap)
+	if err != nil {
+		panic(fmt.Errorf("initialize metadata files: %w", err))
+	}
+	dispatcher.Use(metadata)
 	dispatcher.Use(lazydispatch.Router(router))
 	if !assets.Empty() {
 		dispatcher.Use(lazydispatch.MiddlewareFunc(func(next http.Handler) http.Handler {

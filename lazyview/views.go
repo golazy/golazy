@@ -36,6 +36,7 @@ type Options struct {
 	Action     string
 	Partial    string
 	Format     string
+	Variants   []string
 	Layout     string
 	UseLayout  bool
 }
@@ -183,6 +184,7 @@ func (v *Views) renderContext(options Options) *Context {
 		Action:     options.Action,
 		Partial:    options.Partial,
 		Format:     format,
+		Variants:   normalizeVariants(options.Variants),
 		Layout:     layout,
 	}
 }
@@ -207,7 +209,7 @@ func (v *Views) findView(ctx *Context) (string, error) {
 
 	var tried []string
 	for _, directory := range viewDirectories(ctx) {
-		file, ok := v.findFile(directory, name, ctx.Format, &tried)
+		file, ok := v.findFile(directory, name, ctx.Format, ctx.Variants, &tried)
 		if ok {
 			return file, nil
 		}
@@ -248,7 +250,7 @@ func (v *Views) findLayout(ctx *Context) (string, error) {
 	var tried []string
 	for _, directory := range directories {
 		for _, layout := range layouts {
-			file, ok := v.findFile(directory, layout, ctx.Format, &tried)
+			file, ok := v.findFile(directory, layout, ctx.Format, ctx.Variants, &tried)
 			if ok {
 				return file, nil
 			}
@@ -257,8 +259,16 @@ func (v *Views) findLayout(ctx *Context) (string, error) {
 	return "", fmt.Errorf("lazyview: layout not found. Tried: %s", strings.Join(tried, ", "))
 }
 
-func (v *Views) findFile(directory string, name string, format string, tried *[]string) (string, bool) {
+func (v *Views) findFile(directory string, name string, format string, variants []string, tried *[]string) (string, bool) {
 	for extension := range v.Engines {
+		for _, variant := range variants {
+			candidate := path.Join(directory, name+"."+format+"+"+variant+"."+extension)
+			*tried = append(*tried, candidate)
+			info, err := fs.Stat(v.FS, candidate)
+			if err == nil && !info.IsDir() {
+				return candidate, true
+			}
+		}
 		candidate := path.Join(directory, name+"."+format+"."+extension)
 		*tried = append(*tried, candidate)
 		info, err := fs.Stat(v.FS, candidate)
@@ -304,6 +314,7 @@ func (ctx *Context) partial(args ...any) (Fragment, error) {
 		Controller: ctx.Controller,
 		Partial:    name,
 		Format:     ctx.Format,
+		Variants:   ctx.Variants,
 		UseLayout:  false,
 	})
 	if err != nil {
@@ -340,6 +351,8 @@ func contentTypeForFormat(format string) string {
 	switch format {
 	case "json":
 		return "application/json; charset=utf-8"
+	case "svg":
+		return "image/svg+xml; charset=utf-8"
 	case "turbo_stream":
 		return "text/vnd.turbo-stream.html; charset=utf-8"
 	default:
@@ -354,4 +367,21 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func normalizeVariants(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	var variants []string
+	seen := map[string]bool{}
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || strings.ContainsAny(value, `/\.`) || seen[value] {
+			continue
+		}
+		seen[value] = true
+		variants = append(variants, value)
+	}
+	return variants
 }

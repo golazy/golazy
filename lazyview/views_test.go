@@ -65,6 +65,84 @@ func TestRenderUsesHelpersAndPartials(t *testing.T) {
 	}
 }
 
+func TestRenderUsesFirstMatchingVariant(t *testing.T) {
+	views, err := lazyview.New(fstest.MapFS{
+		"layouts/app.html.tpl":           {Data: []byte(`<main>{{.content}}</main>`)},
+		"posts/show.html+desktop.tpl":    {Data: []byte(`desktop`)},
+		"posts/show.html+square.tpl":     {Data: []byte(`square`)},
+		"posts/show.html.tpl":            {Data: []byte(`default`)},
+		"posts/_summary.html+square.tpl": {Data: []byte(`partial square`)},
+		"posts/_summary.html.tpl":        {Data: []byte(`partial default`)},
+		"posts/partial.html.tpl":         {Data: []byte(`{{partial "summary"}}`)},
+		"app/fallback.html+square.tpl":   {Data: []byte(`app square`)},
+		"app/fallback.html.tpl":          {Data: []byte(`app default`)},
+		"layouts/app.html+print.tpl":     {Data: []byte(`<print>{{.content}}</print>`)},
+		"posts/layout_check.html.tpl":    {Data: []byte(`layout`)},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var out strings.Builder
+	err = views.Render(lazyview.Options{
+		Writer:     &out,
+		Controller: "posts",
+		Action:     "show",
+		Variants:   []string{"mobile", "square", "desktop"},
+		UseLayout:  true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := out.String(), `<main>square</main>`; got != want {
+		t.Fatalf("rendered body = %q, want %q", got, want)
+	}
+
+	out.Reset()
+	err = views.Render(lazyview.Options{
+		Writer:     &out,
+		Controller: "posts",
+		Action:     "partial",
+		Variants:   []string{"square"},
+		UseLayout:  false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := out.String(), `partial square`; got != want {
+		t.Fatalf("rendered body = %q, want %q", got, want)
+	}
+
+	out.Reset()
+	err = views.Render(lazyview.Options{
+		Writer:    &out,
+		Action:    "fallback",
+		Variants:  []string{"square"},
+		UseLayout: false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := out.String(), `app square`; got != want {
+		t.Fatalf("rendered body = %q, want %q", got, want)
+	}
+
+	out.Reset()
+	err = views.Render(lazyview.Options{
+		Writer:     &out,
+		Controller: "posts",
+		Action:     "layout_check",
+		Variants:   []string{"print"},
+		UseLayout:  true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := out.String(), `<print>layout</print>`; got != want {
+		t.Fatalf("rendered body = %q, want %q", got, want)
+	}
+}
+
 func TestPartialUsesCurrentDotAsContext(t *testing.T) {
 	type postView struct {
 		Title string

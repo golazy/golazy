@@ -26,6 +26,11 @@ func WithRenderer(ctx context.Context, renderer *Renderer) context.Context {
 	return context.WithValue(ctx, rendererContextKey{}, renderer)
 }
 
+func RendererFromContext(ctx context.Context) (*Renderer, bool) {
+	renderer, ok := ctx.Value(rendererContextKey{}).(*Renderer)
+	return renderer, ok
+}
+
 type Base struct {
 	appCtx     context.Context
 	ctx        context.Context
@@ -42,6 +47,7 @@ type Base struct {
 	helpers    map[string]any
 	frameOpts  []lazyturbo.FrameOption
 	format     Format
+	variants   []string
 }
 
 func NewBase(ctx context.Context, viewPath ...string) (Base, error) {
@@ -98,6 +104,7 @@ func (b *Base) BindRequest(w http.ResponseWriter, r *http.Request, route lazyvie
 	b.data = make(map[string]any)
 	b.helpers = make(map[string]any)
 	b.frameOpts = nil
+	b.variants = nil
 	return nil
 }
 
@@ -112,6 +119,7 @@ func (b *Base) ResetRequest() {
 	b.data = nil
 	b.helpers = nil
 	b.frameOpts = nil
+	b.variants = nil
 }
 
 type appContext struct {
@@ -181,6 +189,35 @@ func (b *Base) RenderHTML(view string) error {
 	return b.render(view, HTML)
 }
 
+func (b *Base) RenderSVGString(view string, variants ...string) (string, error) {
+	return b.renderString(view, "svg", variants...)
+}
+
+func (b *Base) renderString(view string, format string, variants ...string) (string, error) {
+	if b.renderer == nil {
+		return "", fmt.Errorf("controller base is not initialized")
+	}
+	if view == "" {
+		view = strings.ToLower(b.route.Action)
+	}
+	if view == "" {
+		return "", fmt.Errorf("view name is required")
+	}
+	return b.renderer.RenderString(lazyview.Options{
+		Context:    b.ctx,
+		Request:    b.request,
+		Variables:  b.data,
+		Helpers:    b.helpers,
+		Route:      b.route,
+		Namespace:  b.route.Namespace,
+		Controller: b.controller,
+		Action:     view,
+		Format:     format,
+		Variants:   variants,
+		UseLayout:  false,
+	})
+}
+
 func (b *Base) render(view string, format Format) error {
 	if b.writer == nil || b.renderer == nil {
 		return fmt.Errorf("controller base is not initialized")
@@ -207,9 +244,14 @@ func (b *Base) render(view string, format Format) error {
 		Namespace:  b.route.Namespace,
 		Controller: b.controller,
 		Action:     view,
+		Variants:   b.variants,
 		Layout:     b.layout,
 		UseLayout:  b.useLayout,
 	}, format)
+}
+
+func (b *Base) Variants(variants ...string) {
+	b.variants = append([]string(nil), variants...)
 }
 
 func (b *Base) SetTurboFrameOptions(opts ...lazyturbo.FrameOption) {
@@ -240,6 +282,7 @@ func (b *Base) renderTurboFrame(id string, opts []lazyturbo.FrameOption) error {
 		Controller: b.controller,
 		Partial:    id + "_frame",
 		Format:     string(HTML),
+		Variants:   b.variants,
 		UseLayout:  false,
 	})
 	if err != nil {

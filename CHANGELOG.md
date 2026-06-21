@@ -7,6 +7,8 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.11] - 2026-06-21
+
 ### Added
 
 - `golazy.dev/lazystorage`, `golazy.dev/lazyfiles`, and
@@ -273,7 +275,8 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Route construction with embedded public-file fallback.
 - Method-not-allowed handling for application routes.
 
-[Unreleased]: https://github.com/golazy/golazy/compare/v0.1.10...HEAD
+[Unreleased]: https://github.com/golazy/golazy/compare/v0.1.11...HEAD
+[0.1.11]: https://github.com/golazy/golazy/compare/v0.1.10...v0.1.11
 [0.1.10]: https://github.com/golazy/golazy/compare/v0.1.9...v0.1.10
 [0.1.9]: https://github.com/golazy/golazy/compare/v0.1.8...v0.1.9
 [0.1.8]: https://github.com/golazy/golazy/compare/v0.1.7...v0.1.8

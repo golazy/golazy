@@ -9,6 +9,10 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `golazy.dev/lazystorage`, `golazy.dev/lazyfiles`, and
+  `golazy.dev/lazymedia`, early storage building blocks for object-style
+  storage backends, logical file catalogs, fallback signed file URLs, and
+  generated media variants.
 - `golazy.dev/lazyseo`, an optional helper package for request-local document
   metadata with `{{seo}}` and `{{seo_lang}}` view helpers for title, document
   language, canonical URLs, alternates, JSON-LD, description, Open Graph,
@@ -26,6 +30,8 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Generated `/robots.txt` and `/sitemap.xml` through `lazyapp.Config`, with
   permissive robots defaults, configurable crawler rules, sitemap entries and
   sources, alternate URLs, `<lastmod>`, and `Last-Modified` cache validation.
+- `golazy.dev/lazymailer` for Rails-style mailer rendering, standard-library
+  MIME message building, and pluggable delivery implementations.
 
 ## [0.1.10] - 2026-06-20
 

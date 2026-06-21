@@ -47,9 +47,13 @@ golazy.dev/lazyassets              Asset registry, fingerprints, and serving
 golazy.dev/lazycontroller          Request-local controllers and render state
 golazy.dev/lazycookie              Signed and encrypted secure cookies
 golazy.dev/lazydispatch            HTTP dispatch and middleware
+golazy.dev/lazyfiles               Logical file catalog and fallback file URLs
+golazy.dev/lazymailer              Mailer rendering and delivery interfaces
+golazy.dev/lazymedia               Generated file/media variants
 golazy.dev/lazyroutes              Route DSL, resources, scopes, and route table
 golazy.dev/lazyseo                 Optional SEO metadata view helpers
 golazy.dev/lazysession             Cookie sessions and session middleware
+golazy.dev/lazystorage             Object-style storage interfaces and backends
 golazy.dev/lazyview                View rendering and helper registry
 golazy.dev/lazyview/gotmpl         html/template engine for lazyview
 golazy.dev/lazysupport/inflection  Naming and inflection helpers

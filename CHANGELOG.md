@@ -7,6 +7,24 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.13] - 2026-06-22
+
+### Added
+
+- `golazy.dev/lazycontrolplane`, a framework-owned control plane with liveness
+  and readiness probes, optional metrics and pprof handlers, and standalone
+  HTTP serving support.
+- `lazyapp.Config.ControlPlane` and `CONTROL_PLANE_ADDR` integration for
+  serving the control plane either on the application handler or on a separate
+  HTTP server.
+
+### Changed
+
+- Expanded package documentation and runnable examples across the core
+  framework packages, including `lazyapp`, `lazycontroller`, `lazyroutes`,
+  `lazymailer`, `lazypath`, assets, dispatch, docs, files, forms, media, SEO,
+  SSE, storage, tests, Turbo, and view helpers.
+
 ## [0.1.12] - 2026-06-22
 
 ### Added
@@ -303,7 +321,8 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Route construction with embedded public-file fallback.
 - Method-not-allowed handling for application routes.
 
-[Unreleased]: https://github.com/golazy/golazy/compare/v0.1.12...HEAD
+[Unreleased]: https://github.com/golazy/golazy/compare/v0.1.13...HEAD
+[0.1.13]: https://github.com/golazy/golazy/compare/v0.1.12...v0.1.13
 [0.1.12]: https://github.com/golazy/golazy/compare/v0.1.11...v0.1.12
 [0.1.11]: https://github.com/golazy/golazy/compare/v0.1.10...v0.1.11
 [0.1.10]: https://github.com/golazy/golazy/compare/v0.1.9...v0.1.10

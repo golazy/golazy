@@ -14,6 +14,7 @@ import (
 
 	"golazy.dev/lazyassets"
 	"golazy.dev/lazycontroller"
+	"golazy.dev/lazycontrolplane"
 	"golazy.dev/lazyroutes"
 	"golazy.dev/lazyseo"
 	"golazy.dev/lazysession"
@@ -527,6 +528,153 @@ func TestListenAddr(t *testing.T) {
 
 			if got := listenAddr(); got != test.want {
 				t.Fatalf("listenAddr() = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
+func TestAppDoesNotInstallControlPlaneByDefault(t *testing.T) {
+	app := New(Config{
+		Name: "test",
+		Drawer: func(router *lazyroutes.Scope) {
+			router.HandleFunc(http.MethodGet, "/livez", func(w http.ResponseWriter, _ *http.Request) error {
+				_, _ = fmt.Fprint(w, "app livez")
+				return nil
+			})
+		},
+	})
+
+	response := httptest.NewRecorder()
+	app.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/livez", nil))
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+	if got := response.Body.String(); got != "app livez" {
+		t.Fatalf("body = %q, want app route", got)
+	}
+}
+
+func TestAppInstallsConfiguredControlPlaneBeforeRoutes(t *testing.T) {
+	app := New(Config{
+		Name:         "test",
+		ControlPlane: lazycontrolplane.Config{},
+		Drawer: func(router *lazyroutes.Scope) {
+			router.HandleFunc(http.MethodGet, "/livez", func(w http.ResponseWriter, _ *http.Request) error {
+				_, _ = fmt.Fprint(w, "app livez")
+				return nil
+			})
+		},
+	})
+	if app.ControlPlane == nil {
+		t.Fatal("app ControlPlane is nil")
+	}
+
+	response := httptest.NewRecorder()
+	app.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/livez", nil))
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+	if got := response.Body.String(); got != "live\n" {
+		t.Fatalf("body = %q, want control plane route", got)
+	}
+}
+
+func TestControlPlaneListenAddr(t *testing.T) {
+	t.Setenv("CONTROL_PLANE_ADDR", "9090")
+
+	addr, ok := controlPlaneListenAddr()
+	if !ok {
+		t.Fatal("controlPlaneListenAddr() ok = false, want true")
+	}
+	if addr != ":9090" {
+		t.Fatalf("controlPlaneListenAddr() = %q, want :9090", addr)
+	}
+}
+
+func TestControlPlaneForListenActivatesFromEnvAddress(t *testing.T) {
+	app := New(Config{Name: "test"})
+	if app.controlPlaneForListen(false) != nil {
+		t.Fatal("control plane active without config or CONTROL_PLANE_ADDR")
+	}
+	if app.controlPlaneForListen(true) == nil {
+		t.Fatal("control plane is nil with CONTROL_PLANE_ADDR set")
+	}
+
+	configured := New(Config{
+		Name:         "test",
+		ControlPlane: lazycontrolplane.Config{},
+	})
+	if configured.controlPlaneForListen(false) != configured.ControlPlane {
+		t.Fatal("configured control plane was not reused")
+	}
+}
+
+func TestHandlersForListenMountControlPlaneWhenAddressesMatch(t *testing.T) {
+	app := New(Config{Name: "test"})
+
+	appHandler, controlHandler := app.handlersForListen(":3000", "3000", true)
+	if controlHandler != nil {
+		t.Fatal("control handler is not nil for matching app and control-plane addresses")
+	}
+
+	response := httptest.NewRecorder()
+	appHandler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/livez", nil))
+	if got := response.Body.String(); got != "live\n" {
+		t.Fatalf("app handler /livez body = %q, want control plane", got)
+	}
+}
+
+func TestHandlersForListenSeparateControlPlaneWhenAddressesDiffer(t *testing.T) {
+	app := New(Config{
+		Name:         "test",
+		ControlPlane: lazycontrolplane.Config{},
+		Drawer: func(router *lazyroutes.Scope) {
+			router.HandleFunc(http.MethodGet, "/livez", func(w http.ResponseWriter, _ *http.Request) error {
+				_, _ = fmt.Fprint(w, "app livez")
+				return nil
+			})
+		},
+	})
+
+	appHandler, controlHandler := app.handlersForListen(":3000", ":9090", true)
+	if controlHandler == nil {
+		t.Fatal("control handler is nil for separate control-plane address")
+	}
+
+	response := httptest.NewRecorder()
+	appHandler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/livez", nil))
+	if got := response.Body.String(); got != "app livez" {
+		t.Fatalf("app handler /livez body = %q, want app route", got)
+	}
+
+	response = httptest.NewRecorder()
+	controlHandler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/livez", nil))
+	if got := response.Body.String(); got != "live\n" {
+		t.Fatalf("control handler /livez body = %q, want control plane", got)
+	}
+}
+
+func TestSameListenAddr(t *testing.T) {
+	tests := []struct {
+		name  string
+		left  string
+		right string
+		want  bool
+	}{
+		{name: "same normalized port", left: ":3000", right: "3000", want: true},
+		{name: "same default addr", left: ":3000", right: ":3000", want: true},
+		{name: "wildcard overlaps localhost", left: "0.0.0.0:3000", right: "127.0.0.1:3000", want: true},
+		{name: "localhost aliases overlap", left: "localhost:3000", right: "127.0.0.1:3000", want: true},
+		{name: "different ports", left: ":3000", right: ":3001", want: false},
+		{name: "different concrete hosts", left: "127.0.0.1:3000", right: "192.0.2.10:3000", want: false},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := sameListenAddr(test.left, test.right); got != test.want {
+				t.Fatalf("sameListenAddr(%q, %q) = %v, want %v", test.left, test.right, got, test.want)
 			}
 		})
 	}

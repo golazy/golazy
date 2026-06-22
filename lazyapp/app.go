@@ -13,6 +13,7 @@ import (
 
 	"golazy.dev/lazyassets"
 	"golazy.dev/lazycontroller"
+	"golazy.dev/lazycontrolplane"
 	"golazy.dev/lazydispatch"
 	"golazy.dev/lazydispatch/middlewares"
 	"golazy.dev/lazyforms"
@@ -37,17 +38,19 @@ type Config struct {
 	Robots            RobotsConfig
 	Sitemap           SitemapConfig
 	Sessions          lazysession.Config
+	ControlPlane      lazycontrolplane.Builder
 	Middlewares       []lazydispatch.Middleware
 	ForceDetailErrors bool
 }
 
 type App struct {
-	Name       string
-	Context    context.Context
-	Dispatcher *lazydispatch.Dispatcher
-	Router     *lazyroutes.Scope
-	Assets     *lazyassets.Registry
-	Sessions   *lazysession.Manager
+	Name         string
+	Context      context.Context
+	Dispatcher   *lazydispatch.Dispatcher
+	Router       *lazyroutes.Scope
+	Assets       *lazyassets.Registry
+	Sessions     *lazysession.Manager
+	ControlPlane *lazycontrolplane.ControlPlane
 }
 
 var afterDraw = func(*lazyroutes.Scope) {}
@@ -64,6 +67,14 @@ func MustSub(fsys fs.FS, dir string) func() (fs.FS, error) {
 
 func New(config Config) *App {
 	ctx := context.Background()
+	var controlPlane *lazycontrolplane.ControlPlane
+	if config.ControlPlane != nil {
+		controlPlane = config.ControlPlane.BuildControlPlane()
+		if controlPlane == nil {
+			panic("lazyapp: control plane builder returned nil")
+		}
+	}
+
 	var sessions *lazysession.Manager
 	if config.Sessions.Enabled() {
 		sessionConfig := config.Sessions
@@ -165,16 +176,21 @@ func New(config Config) *App {
 	}
 
 	return &App{
-		Name:       config.Name,
-		Context:    ctx,
-		Dispatcher: dispatcher,
-		Router:     router,
-		Assets:     assets,
-		Sessions:   sessions,
+		Name:         config.Name,
+		Context:      ctx,
+		Dispatcher:   dispatcher,
+		Router:       router,
+		Assets:       assets,
+		Sessions:     sessions,
+		ControlPlane: controlPlane,
 	}
 }
 
 func (app *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if app.ControlPlane != nil && app.ControlPlane.HandlesPath(r.URL.Path) {
+		app.ControlPlane.ServeHTTP(w, r)
+		return
+	}
 	app.Dispatcher.ServeHTTP(w, r)
 }
 
@@ -184,17 +200,16 @@ func (app *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // includes the dependencies initialized by New. When using a custom http.Server,
 // set BaseContext to return app.Context.
 func (app *App) ListenAndServe() error {
-	server := &http.Server{
-		Addr:    listenAddr(),
-		Handler: app,
-		BaseContext: func(_ net.Listener) context.Context {
-			return app.Context
-		},
+	appAddr := listenAddr()
+	controlAddr, controlAddrSet := controlPlaneListenAddr()
+	appHandler, controlHandler := app.handlersForListen(appAddr, controlAddr, controlAddrSet)
+	appServer := app.newServer(appAddr, appHandler)
+	if controlHandler == nil {
+		return listenAndServe(appServer)
 	}
-	if err := server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
-		return err
-	}
-	return nil
+
+	controlServer := app.newServer(controlAddr, controlHandler)
+	return listenAndServeBoth(appServer, controlServer)
 }
 
 func listenAddr() string {
@@ -207,11 +222,117 @@ func listenAddr() string {
 	return ":3000"
 }
 
+func controlPlaneListenAddr() (string, bool) {
+	addr := os.Getenv("CONTROL_PLANE_ADDR")
+	if addr == "" {
+		return "", false
+	}
+	return normalizeListenAddr(addr), true
+}
+
 func normalizeListenAddr(addr string) string {
 	if _, err := strconv.ParseUint(addr, 10, 16); err == nil {
 		return ":" + addr
 	}
 	return addr
+}
+
+func sameListenAddr(left, right string) bool {
+	left = normalizeListenAddr(left)
+	right = normalizeListenAddr(right)
+	if left == right {
+		return true
+	}
+
+	leftHost, leftPort, leftOK := splitListenAddr(left)
+	rightHost, rightPort, rightOK := splitListenAddr(right)
+	if !leftOK || !rightOK || leftPort != rightPort {
+		return false
+	}
+	return listenHostsOverlap(leftHost, rightHost)
+}
+
+func splitListenAddr(addr string) (host string, port string, ok bool) {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return "", "", false
+	}
+	return strings.ToLower(host), port, true
+}
+
+func listenHostsOverlap(left, right string) bool {
+	if left == right {
+		return true
+	}
+	if isWildcardListenHost(left) || isWildcardListenHost(right) {
+		return true
+	}
+	return isLocalListenHost(left) && isLocalListenHost(right)
+}
+
+func isWildcardListenHost(host string) bool {
+	return host == "" || host == "0.0.0.0" || host == "::"
+}
+
+func isLocalListenHost(host string) bool {
+	return host == "localhost" || host == "127.0.0.1" || host == "::1"
+}
+
+func (app *App) controlPlaneForListen(controlAddrSet bool) *lazycontrolplane.ControlPlane {
+	if app.ControlPlane != nil {
+		return app.ControlPlane
+	}
+	if controlAddrSet {
+		return lazycontrolplane.New(lazycontrolplane.Config{})
+	}
+	return nil
+}
+
+func (app *App) handlersForListen(appAddr string, controlAddr string, controlAddrSet bool) (http.Handler, http.Handler) {
+	controlPlane := app.controlPlaneForListen(controlAddrSet)
+	appHandler := http.Handler(app.Dispatcher)
+	if controlPlane == nil {
+		return appHandler, nil
+	}
+	if !controlAddrSet || sameListenAddr(appAddr, controlAddr) {
+		return controlPlane.Handler(appHandler), nil
+	}
+	return appHandler, controlPlane
+}
+
+func (app *App) newServer(addr string, handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:    addr,
+		Handler: handler,
+		BaseContext: func(_ net.Listener) context.Context {
+			return app.Context
+		},
+	}
+}
+
+func listenAndServe(server *http.Server) error {
+	if err := server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+		return err
+	}
+	return nil
+}
+
+func listenAndServeBoth(appServer *http.Server, controlServer *http.Server) error {
+	errs := make(chan error, 2)
+	go func() {
+		errs <- listenAndServe(controlServer)
+	}()
+	go func() {
+		errs <- listenAndServe(appServer)
+	}()
+
+	err := <-errs
+	_ = appServer.Close()
+	_ = controlServer.Close()
+	if secondErr := <-errs; err == nil {
+		err = secondErr
+	}
+	return err
 }
 
 func derivedSessionName(appName string) string {

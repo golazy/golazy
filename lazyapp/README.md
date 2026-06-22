@@ -14,6 +14,7 @@ app := lazyapp.New(lazyapp.Config{
     Context: Context,
     Helpers: lazyapp.Helpers{helpers.RegisterHelpers()},
     Assets:  []lazyassets.Source{generatedAssets},
+    ControlPlane: lazycontrolplane.Config{},
     Sessions: lazysession.Config{
         Key: os.Getenv("SECURE_COOKIE_KEY"),
     },
@@ -33,14 +34,18 @@ log.Fatal(app.ListenAndServe())
 - Caches views after helpers are registered.
 - Creates a `lazydispatch.Dispatcher`.
 - Installs route-only method override, response buffering, and ETag handling.
+- Builds an optional control plane for liveness, readiness, metrics, and Go
+  diagnostics.
 - Installs application middleware.
 - Installs the router middleware.
 - Installs asset serving as the public fallback.
 
 The returned `App` implements `http.Handler`. `App.ListenAndServe` is the
-default server shortcut; it uses `ADDR`, then `PORT`, then `:3000`. It also
-sets the server base context to `app.Context`, so request contexts include the
-dependencies initialized by `lazyapp.New`.
+default server shortcut; it uses `ADDR`, then `PORT`, then `:3000`. When
+`CONTROL_PLANE_ADDR` is set, it activates the default control plane and either
+mounts it into the app server when the addresses match or starts a second server
+when the address differs. It also sets the server base context to `app.Context`,
+so request contexts include the dependencies initialized by `lazyapp.New`.
 
 When using your own `http.Server`, set `BaseContext` manually:
 

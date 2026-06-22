@@ -8,19 +8,13 @@ import (
 	"path/filepath"
 	"testing"
 	"testing/fstest"
-
-	"golazy.dev/lazyviews"
 )
 
 func TestOpenConfiguredViewsUsesLocalViewsInLazyDevBuild(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, "views", "layouts", "app.html.tpl"), "local")
 
-	previous := lazyviews.ViewsPath
-	lazyviews.ViewsPath = filepath.Join(dir, "views")
-	t.Cleanup(func() {
-		lazyviews.ViewsPath = previous
-	})
+	t.Setenv(lazyDevViewsPathEnv, filepath.Join(dir, "views"))
 
 	views, err := openConfiguredViews(func() (fs.FS, error) {
 		return fstest.MapFS{

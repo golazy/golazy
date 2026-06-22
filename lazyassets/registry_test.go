@@ -91,6 +91,31 @@ func TestRegistryStylesheetHelper(t *testing.T) {
 	}
 }
 
+func TestRegistryAssetBaseURL(t *testing.T) {
+	registry := New(WithBaseURL("http://127.0.0.1:8888/buckets/assets/"))
+	if err := registry.Add("/styles.css", []byte("body { background: url('/logo.txt') }"), ContentType("text/css")); err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.Add("/logo.txt", []byte("logo")); err != nil {
+		t.Fatal(err)
+	}
+
+	permanent, err := registry.Path("/styles.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(permanent, "http://127.0.0.1:8888/buckets/assets/styles-") {
+		t.Fatalf("Path = %q, want base URL", permanent)
+	}
+	data, err := registry.content("/styles.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !regexp.MustCompile(`url\('http://127\.0\.0\.1:8888/buckets/assets/logo-[a-f0-9]{12}\.txt'\)`).Match(data) {
+		t.Fatalf("stylesheet = %q, want rewritten absolute asset URL", data)
+	}
+}
+
 func TestRegistryImportmapHelper(t *testing.T) {
 	registry := New()
 	if err := registry.Add("/assets/importmap.json", []byte(`{"imports":{"library":"/assets/library.js","unsafe":"</script>"}}`)); err != nil {
@@ -113,6 +138,25 @@ func TestRegistryImportmapHelper(t *testing.T) {
 	}
 	if !strings.Contains(fragment.Body, `\u003c/script\u003e`) {
 		t.Fatalf("Body = %q, want escaped JSON", fragment.Body)
+	}
+}
+
+func TestRegistryImportmapHelperRewritesAssetBaseURL(t *testing.T) {
+	registry := New(WithBaseURL("http://127.0.0.1:8888/buckets/assets"))
+	if err := registry.Add("/assets/importmap.json", []byte(`{"imports":{"library":"/assets/library.js","remote":"https://cdn.example.test/x.js"}}`)); err != nil {
+		t.Fatal(err)
+	}
+
+	helper := registry.Helpers()["importmap"].(func(string) (lazyview.Fragment, error))
+	fragment, err := helper("/assets/importmap.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(fragment.Body, `http://127.0.0.1:8888/buckets/assets/assets/library.js`) {
+		t.Fatalf("Body = %q, want local import rewritten to asset base URL", fragment.Body)
+	}
+	if !strings.Contains(fragment.Body, `https://cdn.example.test/x.js`) {
+		t.Fatalf("Body = %q, want remote import preserved", fragment.Body)
 	}
 }
 

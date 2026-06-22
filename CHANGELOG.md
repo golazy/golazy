@@ -7,6 +7,12 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Removed
+
+- Removed the public `golazy.dev/lazyviews` package. The `lazy` CLI now owns
+  local development view-path resolution and passes the resolved path to
+  `lazyapp` in `lazydev` builds.
+
 ## [0.1.11] - 2026-06-21
 
 ### Added

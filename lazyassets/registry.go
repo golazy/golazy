@@ -44,6 +44,7 @@ type Options struct {
 	LogicalCache   CachePolicy
 	PermanentCache CachePolicy
 	RewriteCSSURLs bool
+	BaseURL        string
 }
 
 type Option func(*Options)
@@ -82,6 +83,14 @@ func WithCachePolicies(logical, permanent CachePolicy) Option {
 func WithCSSURLRewrite(enabled bool) Option {
 	return func(options *Options) {
 		options.RewriteCSSURLs = enabled
+	}
+}
+
+// WithBaseURL makes helpers return absolute asset URLs while keeping request
+// routing and storage keys path-based.
+func WithBaseURL(baseURL string) Option {
+	return func(options *Options) {
+		options.BaseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	}
 }
 
@@ -278,9 +287,9 @@ func (r *Registry) Path(assetPath string) (string, error) {
 		return "", fmt.Errorf("lazyassets: asset %q not found", assetPath)
 	}
 	if asset.Permanent != "" {
-		return asset.Permanent, nil
+		return r.assetURL(asset.Permanent), nil
 	}
-	return asset.Path, nil
+	return r.assetURL(asset.Path), nil
 }
 
 func (r *Registry) MustPath(assetPath string) string {
@@ -385,6 +394,10 @@ func (r *Registry) Helpers() map[string]any {
 			if err != nil {
 				return lazyview.Fragment{}, err
 			}
+			data, err = r.rewriteImportmapURLs(data)
+			if err != nil {
+				return lazyview.Fragment{}, err
+			}
 			if !json.Valid(data) {
 				return lazyview.Fragment{}, fmt.Errorf("lazyassets: importmap %q is not valid JSON", path)
 			}
@@ -399,6 +412,39 @@ func (r *Registry) Helpers() map[string]any {
 			return r.Path(path)
 		},
 	}
+}
+
+func (r *Registry) rewriteImportmapURLs(data []byte) ([]byte, error) {
+	if r.options.BaseURL == "" {
+		return data, nil
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(data, &doc); err != nil {
+		return data, nil
+	}
+	rewriteStringMap := func(value any) {
+		values, ok := value.(map[string]any)
+		if !ok {
+			return
+		}
+		for name, raw := range values {
+			ref, ok := raw.(string)
+			if ok && strings.HasPrefix(ref, "/") {
+				values[name] = r.assetURL(ref)
+			}
+		}
+	}
+	rewriteStringMap(doc["imports"])
+	if scopes, ok := doc["scopes"].(map[string]any); ok {
+		for _, scope := range scopes {
+			rewriteStringMap(scope)
+		}
+	}
+	rewritten, err := json.Marshal(doc)
+	if err != nil {
+		return nil, fmt.Errorf("lazyassets: rewrite importmap URLs: %w", err)
+	}
+	return rewritten, nil
 }
 
 type UnpackMode int
@@ -605,8 +651,15 @@ func (r *Registry) rewriteCSSContent(stylesheet *Asset, css string) string {
 		if !ok || target == stylesheet || target.Permanent == "" {
 			return match
 		}
-		return "url(" + quote + target.Permanent + suffix + quote + ")"
+		return "url(" + quote + r.assetURL(target.Permanent) + suffix + quote + ")"
 	})
+}
+
+func (r *Registry) assetURL(assetPath string) string {
+	if r.options.BaseURL == "" {
+		return assetPath
+	}
+	return r.options.BaseURL + "/" + strings.TrimPrefix(assetPath, "/")
 }
 
 func (r *Registry) updateAssetContent(asset *Asset, content []byte) {

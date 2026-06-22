@@ -7,6 +7,28 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.12] - 2026-06-22
+
+### Added
+
+- `lazyassets.Registry.Upload`, which writes registered assets to any
+  `lazystorage.Writer`. The default mode uploads content-hashed permanent asset
+  paths plus `manifest.json`, which fits CDN and static ingress deployments.
+- `lazyassets.WithBaseURL`, which makes asset helpers and importmap fragments
+  emit absolute asset URLs while keeping registered asset paths and routing
+  path-based.
+- `golazy.dev/lazystorage/s3`, a concrete S3-compatible storage backend with
+  signed Open, Put, Delete, List, URL, Watch polling, and bucket creation
+  support.
+- `golazy.dev/lazydoc`, shared package documentation loading, extraction,
+  JSON, and search models for the GoLazy website and `lazy docs`.
+
+### Changed
+
+- In `lazydev` builds, `lazyapp` reads the local view root from
+  `GOLAZY_VIEW_PATH`. Production builds continue to use the application
+  configured embedded view filesystem.
+
 ### Removed
 
 - Removed the public `golazy.dev/lazyviews` package. The `lazy` CLI now owns
@@ -281,7 +303,8 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Route construction with embedded public-file fallback.
 - Method-not-allowed handling for application routes.
 
-[Unreleased]: https://github.com/golazy/golazy/compare/v0.1.11...HEAD
+[Unreleased]: https://github.com/golazy/golazy/compare/v0.1.12...HEAD
+[0.1.12]: https://github.com/golazy/golazy/compare/v0.1.11...v0.1.12
 [0.1.11]: https://github.com/golazy/golazy/compare/v0.1.10...v0.1.11
 [0.1.10]: https://github.com/golazy/golazy/compare/v0.1.9...v0.1.10
 [0.1.9]: https://github.com/golazy/golazy/compare/v0.1.8...v0.1.9

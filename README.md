@@ -44,16 +44,24 @@ framework itself is just Go packages.
 ```text
 golazy.dev/lazyapp                 Application composition
 golazy.dev/lazyassets              Asset registry, fingerprints, and serving
+golazy.dev/lazycontrolplane        Liveness, readiness, metrics, and diagnostics
 golazy.dev/lazycontroller          Request-local controllers and render state
 golazy.dev/lazycookie              Signed and encrypted secure cookies
 golazy.dev/lazydispatch            HTTP dispatch and middleware
+golazy.dev/lazydoc                 Package documentation extraction and search
 golazy.dev/lazyfiles               Logical file catalog and fallback file URLs
+golazy.dev/lazyforms               Form helpers aligned with schema decoding
 golazy.dev/lazymailer              Mailer rendering and delivery interfaces
 golazy.dev/lazymedia               Generated file/media variants
+golazy.dev/lazypath                Route path and URL parameter helpers
 golazy.dev/lazyroutes              Route DSL, resources, scopes, and route table
+golazy.dev/lazyschema              Form decoding and field naming
 golazy.dev/lazyseo                 Optional SEO metadata view helpers
 golazy.dev/lazysession             Cookie sessions and session middleware
+golazy.dev/lazysse                 Server-Sent Events response helpers
 golazy.dev/lazystorage             Object-style storage interfaces and backends
+golazy.dev/lazytest                HTTP-level application test helpers
+golazy.dev/lazyturbo               Turbo Frame view/controller helpers
 golazy.dev/lazyview                View rendering and helper registry
 golazy.dev/lazyview/gotmpl         html/template engine for lazyview
 golazy.dev/lazysupport/inflection  Naming and inflection helpers
@@ -70,6 +78,7 @@ import (
     "os"
 
     "golazy.dev/lazyapp"
+    "golazy.dev/lazycontrolplane"
     "golazy.dev/lazysession"
     _ "golazy.dev/lazyview/gotmpl"
     "my_app/app"
@@ -82,6 +91,7 @@ func App() *lazyapp.App {
         Public:  app.Public,
         Views:   app.Views,
         Context: Context,
+        ControlPlane: lazycontrolplane.Config{},
         Sessions: lazysession.Config{
             Key: os.Getenv("SECURE_COOKIE_KEY"),
         },
@@ -105,6 +115,11 @@ func main() {
     }
 }
 ```
+
+`lazycontrolplane.Config{}` exposes `GET /livez` and `GET /readyz`. When
+`CONTROL_PLANE_ADDR` is set, `ListenAndServe` starts the control plane on that
+address unless it is the same as the application address, in which case the
+control plane is mounted into the app server.
 
 Routes are drawn through `lazyroutes.Scope`:
 

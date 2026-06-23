@@ -15,6 +15,7 @@ import (
 	"golazy.dev/lazyassets"
 	"golazy.dev/lazycontroller"
 	"golazy.dev/lazycontrolplane"
+	"golazy.dev/lazydeps"
 	"golazy.dev/lazyroutes"
 	"golazy.dev/lazyseo"
 	"golazy.dev/lazysession"
@@ -120,50 +121,37 @@ func TestAppServesDefaultRobotsAndSitemap(t *testing.T) {
 	}
 }
 
-func TestAppPanicsWhenContextInitializationFails(t *testing.T) {
+func TestAppPanicsWhenDependencyInitializationFails(t *testing.T) {
 	defer func() {
 		recovered := recover()
 		if recovered == nil {
 			t.Fatal("New did not panic")
 		}
-		if got := fmt.Sprint(recovered); !strings.Contains(got, "initialize context: database unavailable") {
-			t.Fatalf("panic = %q, want context initialization error", got)
+		if got := fmt.Sprint(recovered); !strings.Contains(got, "initialize dependencies: database unavailable") {
+			t.Fatalf("panic = %q, want dependency initialization error", got)
 		}
 	}()
 
 	New(Config{
-		Context: func(context.Context) (context.Context, error) {
-			return nil, errors.New("database unavailable")
+		Dependencies: func(*lazydeps.Scope) error {
+			return errors.New("database unavailable")
 		},
 	})
 }
 
-func TestAppAcceptsLegacyContextInitializer(t *testing.T) {
+func TestAppInitializesDependencies(t *testing.T) {
 	type contextKey struct{}
 
 	app := New(Config{
-		Context: func(ctx context.Context) context.Context {
-			return context.WithValue(ctx, contextKey{}, "initialized")
+		Dependencies: func(deps *lazydeps.Scope) error {
+			deps.SetContext(context.WithValue(deps.Context(), contextKey{}, "initialized"))
+			return nil
 		},
 	})
 
 	if got := app.Context.Value(contextKey{}); got != "initialized" {
 		t.Fatalf("context value = %v, want initialized", got)
 	}
-}
-
-func TestAppPanicsForUnsupportedContextInitializer(t *testing.T) {
-	defer func() {
-		recovered := recover()
-		if recovered == nil {
-			t.Fatal("New did not panic")
-		}
-		if got := fmt.Sprint(recovered); !strings.Contains(got, "unsupported Context initializer string") {
-			t.Fatalf("panic = %q, want unsupported initializer error", got)
-		}
-	}()
-
-	New(Config{Context: "invalid"})
 }
 
 func TestAppServesConfiguredRobotsAndSitemapAlternates(t *testing.T) {

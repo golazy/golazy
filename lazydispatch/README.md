@@ -43,7 +43,7 @@ func App() *lazyapp.App {
         Drawer:      Draw,
         Public:      app.Public,
         Views:       app.Views,
-        Context:     Context,
+        Dependencies: Dependencies,
         Middlewares: []lazydispatch.Middleware{
             requestIDMiddleware,
         },

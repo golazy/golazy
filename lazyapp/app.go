@@ -14,6 +14,7 @@ import (
 	"golazy.dev/lazyassets"
 	"golazy.dev/lazycontroller"
 	"golazy.dev/lazycontrolplane"
+	"golazy.dev/lazydeps"
 	"golazy.dev/lazydispatch"
 	"golazy.dev/lazydispatch/middlewares"
 	"golazy.dev/lazyforms"
@@ -26,14 +27,11 @@ import (
 type Helpers []map[string]any
 
 type Config struct {
-	Name   string
-	Drawer func(*lazyroutes.Scope)
-	Public func() (fs.FS, error)
-	Views  func() (fs.FS, error)
-	// Context may be func(context.Context) context.Context or
-	// func(context.Context) (context.Context, error). The error-returning form is
-	// preferred for new applications.
-	Context           any
+	Name              string
+	Drawer            func(*lazyroutes.Scope)
+	Public            func() (fs.FS, error)
+	Views             func() (fs.FS, error)
+	Dependencies      func(*lazydeps.Scope) error
 	Helpers           Helpers
 	SEO               []lazyseo.Option
 	Assets            []lazyassets.Source
@@ -54,6 +52,7 @@ type App struct {
 	Assets       *lazyassets.Registry
 	Sessions     *lazysession.Manager
 	ControlPlane *lazycontrolplane.ControlPlane
+	Dependencies *lazydeps.Scope
 }
 
 var afterDraw = func(*lazyroutes.Scope) {}
@@ -104,13 +103,6 @@ func New(config Config) *App {
 		}
 		ctx = lazycontroller.WithRenderer(ctx, renderer)
 	}
-	if config.Context != nil {
-		var err error
-		ctx, err = initializeContext(ctx, config.Context)
-		if err != nil {
-			panic(fmt.Errorf("initialize context: %w", err))
-		}
-	}
 	if config.ForceDetailErrors {
 		ctx = lazycontroller.WithDetailErrors(ctx)
 	}
@@ -133,6 +125,14 @@ func New(config Config) *App {
 		if err := source.Assets(assets); err != nil {
 			panic(fmt.Errorf("register generated assets: %w", err))
 		}
+	}
+
+	dependencies := lazydeps.New(ctx)
+	if config.Dependencies != nil {
+		if err := config.Dependencies(dependencies); err != nil {
+			panic(fmt.Errorf("initialize dependencies: %w", err))
+		}
+		ctx = dependencies.Context()
 	}
 
 	router := lazyroutes.New(ctx)
@@ -190,19 +190,7 @@ func New(config Config) *App {
 		Assets:       assets,
 		Sessions:     sessions,
 		ControlPlane: controlPlane,
-	}
-}
-
-func initializeContext(ctx context.Context, initializer any) (context.Context, error) {
-	switch init := initializer.(type) {
-	case nil:
-		return ctx, nil
-	case func(context.Context) context.Context:
-		return init(ctx), nil
-	case func(context.Context) (context.Context, error):
-		return init(ctx)
-	default:
-		return ctx, fmt.Errorf("unsupported Context initializer %T", initializer)
+		Dependencies: dependencies,
 	}
 }
 

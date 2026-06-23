@@ -11,7 +11,7 @@ app := lazyapp.New(lazyapp.Config{
     Drawer:  Draw,
     Public:  app.Public,
     Views:   app.Views,
-    Context: Context,
+    Dependencies: Dependencies,
     Helpers: lazyapp.Helpers{helpers.RegisterHelpers()},
     Assets:  []lazyassets.Source{generatedAssets},
     ControlPlane: lazycontrolplane.Config{},
@@ -25,7 +25,7 @@ log.Fatal(app.ListenAndServe())
 `lazyapp.New`:
 
 - Opens views and initializes the renderer.
-- Calls the application context initializer.
+- Calls the application dependency initializer.
 - Creates an asset registry.
 - Registers public and generated assets.
 - Creates the root `lazyroutes.Scope`.

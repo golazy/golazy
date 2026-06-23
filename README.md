@@ -90,7 +90,7 @@ func App() *lazyapp.App {
         Drawer:  Draw,
         Public:  app.Public,
         Views:   app.Views,
-        Context: Context,
+        Dependencies: Dependencies,
         ControlPlane: lazycontrolplane.Config{},
         Sessions: lazysession.Config{
             Key: os.Getenv("SECURE_COOKIE_KEY"),

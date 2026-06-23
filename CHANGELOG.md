@@ -7,6 +7,19 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `golazy.dev/lazydeps`, a dependency-initialization helper that records service
+  nodes and dependency edges while returning typed service references.
+
+### Changed
+
+- `lazyapp.Config.Dependencies` replaces `lazyapp.Config.Context`. The
+  framework now creates a `*lazydeps.Scope`, passes it to the application
+  dependency initializer, and keeps the resulting scope on `lazyapp.App`.
+- Retracted pre-`v0.1.0` framework module versions, which were unstable
+  snapshots before the current GoLazy release line.
+
 ## [0.1.14] - 2026-06-23
 
 ### Added

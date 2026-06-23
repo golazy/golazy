@@ -99,6 +99,118 @@ func TestNewContinuesAfterWarning(t *testing.T) {
 	}
 }
 
+func TestUITaskCapturesOutputOnSuccess(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	err := run(Tasks{
+		UITask("ui", func(ui *UI) error {
+			fmt.Fprintln(ui.Stdout(), "hidden stdout")
+			fmt.Fprintln(ui.Stderr(), "hidden stderr")
+			return ui.Run(func(_ io.Reader, out io.Writer, errout io.Writer) error {
+				fmt.Fprintln(out, "also hidden")
+				fmt.Fprintln(errout, "still hidden")
+				return nil
+			})
+		}),
+	}, environment{stdout: &stdout, stderr: &stderr})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got, want := stdout.String(), "* ui ... DONE\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("stderr = %q, want empty", got)
+	}
+}
+
+func TestUITaskTakeoverUsesRawStreamsAndResumesProgress(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	err := run(Tasks{
+		UITask("review", func(ui *UI) error {
+			fmt.Fprintln(ui.Stdout(), "captured before")
+			if err := ui.Takeover(func(_ io.Reader, out io.Writer, errout io.Writer) error {
+				fmt.Fprintln(out, "visible stdout")
+				fmt.Fprintln(errout, "visible stderr")
+				return nil
+			}); err != nil {
+				return err
+			}
+			fmt.Fprintln(ui.Stdout(), "captured after")
+			return nil
+		}),
+	}, environment{stdout: &stdout, stderr: &stderr})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got, want := stdout.String(), "* review ...\nvisible stdout\n* review ... DONE\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if got, want := stderr.String(), "visible stderr\n"; got != want {
+		t.Fatalf("stderr = %q, want %q", got, want)
+	}
+}
+
+func TestUITaskTakeoverFlushesCapturedOutputOnError(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	boom := errors.New("boom")
+
+	err := run(Tasks{
+		UITask("review", func(ui *UI) error {
+			fmt.Fprintln(ui.Stdout(), "captured stdout")
+			fmt.Fprintln(ui.Stderr(), "captured stderr")
+			return ui.Takeover(func(_ io.Reader, out io.Writer, errout io.Writer) error {
+				fmt.Fprintln(out, "visible stdout")
+				fmt.Fprintln(errout, "visible stderr")
+				return boom
+			})
+		}),
+	}, environment{stdout: &stdout, stderr: &stderr})
+	if !errors.Is(err, boom) {
+		t.Fatalf("error = %v, want boom", err)
+	}
+
+	if got, want := stdout.String(), "* review ...\nvisible stdout\n* review ... ERROR\ncaptured stdout\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if got, want := stderr.String(), "visible stderr\ncaptured stderr\n  error: boom\n"; got != want {
+		t.Fatalf("stderr = %q, want %q", got, want)
+	}
+}
+
+func TestUITaskTakeoverIsRejectedInParallel(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	err := run(Tasks{
+		Parallel("group", Tasks{
+			UITask("ui", func(ui *UI) error {
+				return ui.Takeover(func(_ io.Reader, _ io.Writer, _ io.Writer) error {
+					return nil
+				})
+			}),
+		}),
+	}, environment{stdout: &stdout, stderr: &stderr})
+	if err == nil {
+		t.Fatal("err = nil, want takeover rejection")
+	}
+	if !strings.Contains(err.Error(), "takeover is not available in parallel tasks") {
+		t.Fatalf("error = %v", err)
+	}
+	if got, want := stdout.String(), "* ui ... Working\n* ui ... ERROR\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if got, want := stderr.String(), "  error: progress UI takeover is not available in parallel tasks\n"; got != want {
+		t.Fatalf("stderr = %q, want %q", got, want)
+	}
+}
+
 func TestWarnUnwrapsUnderlyingError(t *testing.T) {
 	wrapped := &customWarningError{}
 	err := Warn{Err: wrapped}

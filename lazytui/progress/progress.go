@@ -12,10 +12,12 @@ import (
 // Func is the function shape run by a progress task.
 type Func func(stdin io.Reader, stdout io.Writer, stderr io.Writer) error
 
-// TaskDefinition is an opaque progress task created by Task or Parallel.
+// TaskDefinition is an opaque progress task created by Task, UITask, or
+// Parallel.
 type TaskDefinition struct {
 	name     string
 	run      Func
+	uiRun    func(*UI) error
 	parallel Tasks
 }
 
@@ -46,6 +48,12 @@ func Task(name string, run Func) TaskDefinition {
 	return TaskDefinition{name: name, run: run}
 }
 
+// UITask creates a named progress task that can temporarily take over the
+// terminal for interactive work.
+func UITask(name string, run func(*UI) error) TaskDefinition {
+	return TaskDefinition{name: name, uiRun: run}
+}
+
 // Parallel creates a named task that runs child tasks concurrently.
 //
 // The returned value is a normal TaskDefinition and can be placed inside Tasks
@@ -56,9 +64,24 @@ func Parallel(name string, tasks Tasks) TaskDefinition {
 	return TaskDefinition{name: name, parallel: copied}
 }
 
-// New runs tasks until a task returns a non-warning error.
+// New runs tasks with process standard streams until a task returns a
+// non-warning error.
 func New(tasks Tasks) error {
-	return run(tasks, defaultEnvironment())
+	return Run(tasks, os.Stdin, os.Stdout, os.Stderr)
+}
+
+// Run runs tasks with explicit streams until a task returns a non-warning
+// error. It is useful for command packages that already receive stdin, stdout,
+// and stderr from their caller.
+func Run(tasks Tasks, stdin io.Reader, stdout io.Writer, stderr io.Writer) error {
+	interactive := isTerminal(stdout)
+	return run(tasks, environment{
+		stdin:       stdin,
+		stdout:      stdout,
+		stderr:      stderr,
+		interactive: interactive,
+		color:       supportsColor(interactive),
+	})
 }
 
 func run(tasks Tasks, env environment) error {
@@ -93,7 +116,7 @@ func (r *runner) runSingle(task TaskDefinition) error {
 	r.renderer.startSingle(task.name)
 	stdout := &captureBuffer{}
 	stderr := &captureBuffer{}
-	err := runTaskFunc(task, r.env.stdin, stdout, stderr)
+	err := r.runTaskFunc(task, stdout, stderr, false)
 	r.renderer.finishSingle(task.name, statusFor(err), stdout.String(), stderr.String(), err)
 	return err
 }
@@ -113,7 +136,7 @@ func (r *runner) runParallel(task TaskDefinition) error {
 			defer wg.Done()
 			stdout := &captureBuffer{}
 			stderr := &captureBuffer{}
-			err := runTaskFunc(child, r.env.stdin, stdout, stderr)
+			err := r.runTaskFunc(child, stdout, stderr, true)
 			results[index] = parallelResult{
 				name:   child.name,
 				stdout: stdout.String(),
@@ -154,14 +177,26 @@ type parallelResult struct {
 	err    error
 }
 
-func runTaskFunc(task TaskDefinition, stdin io.Reader, stdout io.Writer, stderr io.Writer) error {
+func (r *runner) runTaskFunc(task TaskDefinition, stdout io.Writer, stderr io.Writer, parallel bool) error {
 	if task.parallel != nil {
 		return fmt.Errorf("%s: nested parallel tasks are not supported", task.name)
+	}
+	if task.uiRun != nil {
+		return task.uiRun(&UI{
+			stdin:       r.env.stdin,
+			stdout:      stdout,
+			stderr:      stderr,
+			rawStdout:   r.env.stdout,
+			rawStderr:   r.env.stderr,
+			renderer:    r.renderer,
+			taskName:    task.name,
+			parallelRun: parallel,
+		})
 	}
 	if task.run == nil {
 		return fmt.Errorf("%s: task function is nil", task.name)
 	}
-	return task.run(stdin, stdout, stderr)
+	return task.run(r.env.stdin, stdout, stderr)
 }
 
 type taskStatus string

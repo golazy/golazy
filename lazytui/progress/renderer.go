@@ -37,6 +37,28 @@ func (r *renderer) startSingle(name string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	r.writeSingleWorkingLocked(name)
+}
+
+func (r *renderer) suspendSingle(name string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.interactive {
+		fmt.Fprintf(r.stdout, "\r%s", ansiClearLine)
+		return
+	}
+	fmt.Fprintln(r.stdout)
+}
+
+func (r *renderer) resumeSingle(name string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.writeSingleWorkingLocked(name)
+}
+
+func (r *renderer) writeSingleWorkingLocked(name string) {
 	if r.interactive {
 		fmt.Fprintf(r.stdout, "* %s %s", name, r.decorate("Working", statusDone))
 		return

@@ -138,6 +138,34 @@ func TestAppPanicsWhenContextInitializationFails(t *testing.T) {
 	})
 }
 
+func TestAppAcceptsLegacyContextInitializer(t *testing.T) {
+	type contextKey struct{}
+
+	app := New(Config{
+		Context: func(ctx context.Context) context.Context {
+			return context.WithValue(ctx, contextKey{}, "initialized")
+		},
+	})
+
+	if got := app.Context.Value(contextKey{}); got != "initialized" {
+		t.Fatalf("context value = %v, want initialized", got)
+	}
+}
+
+func TestAppPanicsForUnsupportedContextInitializer(t *testing.T) {
+	defer func() {
+		recovered := recover()
+		if recovered == nil {
+			t.Fatal("New did not panic")
+		}
+		if got := fmt.Sprint(recovered); !strings.Contains(got, "unsupported Context initializer string") {
+			t.Fatalf("panic = %q, want unsupported initializer error", got)
+		}
+	}()
+
+	New(Config{Context: "invalid"})
+}
+
 func TestAppServesConfiguredRobotsAndSitemapAlternates(t *testing.T) {
 	app := New(Config{
 		Robots: RobotsConfig{

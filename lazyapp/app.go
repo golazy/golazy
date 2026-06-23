@@ -26,11 +26,14 @@ import (
 type Helpers []map[string]any
 
 type Config struct {
-	Name              string
-	Drawer            func(*lazyroutes.Scope)
-	Public            func() (fs.FS, error)
-	Views             func() (fs.FS, error)
-	Context           func(context.Context) (context.Context, error)
+	Name   string
+	Drawer func(*lazyroutes.Scope)
+	Public func() (fs.FS, error)
+	Views  func() (fs.FS, error)
+	// Context may be func(context.Context) context.Context or
+	// func(context.Context) (context.Context, error). The error-returning form is
+	// preferred for new applications.
+	Context           any
 	Helpers           Helpers
 	SEO               []lazyseo.Option
 	Assets            []lazyassets.Source
@@ -103,7 +106,7 @@ func New(config Config) *App {
 	}
 	if config.Context != nil {
 		var err error
-		ctx, err = config.Context(ctx)
+		ctx, err = initializeContext(ctx, config.Context)
 		if err != nil {
 			panic(fmt.Errorf("initialize context: %w", err))
 		}
@@ -187,6 +190,19 @@ func New(config Config) *App {
 		Assets:       assets,
 		Sessions:     sessions,
 		ControlPlane: controlPlane,
+	}
+}
+
+func initializeContext(ctx context.Context, initializer any) (context.Context, error) {
+	switch init := initializer.(type) {
+	case nil:
+		return ctx, nil
+	case func(context.Context) context.Context:
+		return init(ctx), nil
+	case func(context.Context) (context.Context, error):
+		return init(ctx)
+	default:
+		return ctx, fmt.Errorf("unsupported Context initializer %T", initializer)
 	}
 }
 

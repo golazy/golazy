@@ -7,6 +7,30 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.14] - 2026-06-23
+
+### Added
+
+- `golazy.dev/lazytui/progress`, a small terminal progress package for running
+  named tasks with compact status output, captured command output, warning
+  results, mise command helpers, and temporary UI takeovers for interactive
+  steps.
+- SEO metadata can now include image alt text and article published time
+  through `lazyseo.ImageAlt`, `lazyseo.PublishedTime`,
+  `lazycontroller.Base.SEOImageAlt`, `lazycontroller.Base.PublishedTime`, and
+  matching model metadata interfaces.
+
+### Changed
+
+- `lazyapp.Config.Context` now supports the preferred
+  `func(context.Context) (context.Context, error)` initializer shape so
+  application dependency setup can fail explicitly during startup. The previous
+  `func(context.Context) context.Context` shape remains accepted for existing
+  applications.
+- SEO rendering now emits richer social image metadata, including secure image
+  URLs, image dimensions, image alt text, and `article:published_time`, and it
+  avoids appending the site name when a complete title is already present.
+
 ## [0.1.13] - 2026-06-22
 
 ### Added
@@ -321,7 +345,8 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Route construction with embedded public-file fallback.
 - Method-not-allowed handling for application routes.
 
-[Unreleased]: https://github.com/golazy/golazy/compare/v0.1.13...HEAD
+[Unreleased]: https://github.com/golazy/golazy/compare/v0.1.14...HEAD
+[0.1.14]: https://github.com/golazy/golazy/compare/v0.1.13...v0.1.14
 [0.1.13]: https://github.com/golazy/golazy/compare/v0.1.12...v0.1.13
 [0.1.12]: https://github.com/golazy/golazy/compare/v0.1.11...v0.1.12
 [0.1.11]: https://github.com/golazy/golazy/compare/v0.1.10...v0.1.11

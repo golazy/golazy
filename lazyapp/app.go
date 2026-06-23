@@ -30,7 +30,7 @@ type Config struct {
 	Drawer            func(*lazyroutes.Scope)
 	Public            func() (fs.FS, error)
 	Views             func() (fs.FS, error)
-	Context           func(context.Context) context.Context
+	Context           func(context.Context) (context.Context, error)
 	Helpers           Helpers
 	SEO               []lazyseo.Option
 	Assets            []lazyassets.Source
@@ -102,7 +102,11 @@ func New(config Config) *App {
 		ctx = lazycontroller.WithRenderer(ctx, renderer)
 	}
 	if config.Context != nil {
-		ctx = config.Context(ctx)
+		var err error
+		ctx, err = config.Context(ctx)
+		if err != nil {
+			panic(fmt.Errorf("initialize context: %w", err))
+		}
 	}
 	if config.ForceDetailErrors {
 		ctx = lazycontroller.WithDetailErrors(ctx)

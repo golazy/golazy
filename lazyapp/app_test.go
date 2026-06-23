@@ -120,6 +120,24 @@ func TestAppServesDefaultRobotsAndSitemap(t *testing.T) {
 	}
 }
 
+func TestAppPanicsWhenContextInitializationFails(t *testing.T) {
+	defer func() {
+		recovered := recover()
+		if recovered == nil {
+			t.Fatal("New did not panic")
+		}
+		if got := fmt.Sprint(recovered); !strings.Contains(got, "initialize context: database unavailable") {
+			t.Fatalf("panic = %q, want context initialization error", got)
+		}
+	}()
+
+	New(Config{
+		Context: func(context.Context) (context.Context, error) {
+			return nil, errors.New("database unavailable")
+		},
+	})
+}
+
 func TestAppServesConfiguredRobotsAndSitemapAlternates(t *testing.T) {
 	app := New(Config{
 		Robots: RobotsConfig{

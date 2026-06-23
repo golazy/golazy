@@ -3,6 +3,7 @@ package lazyseo
 import (
 	"encoding/json"
 	"html"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -26,6 +27,9 @@ func render(meta Meta) string {
 	}
 	renderOpenGraph(&out, meta)
 	renderTwitterCard(&out, meta)
+	if !meta.PublishedTime.IsZero() {
+		property(&out, "article:published_time", meta.PublishedTime.Format(time.RFC3339))
+	}
 	if !meta.UpdatedTime.IsZero() {
 		property(&out, "article:modified_time", meta.UpdatedTime.Format(time.RFC3339))
 	}
@@ -50,6 +54,18 @@ func renderOpenGraph(out *strings.Builder, meta Meta) {
 	}
 	if image := firstNonEmpty(meta.OpenGraph.Image, meta.Image); image != "" {
 		property(out, "og:image", image)
+		if strings.HasPrefix(image, "https://") {
+			property(out, "og:image:secure_url", image)
+		}
+		if meta.OpenGraph.ImageWidth > 0 {
+			property(out, "og:image:width", strconv.Itoa(meta.OpenGraph.ImageWidth))
+		}
+		if meta.OpenGraph.ImageHeight > 0 {
+			property(out, "og:image:height", strconv.Itoa(meta.OpenGraph.ImageHeight))
+		}
+		if alt := firstNonEmpty(meta.OpenGraph.ImageAlt, meta.ImageAlt); alt != "" {
+			property(out, "og:image:alt", alt)
+		}
 	}
 	if typ := firstNonEmpty(meta.OpenGraph.Type, meta.Type); typ != "" {
 		property(out, "og:type", typ)
@@ -71,6 +87,9 @@ func renderTwitterCard(out *strings.Builder, meta Meta) {
 	}
 	if image := firstNonEmpty(meta.Twitter.Image, meta.Image); image != "" {
 		name(out, "twitter:image", image)
+		if alt := firstNonEmpty(meta.Twitter.ImageAlt, meta.ImageAlt); alt != "" {
+			name(out, "twitter:image:alt", alt)
+		}
 	}
 	if site := meta.Twitter.Site; site != "" {
 		name(out, "twitter:site", site)
@@ -85,7 +104,7 @@ func displayTitle(meta Meta) string {
 		return ""
 	}
 	title := meta.Title
-	if meta.SiteName != "" {
+	if meta.SiteName != "" && title != meta.SiteName && !strings.Contains(title, "|") && !strings.HasSuffix(title, " - "+meta.SiteName) {
 		title += " - " + meta.SiteName
 	}
 	return title

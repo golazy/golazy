@@ -39,8 +39,14 @@ func applyMetadataCore(meta *lazyseo.Meta, model any) {
 	if provider, ok := model.(interface{ Image() string }); ok {
 		lazyseo.Image(provider.Image())(meta)
 	}
+	if provider, ok := model.(interface{ ImageAlt() string }); ok {
+		lazyseo.ImageAlt(provider.ImageAlt())(meta)
+	}
 	if provider, ok := model.(interface{ Kind() lazyseo.PageKind }); ok {
 		lazyseo.Kind(provider.Kind())(meta)
+	}
+	if provider, ok := model.(interface{ PublishedTime() time.Time }); ok {
+		lazyseo.PublishedTime(provider.PublishedTime())(meta)
 	}
 	if provider, ok := model.(interface{ LastUpdated() time.Time }); ok {
 		lazyseo.LastUpdated(provider.LastUpdated())(meta)

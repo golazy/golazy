@@ -38,8 +38,11 @@ func TestSetStoresMetaForSEOHelper(t *testing.T) {
 		}),
 		lazyseo.URL("https://golazy.dev/posts/hello"),
 		lazyseo.Image("https://golazy.dev/preview.png"),
+		lazyseo.ImageAlt("Preview of Hello <Go>"),
+		lazyseo.OpenGraphData(lazyseo.OpenGraph{ImageWidth: 1200, ImageHeight: 630}),
 		lazyseo.Kind(lazyseo.Article),
 		lazyseo.JSONLD(jsonld.NewArticle("Hello <Go>")),
+		lazyseo.PublishedTime(updated.Add(-24*time.Hour)),
 		lazyseo.UpdatedTime(updated),
 	)
 
@@ -77,9 +80,15 @@ func TestSetStoresMetaForSEOHelper(t *testing.T) {
 	assertContains(t, body, `<meta property="og:title" content="Hello &lt;Go&gt; - GoLazy">`)
 	assertContains(t, body, `<meta property="og:url" content="https://golazy.dev/posts/hello">`)
 	assertContains(t, body, `<meta property="og:image" content="https://golazy.dev/preview.png">`)
+	assertContains(t, body, `<meta property="og:image:secure_url" content="https://golazy.dev/preview.png">`)
+	assertContains(t, body, `<meta property="og:image:width" content="1200">`)
+	assertContains(t, body, `<meta property="og:image:height" content="630">`)
+	assertContains(t, body, `<meta property="og:image:alt" content="Preview of Hello &lt;Go&gt;">`)
 	assertContains(t, body, `<meta property="og:type" content="article">`)
 	assertContains(t, body, `<meta property="og:locale" content="en_US">`)
 	assertContains(t, body, `<meta name="twitter:card" content="summary_large_image">`)
+	assertContains(t, body, `<meta name="twitter:image:alt" content="Preview of Hello &lt;Go&gt;">`)
+	assertContains(t, body, `<meta property="article:published_time" content="2026-06-19T11:12:13Z">`)
 	assertContains(t, body, `<meta property="article:modified_time" content="2026-06-20T11:12:13Z">`)
 	assertContains(t, body, `<script type="application/ld+json">{"@context":"https://schema.org","@type":"Article","headline":"Hello \u003cGo\u003e"}</script>`)
 }
@@ -142,6 +151,44 @@ func TestSEOHelperUsesDefaultsWithoutRequestMeta(t *testing.T) {
 	assertContains(t, out.String(), `<html lang="en">`)
 	assertContains(t, out.String(), `<link rel="canonical" href="https://golazy.dev/">`)
 	assertContains(t, out.String(), `<meta property="og:url" content="https://golazy.dev/">`)
+}
+
+func TestSEOHelperKeepsCompleteTitles(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		title string
+		want  string
+	}{
+		{name: "site title", title: "golazy.dev", want: `<title>golazy.dev</title>`},
+		{name: "already qualified", title: "Views | GoLazy Guides", want: `<title>Views | GoLazy Guides</title>`},
+		{name: "plain", title: "Views", want: `<title>Views - golazy.dev</title>`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			c := &controller{}
+			lazyseo.Set(c, lazyseo.Title(test.title))
+			views, err := lazyview.New(fstest.MapFS{
+				"layouts/app.html.tpl": {Data: []byte(`<head>{{seo}}</head><main>{{.content}}</main>`)},
+				"home/index.html.tpl":  {Data: []byte(`home`)},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			views.AddHelpers(lazyseo.Helpers(lazyseo.SiteName("golazy.dev")))
+
+			var out strings.Builder
+			err = views.Render(lazyview.Options{
+				Writer:     &out,
+				Variables:  c.data,
+				Controller: "home",
+				Action:     "index",
+				UseLayout:  true,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertContains(t, out.String(), test.want)
+		})
+	}
 }
 
 func assertContains(t *testing.T, body, expected string) {

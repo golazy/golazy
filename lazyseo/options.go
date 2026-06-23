@@ -80,6 +80,12 @@ func Image(value string) Option {
 	}
 }
 
+func ImageAlt(value string) Option {
+	return func(meta *Meta) {
+		meta.ImageAlt = strings.TrimSpace(value)
+	}
+}
+
 func OpenGraphData(value OpenGraph) Option {
 	return func(meta *Meta) {
 		meta.OpenGraph = normalizeOpenGraph(value)
@@ -139,6 +145,12 @@ func JSONLD(value any) Option {
 func UpdatedTime(value time.Time) Option {
 	return func(meta *Meta) {
 		meta.UpdatedTime = value
+	}
+}
+
+func PublishedTime(value time.Time) Option {
+	return func(meta *Meta) {
+		meta.PublishedTime = value
 	}
 }
 

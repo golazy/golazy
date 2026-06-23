@@ -8,6 +8,9 @@ type OpenGraph struct {
 	Description string
 	URL         string
 	Image       string
+	ImageAlt    string
+	ImageWidth  int
+	ImageHeight int
 	Type        string
 	SiteName    string
 	Locale      string
@@ -19,6 +22,7 @@ type TwitterCard struct {
 	Title       string
 	Description string
 	Image       string
+	ImageAlt    string
 	Site        string
 	Creator     string
 }
@@ -28,6 +32,7 @@ func normalizeOpenGraph(value OpenGraph) OpenGraph {
 	value.Description = strings.TrimSpace(value.Description)
 	value.URL = strings.TrimSpace(value.URL)
 	value.Image = strings.TrimSpace(value.Image)
+	value.ImageAlt = strings.TrimSpace(value.ImageAlt)
 	value.Type = strings.TrimSpace(value.Type)
 	value.SiteName = strings.TrimSpace(value.SiteName)
 	value.Locale = strings.TrimSpace(value.Locale)
@@ -39,6 +44,7 @@ func normalizeTwitterCard(value TwitterCard) TwitterCard {
 	value.Title = strings.TrimSpace(value.Title)
 	value.Description = strings.TrimSpace(value.Description)
 	value.Image = strings.TrimSpace(value.Image)
+	value.ImageAlt = strings.TrimSpace(value.ImageAlt)
 	value.Site = strings.TrimSpace(value.Site)
 	value.Creator = strings.TrimSpace(value.Creator)
 	return value

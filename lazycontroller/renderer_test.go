@@ -73,6 +73,7 @@ func TestRenderUsesSEOControllerHelpers(t *testing.T) {
 	base.Canonical("https://golazy.dev/posts/hello")
 	base.Alternate("de", "https://golazy.dev/de/posts/hello")
 	base.SEOImage("https://golazy.dev/posts/hello.png")
+	base.SEOImageAlt("Hello post preview")
 	base.Kind(lazyseo.Article)
 	base.JSONLD(jsonld.NewArticle("Hello"))
 
@@ -89,6 +90,8 @@ func TestRenderUsesSEOControllerHelpers(t *testing.T) {
 		`<link rel="alternate" hreflang="de" href="https://golazy.dev/de/posts/hello">`,
 		`<meta property="og:type" content="article">`,
 		`<meta property="og:image" content="https://golazy.dev/posts/hello.png">`,
+		`<meta property="og:image:alt" content="Hello post preview">`,
+		`<meta name="twitter:image:alt" content="Hello post preview">`,
 		`<script type="application/ld+json">{"@context":"https://schema.org","@type":"Article","headline":"Hello"}</script>`,
 	} {
 		if !strings.Contains(body, expected) {
@@ -113,6 +116,14 @@ func (metadataPost) Canonical() string {
 
 func (metadataPost) Image() string {
 	return "https://golazy.dev/posts/metadata.png"
+}
+
+func (metadataPost) ImageAlt() string {
+	return "Metadata post preview"
+}
+
+func (metadataPost) PublishedTime() time.Time {
+	return time.Date(2026, 6, 19, 12, 0, 0, 0, time.UTC)
 }
 
 func (metadataPost) Kind() lazyseo.PageKind {
@@ -172,9 +183,12 @@ func TestRenderUsesMetadataModelInterfaces(t *testing.T) {
 		`<meta name="description" content="Base description">`,
 		`<meta property="og:description" content="Open Graph description">`,
 		`<meta property="og:image" content="https://golazy.dev/posts/metadata-og.png">`,
+		`<meta property="og:image:alt" content="Metadata post preview">`,
 		`<meta name="twitter:card" content="summary_large_image">`,
 		`<meta name="twitter:description" content="Twitter description">`,
 		`<meta name="twitter:image" content="https://golazy.dev/posts/metadata-twitter.png">`,
+		`<meta name="twitter:image:alt" content="Metadata post preview">`,
+		`<meta property="article:published_time" content="2026-06-19T12:00:00Z">`,
 		`<link rel="alternate" hreflang="de" href="https://golazy.dev/de/posts/metadata">`,
 		`<script type="application/ld+json">{"@context":"https://schema.org","@type":"Article","headline":"Metadata Post","description":"Base description","url":"https://golazy.dev/posts/metadata","image":"https://golazy.dev/posts/metadata.png","dateModified":"2026-06-20"}</script>`,
 	} {

@@ -10,23 +10,25 @@ type setter interface {
 
 // Meta contains the metadata emitted by the seo view helper.
 type Meta struct {
-	Title       string
-	SiteName    string
-	Description string
-	Author      string
-	Language    string
-	URL         string
-	Canonical   string
-	Alternates  []Alternate
-	Image       string
-	OpenGraph   OpenGraph
-	Type        string
-	SchemaType  string
-	Locale      string
-	Twitter     TwitterCard
-	TwitterType string
-	JSONLD      []any
-	UpdatedTime time.Time
+	Title         string
+	SiteName      string
+	Description   string
+	Author        string
+	Language      string
+	URL           string
+	Canonical     string
+	Alternates    []Alternate
+	Image         string
+	ImageAlt      string
+	OpenGraph     OpenGraph
+	Type          string
+	SchemaType    string
+	Locale        string
+	Twitter       TwitterCard
+	TwitterType   string
+	JSONLD        []any
+	PublishedTime time.Time
+	UpdatedTime   time.Time
 }
 
 // Alternate describes an alternate URL for the current page.
@@ -92,6 +94,9 @@ func merge(defaults, current *Meta) Meta {
 	if current.Image != "" {
 		meta.Image = current.Image
 	}
+	if current.ImageAlt != "" {
+		meta.ImageAlt = current.ImageAlt
+	}
 	if !isZeroOpenGraph(current.OpenGraph) {
 		meta.OpenGraph = current.OpenGraph
 	}
@@ -112,6 +117,9 @@ func merge(defaults, current *Meta) Meta {
 	}
 	if len(current.JSONLD) > 0 {
 		meta.JSONLD = append([]any(nil), current.JSONLD...)
+	}
+	if !current.PublishedTime.IsZero() {
+		meta.PublishedTime = current.PublishedTime
 	}
 	if !current.UpdatedTime.IsZero() {
 		meta.UpdatedTime = current.UpdatedTime

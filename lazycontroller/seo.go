@@ -58,6 +58,10 @@ func (b *Base) SEOImage(value string) *lazyseo.Meta {
 	return b.SEO(lazyseo.Image(value))
 }
 
+func (b *Base) SEOImageAlt(value string) *lazyseo.Meta {
+	return b.SEO(lazyseo.ImageAlt(value))
+}
+
 func (b *Base) Type(value string) *lazyseo.Meta {
 	return b.SEO(lazyseo.Type(value))
 }
@@ -84,6 +88,10 @@ func (b *Base) TwitterCardType(value string) *lazyseo.Meta {
 
 func (b *Base) LastUpdated(value time.Time) *lazyseo.Meta {
 	return b.SEO(lazyseo.LastUpdated(value))
+}
+
+func (b *Base) PublishedTime(value time.Time) *lazyseo.Meta {
+	return b.SEO(lazyseo.PublishedTime(value))
 }
 
 func (b *Base) ensureSEO() *lazyseo.Meta {

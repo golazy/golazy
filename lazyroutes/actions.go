@@ -245,10 +245,18 @@ func handleControllerError(ctx context.Context, w http.ResponseWriter, r *http.R
 			return
 		}
 		lazycontroller.ResetResponse(w)
+		if lazycontroller.DetailErrors(ctx) {
+			lazycontroller.WriteErrorDetail(w, r, handleErr)
+			return
+		}
 		if lazycontroller.WriteErrorFallback(ctx, w, r) {
 			return
 		}
 		lazycontroller.WriteError(w, r, handleErr)
+		return
+	}
+	if lazycontroller.DetailErrors(ctx) {
+		lazycontroller.WriteErrorDetail(w, r, err)
 		return
 	}
 	lazycontroller.WriteError(w, r, err)

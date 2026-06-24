@@ -378,6 +378,38 @@ func TestControllerErrorUsesStaticFallbackWhenErrorTemplateFails(t *testing.T) {
 	}
 }
 
+func TestControllerErrorUsesDetailWhenEnabled(t *testing.T) {
+	renderer, err := lazycontroller.NewRenderer(fstest.MapFS{
+		"layouts/app.html.tpl": {Data: []byte(`<main>{{.content}}</main>`)},
+		"app/error.html.tpl":   {Data: []byte(`error {{.status}} {{.statusText}} {{.error}}`)},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := lazycontroller.WithRenderer(context.Background(), renderer)
+	ctx = lazycontroller.WithDetailErrors(ctx)
+	ctx = lazycontroller.WithErrorPages(ctx, fstest.MapFS{
+		"404.html": {Data: []byte(`<h1>static 404</h1>`)},
+	})
+	scope := New(ctx)
+	scope.Get("/broken", newAutoRenderController, (*autoRenderController).Broken)
+	handler := lazydispatch.ResponseBuffer().Handler(scope)
+
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/broken", nil))
+
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusNotFound)
+	}
+	body := response.Body.String()
+	if strings.Contains(body, "partial") || strings.Contains(body, "static 404") {
+		t.Fatalf("body contains non-detail fallback output: %q", body)
+	}
+	if !strings.Contains(body, "missing post") {
+		t.Fatalf("body = %q, want detail error", body)
+	}
+}
+
 func TestControllerHandleErrorCanServeStaticStatusPage(t *testing.T) {
 	renderer, err := lazycontroller.NewRenderer(fstest.MapFS{
 		"layouts/app.html.tpl": {Data: []byte(`<main>{{.content}}</main>`)},

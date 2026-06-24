@@ -330,6 +330,10 @@ func (b *Base) HandleError(w http.ResponseWriter, r *http.Request, err error) er
 		r = b.request
 	}
 	ResetResponse(w)
+	if DetailErrors(b.ctx) {
+		WriteErrorDetail(w, r, err)
+		return nil
+	}
 
 	status := StatusCode(err)
 	b.Set("status", status)

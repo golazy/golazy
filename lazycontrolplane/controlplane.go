@@ -78,6 +78,29 @@ func (plane *ControlPlane) handle(pattern, path string, handler http.Handler) {
 	plane.paths[path] = struct{}{}
 }
 
+// Handle registers an exact control-plane endpoint.
+func (plane *ControlPlane) Handle(pattern string, handler http.Handler) {
+	if plane == nil {
+		panic("lazycontrolplane: control plane is nil")
+	}
+	plane.handle(pattern, controlPlanePatternPath(pattern), handler)
+}
+
+func controlPlanePatternPath(pattern string) string {
+	fields := strings.Fields(pattern)
+	if len(fields) == 0 {
+		panic("lazycontrolplane: route pattern is empty")
+	}
+	path := fields[0]
+	if len(fields) > 1 {
+		path = fields[1]
+	}
+	if !strings.HasPrefix(path, "/") {
+		panic("lazycontrolplane: route pattern path must start with /")
+	}
+	return path
+}
+
 func (plane *ControlPlane) mountPprof() {
 	plane.mux.HandleFunc("/debug/pprof/", pprof.Index)
 	plane.mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)

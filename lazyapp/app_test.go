@@ -711,6 +711,12 @@ func TestAppDoesNotInstallControlPlaneByDefault(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
 	}
+	if lazyDevTestBuild() {
+		if got := response.Body.String(); got != "live\n" {
+			t.Fatalf("body = %q, want lazydev control plane route", got)
+		}
+		return
+	}
 	if got := response.Body.String(); got != "app livez" {
 		t.Fatalf("body = %q, want app route", got)
 	}
@@ -756,8 +762,11 @@ func TestControlPlaneListenAddr(t *testing.T) {
 
 func TestControlPlaneForListenActivatesFromEnvAddress(t *testing.T) {
 	app := New(Config{Name: "test"})
-	if app.controlPlaneForListen(false) != nil {
+	if !lazyDevTestBuild() && app.controlPlaneForListen(false) != nil {
 		t.Fatal("control plane active without config or CONTROL_PLANE_ADDR")
+	}
+	if lazyDevTestBuild() && app.controlPlaneForListen(false) == nil {
+		t.Fatal("lazydev control plane is nil")
 	}
 	if app.controlPlaneForListen(true) == nil {
 		t.Fatal("control plane is nil with CONTROL_PLANE_ADDR set")

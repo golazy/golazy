@@ -83,6 +83,25 @@ func TestMetricsIsOptional(t *testing.T) {
 	}
 }
 
+func TestHandleRegistersCustomControlPlaneEndpoint(t *testing.T) {
+	plane := New(Config{})
+	plane.Handle("POST /_golazy/views/reload", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		writePlain(w, http.StatusOK, "reload views ok\n")
+	}))
+
+	if !plane.HandlesPath("/_golazy/views/reload") {
+		t.Fatal("custom control-plane path is not handled")
+	}
+	response := httptest.NewRecorder()
+	plane.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/_golazy/views/reload", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+	if got, want := response.Body.String(), "reload views ok\n"; got != want {
+		t.Fatalf("body = %q, want %q", got, want)
+	}
+}
+
 func TestHandlerMountsControlPlaneBeforeNext(t *testing.T) {
 	plane := New(Config{})
 	handler := plane.Handler(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

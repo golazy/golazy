@@ -7,8 +7,6 @@ import (
 	"io/fs"
 	"net"
 	"net/http"
-	"os"
-	"strconv"
 	"strings"
 
 	"golazy.dev/lazyassets"
@@ -218,31 +216,6 @@ func (app *App) ListenAndServe() error {
 
 	controlServer := app.newServer(controlAddr, controlHandler)
 	return listenAndServeBoth(appServer, controlServer)
-}
-
-func listenAddr() string {
-	if addr := os.Getenv("ADDR"); addr != "" {
-		return normalizeListenAddr(addr)
-	}
-	if port := os.Getenv("PORT"); port != "" {
-		return normalizeListenAddr(port)
-	}
-	return ":3000"
-}
-
-func controlPlaneListenAddr() (string, bool) {
-	addr := os.Getenv("CONTROL_PLANE_ADDR")
-	if addr == "" {
-		return "", false
-	}
-	return normalizeListenAddr(addr), true
-}
-
-func normalizeListenAddr(addr string) string {
-	if _, err := strconv.ParseUint(addr, 10, 16); err == nil {
-		return ":" + addr
-	}
-	return addr
 }
 
 func sameListenAddr(left, right string) bool {

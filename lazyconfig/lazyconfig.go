@@ -1,0 +1,467 @@
+package lazyconfig
+
+import (
+	"encoding"
+	"fmt"
+	"os"
+	"reflect"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+	"unicode"
+)
+
+var textUnmarshalerType = reflect.TypeFor[encoding.TextUnmarshaler]()
+var durationType = reflect.TypeFor[time.Duration]()
+
+type validator interface {
+	Validate() error
+}
+
+type loader struct {
+	env map[string]string
+}
+
+// Getenv fills a configuration struct from environment variables.
+func Getenv[T any]() (T, error) {
+	var config T
+	value := reflect.ValueOf(&config).Elem()
+	if err := newLoader().fillRoot(value); err != nil {
+		return config, err
+	}
+	if validatable, ok := any(&config).(validator); ok {
+		return config, validatable.Validate()
+	}
+	if validatable, ok := any(config).(validator); ok {
+		return config, validatable.Validate()
+	}
+	return config, nil
+}
+
+func newLoader() loader {
+	env := make(map[string]string)
+	for _, item := range os.Environ() {
+		name, value, ok := strings.Cut(item, "=")
+		if ok {
+			env[name] = value
+		}
+	}
+	return loader{env: env}
+}
+
+func (l loader) fillRoot(value reflect.Value) error {
+	for value.Kind() == reflect.Ptr {
+		if value.IsNil() {
+			value.Set(reflect.New(value.Type().Elem()))
+		}
+		value = value.Elem()
+	}
+	if value.Kind() != reflect.Struct {
+		return fmt.Errorf("lazyconfig: config type must be a struct or pointer to struct")
+	}
+	return l.fillStruct(value, "")
+}
+
+func (l loader) fillStruct(value reflect.Value, prefix string) error {
+	typ := value.Type()
+	for index := 0; index < value.NumField(); index++ {
+		field := typ.Field(index)
+		if !field.IsExported() {
+			continue
+		}
+		if err := l.fillField(value.Field(index), field, prefix); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (l loader) fillField(value reflect.Value, field reflect.StructField, prefix string) error {
+	if !value.CanSet() {
+		return nil
+	}
+
+	if value.Kind() == reflect.Ptr {
+		return l.fillPointer(value, field, prefix)
+	}
+
+	if canSetScalar(value) {
+		return l.fillScalar(value, fieldEnvName(prefix, field), field)
+	}
+
+	switch value.Kind() {
+	case reflect.Struct:
+		return l.fillStruct(value, fieldEnvName(prefix, field))
+	case reflect.Slice:
+		return l.fillSlice(value, sliceEnvName(prefix, field), field)
+	default:
+		return fmt.Errorf("lazyconfig: %s has unsupported type %s", field.Name, field.Type)
+	}
+}
+
+func (l loader) fillPointer(value reflect.Value, field reflect.StructField, prefix string) error {
+	elemType := value.Type().Elem()
+	if elemType.Kind() == reflect.Struct && !canSetScalarType(elemType) {
+		envName := fieldEnvName(prefix, field)
+		if !l.hasStructEnv(envName, elemType) {
+			if required, reason := requirement(field); required {
+				return requiredError(envName, reason)
+			}
+			return nil
+		}
+		value.Set(reflect.New(elemType))
+		return l.fillStruct(value.Elem(), envName)
+	}
+
+	envName := fieldEnvName(prefix, field)
+	raw, found := l.lookupValue(envName, field)
+	if !found {
+		if required, reason := requirement(field); required {
+			return requiredError(envName, reason)
+		}
+		return nil
+	}
+	value.Set(reflect.New(elemType))
+	return setScalar(value.Elem(), envName, raw)
+}
+
+func (l loader) fillScalar(value reflect.Value, envName string, field reflect.StructField) error {
+	raw, found := l.lookupValue(envName, field)
+	required, reason := requirement(field)
+	if required && (!found || strings.TrimSpace(raw) == "") {
+		return requiredError(envName, reason)
+	}
+	if !found {
+		return nil
+	}
+	return setScalar(value, envName, raw)
+}
+
+func (l loader) fillSlice(value reflect.Value, prefix string, field reflect.StructField) error {
+	elemType := value.Type().Elem()
+	var values []reflect.Value
+
+	if elemType.Kind() == reflect.Struct && !canSetScalarType(elemType) {
+		if l.hasDirectStructEnv(prefix, elemType) {
+			item := reflect.New(elemType).Elem()
+			if err := l.fillStruct(item, prefix); err != nil {
+				return err
+			}
+			values = append(values, item)
+		}
+		for _, index := range l.structIndexes(prefix) {
+			item := reflect.New(elemType).Elem()
+			if err := l.fillStruct(item, fmt.Sprintf("%s_%d", prefix, index)); err != nil {
+				return err
+			}
+			values = append(values, item)
+		}
+	} else if canSetScalarType(elemType) {
+		if raw, ok := l.env[prefix]; ok {
+			item := reflect.New(elemType).Elem()
+			if err := setScalar(item, prefix, raw); err != nil {
+				return err
+			}
+			values = append(values, item)
+		}
+		for _, index := range l.scalarIndexes(prefix) {
+			envName := fmt.Sprintf("%s_%d", prefix, index)
+			raw, ok := l.env[envName]
+			if !ok {
+				continue
+			}
+			item := reflect.New(elemType).Elem()
+			if err := setScalar(item, envName, raw); err != nil {
+				return err
+			}
+			values = append(values, item)
+		}
+	} else {
+		return fmt.Errorf("lazyconfig: %s has unsupported slice element type %s", field.Name, elemType)
+	}
+
+	if len(values) == 0 {
+		if required, reason := requirement(field); required {
+			return requiredError(prefix, reason)
+		}
+		return nil
+	}
+
+	result := reflect.MakeSlice(value.Type(), 0, len(values))
+	for _, item := range values {
+		result = reflect.Append(result, item)
+	}
+	value.Set(result)
+	return nil
+}
+
+func (l loader) lookupValue(envName string, field reflect.StructField) (string, bool) {
+	if value, ok := l.env[envName]; ok {
+		return value, true
+	}
+	if value, ok := field.Tag.Lookup("default"); ok {
+		return value, true
+	}
+	return "", false
+}
+
+func (l loader) hasDirectStructEnv(prefix string, typ reflect.Type) bool {
+	for index := 0; index < typ.NumField(); index++ {
+		field := typ.Field(index)
+		if !field.IsExported() {
+			continue
+		}
+		envName := fieldEnvName(prefix, field)
+		if _, ok := l.env[envName]; ok {
+			return true
+		}
+		if field.Type.Kind() == reflect.Struct && !canSetScalarType(field.Type) {
+			if l.hasDirectStructEnv(envName, field.Type) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (l loader) hasStructEnv(prefix string, typ reflect.Type) bool {
+	if l.hasDirectStructEnv(prefix, typ) {
+		return true
+	}
+	marker := prefix + "_"
+	for name := range l.env {
+		if strings.HasPrefix(name, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func (l loader) structIndexes(prefix string) []int {
+	marker := prefix + "_"
+	seen := make(map[int]bool)
+	for name := range l.env {
+		if !strings.HasPrefix(name, marker) {
+			continue
+		}
+		rest := name[len(marker):]
+		digitCount := 0
+		for _, char := range rest {
+			if char < '0' || char > '9' {
+				break
+			}
+			digitCount++
+		}
+		if digitCount == 0 || len(rest) == digitCount || rest[digitCount] != '_' {
+			continue
+		}
+		index, err := strconv.Atoi(rest[:digitCount])
+		if err == nil {
+			seen[index] = true
+		}
+	}
+	out := make([]int, 0, len(seen))
+	for index := range seen {
+		out = append(out, index)
+	}
+	sort.Ints(out)
+	return out
+}
+
+func (l loader) scalarIndexes(prefix string) []int {
+	marker := prefix + "_"
+	seen := make(map[int]bool)
+	for name := range l.env {
+		if !strings.HasPrefix(name, marker) {
+			continue
+		}
+		rest := name[len(marker):]
+		if rest == "" {
+			continue
+		}
+		index, err := strconv.Atoi(rest)
+		if err == nil {
+			seen[index] = true
+		}
+	}
+	out := make([]int, 0, len(seen))
+	for index := range seen {
+		out = append(out, index)
+	}
+	sort.Ints(out)
+	return out
+}
+
+func canSetScalar(value reflect.Value) bool {
+	return canSetScalarType(value.Type())
+}
+
+func canSetScalarType(typ reflect.Type) bool {
+	if typ == durationType {
+		return true
+	}
+	if reflect.PointerTo(typ).Implements(textUnmarshalerType) || typ.Implements(textUnmarshalerType) {
+		return true
+	}
+	switch typ.Kind() {
+	case reflect.String, reflect.Bool,
+		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
+		reflect.Float32, reflect.Float64:
+		return true
+	default:
+		return false
+	}
+}
+
+func setScalar(value reflect.Value, envName string, raw string) error {
+	if value.Type() == durationType {
+		parsed, err := time.ParseDuration(raw)
+		if err != nil {
+			return fmt.Errorf("lazyconfig: parse %s: %w", envName, err)
+		}
+		value.SetInt(int64(parsed))
+		return nil
+	}
+
+	if value.CanAddr() && reflect.PointerTo(value.Type()).Implements(textUnmarshalerType) {
+		unmarshaler := value.Addr().Interface().(encoding.TextUnmarshaler)
+		if err := unmarshaler.UnmarshalText([]byte(raw)); err != nil {
+			return fmt.Errorf("lazyconfig: parse %s: %w", envName, err)
+		}
+		return nil
+	}
+	if value.Type().Implements(textUnmarshalerType) {
+		unmarshaler := value.Interface().(encoding.TextUnmarshaler)
+		if err := unmarshaler.UnmarshalText([]byte(raw)); err != nil {
+			return fmt.Errorf("lazyconfig: parse %s: %w", envName, err)
+		}
+		return nil
+	}
+
+	switch value.Kind() {
+	case reflect.String:
+		value.SetString(raw)
+	case reflect.Bool:
+		parsed, err := strconv.ParseBool(raw)
+		if err != nil {
+			return fmt.Errorf("lazyconfig: parse %s: %w", envName, err)
+		}
+		value.SetBool(parsed)
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		parsed, err := strconv.ParseInt(raw, 10, value.Type().Bits())
+		if err != nil {
+			return fmt.Errorf("lazyconfig: parse %s: %w", envName, err)
+		}
+		value.SetInt(parsed)
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		parsed, err := strconv.ParseUint(raw, 10, value.Type().Bits())
+		if err != nil {
+			return fmt.Errorf("lazyconfig: parse %s: %w", envName, err)
+		}
+		value.SetUint(parsed)
+	case reflect.Float32, reflect.Float64:
+		parsed, err := strconv.ParseFloat(raw, value.Type().Bits())
+		if err != nil {
+			return fmt.Errorf("lazyconfig: parse %s: %w", envName, err)
+		}
+		value.SetFloat(parsed)
+	default:
+		return fmt.Errorf("lazyconfig: %s has unsupported type %s", envName, value.Type())
+	}
+	return nil
+}
+
+func fieldEnvName(prefix string, field reflect.StructField) string {
+	name := envName(field)
+	if prefix == "" || hasVarTag(field) {
+		return name
+	}
+	return prefix + "_" + name
+}
+
+func sliceEnvName(prefix string, field reflect.StructField) string {
+	if hasVarTag(field) {
+		return envName(field)
+	}
+	name := singularEnvName(envName(field))
+	if prefix == "" {
+		return name
+	}
+	return prefix + "_" + name
+}
+
+func envName(field reflect.StructField) string {
+	if value, ok := field.Tag.Lookup("var"); ok && strings.TrimSpace(value) != "" {
+		return strings.TrimSpace(value)
+	}
+	return camelEnvName(field.Name)
+}
+
+func hasVarTag(field reflect.StructField) bool {
+	value, ok := field.Tag.Lookup("var")
+	return ok && strings.TrimSpace(value) != ""
+}
+
+func camelEnvName(name string) string {
+	var out []rune
+	runes := []rune(name)
+	for index, char := range runes {
+		if index > 0 && shouldSplit(runes, index) {
+			out = append(out, '_')
+		}
+		out = append(out, unicode.ToUpper(char))
+	}
+	return string(out)
+}
+
+func shouldSplit(runes []rune, index int) bool {
+	current := runes[index]
+	previous := runes[index-1]
+	if !unicode.IsUpper(current) && !unicode.IsDigit(current) {
+		return false
+	}
+	if unicode.IsLower(previous) || unicode.IsDigit(previous) {
+		return true
+	}
+	return unicode.IsUpper(previous) && index+1 < len(runes) && unicode.IsLower(runes[index+1])
+}
+
+func singularEnvName(name string) string {
+	if strings.HasSuffix(name, "IES") && len(name) > 3 {
+		return strings.TrimSuffix(name, "IES") + "Y"
+	}
+	if strings.HasSuffix(name, "S") && len(name) > 1 {
+		return strings.TrimSuffix(name, "S")
+	}
+	return name
+}
+
+func requirement(field reflect.StructField) (bool, string) {
+	for _, key := range []string{"required", "require"} {
+		value, ok := field.Tag.Lookup(key)
+		if !ok {
+			continue
+		}
+		value = strings.TrimSpace(value)
+		if value == "" || strings.EqualFold(value, "true") {
+			return true, ""
+		}
+		if strings.EqualFold(value, "false") {
+			continue
+		}
+		return true, value
+	}
+	return false, ""
+}
+
+func requiredError(envName string, reason string) error {
+	if reason == "" {
+		return fmt.Errorf("%s missing", envName)
+	}
+	if strings.HasPrefix(strings.ToLower(reason), "for ") {
+		return fmt.Errorf("%s is required %s, please set", envName, reason)
+	}
+	return fmt.Errorf("%s is required for %s, please set", envName, reason)
+}

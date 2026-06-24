@@ -11,12 +11,19 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - `golazy.dev/lazydeps`, a dependency-initialization helper that records service
   nodes and dependency edges while returning typed service references.
+- `golazy.dev/lazyconfig`, a small environment-backed configuration loader with
+  `Getenv[T]`, default field-to-env naming, struct tags for defaults and
+  required values, slice entry loading, and optional `Validate() error`
+  support.
 
 ### Changed
 
 - `lazyapp.Config.Dependencies` replaces `lazyapp.Config.Context`. The
   framework now creates a `*lazydeps.Scope`, passes it to the application
   dependency initializer, and keeps the resulting scope on `lazyapp.App`.
+- `lazyapp` now reads its framework-owned environment variables, including
+  `ADDR`, `PORT`, and `CONTROL_PLANE_ADDR`, through a local config struct
+  backed by `lazyconfig`.
 - Retracted pre-`v0.1.0` framework module versions, which were unstable
   snapshots before the current GoLazy release line.
 

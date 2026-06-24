@@ -7,3 +7,7 @@ import "io/fs"
 func openConfiguredViews(open func() (fs.FS, error)) (fs.FS, error) {
 	return open()
 }
+
+func openConfiguredPublic(open func() (fs.FS, error)) (fs.FS, error) {
+	return open()
+}

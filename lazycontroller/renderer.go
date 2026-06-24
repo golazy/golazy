@@ -330,20 +330,22 @@ func (b *Base) HandleError(w http.ResponseWriter, r *http.Request, err error) er
 		r = b.request
 	}
 	ResetResponse(w)
-	if DetailErrors(b.ctx) {
-		WriteErrorDetail(w, r, err)
-		return nil
-	}
 
+	detailErrors := DetailErrors(b.ctx)
 	status := StatusCode(err)
 	b.Set("status", status)
 	b.Set("statusText", http.StatusText(status))
-	b.Set("error", err.Error())
-
-	if b.returnFile(w, r, strconv.Itoa(status)+".html", status) == nil {
-		return nil
+	b.Set("detailErrors", detailErrors)
+	if detailErrors {
+		b.Set("error", err.Error())
+	} else {
+		b.Set("error", "")
 	}
+
 	if b.renderer == nil {
+		if b.returnFile(w, r, strconv.Itoa(status)+".html", status) == nil {
+			return nil
+		}
 		return fmt.Errorf("controller renderer is not initialized")
 	}
 	if w == nil {
@@ -359,13 +361,15 @@ func (b *Base) HandleError(w http.ResponseWriter, r *http.Request, err error) er
 		Variables:  b.data,
 		Helpers:    b.helpers,
 		Route:      b.route,
-		Namespace:  b.route.Namespace,
-		Controller: b.controller,
+		Controller: "app",
 		Action:     "error",
 		Layout:     b.layout,
 		UseLayout:  true,
 	})
 	if renderErr != nil {
+		if b.returnFile(w, r, strconv.Itoa(status)+".html", status) == nil {
+			return nil
+		}
 		return renderErr
 	}
 

@@ -45,6 +45,7 @@ type Options struct {
 	PermanentCache CachePolicy
 	RewriteCSSURLs bool
 	BaseURL        string
+	Development    bool
 }
 
 type Option func(*Options)
@@ -77,6 +78,14 @@ func WithCachePolicies(logical, permanent CachePolicy) Option {
 	return func(options *Options) {
 		options.LogicalCache = logical
 		options.PermanentCache = permanent
+	}
+}
+
+// WithDevelopmentMode serves logical asset paths directly without permanent
+// hashed URLs, cache headers, ETags, integrity values, or CSS URL rewriting.
+func WithDevelopmentMode(enabled bool) Option {
+	return func(options *Options) {
+		options.Development = enabled
 	}
 }
 
@@ -189,6 +198,11 @@ func New(options ...Option) *Registry {
 	for _, option := range options {
 		option(&config)
 	}
+	if config.Development {
+		config.LogicalCache = ""
+		config.PermanentCache = ""
+		config.RewriteCSSURLs = false
+	}
 	config.URLPrefix = normalizePrefix(config.URLPrefix)
 	if config.HashLength <= 0 {
 		config.HashLength = defaultHashLength
@@ -266,6 +280,9 @@ func (r *Registry) AddReader(path string, open OpenFunc, options ...AssetOption)
 	var opts assetOptions
 	for _, option := range options {
 		option(&opts)
+	}
+	if r.options.Development {
+		return r.addOpen(path, open, true, opts)
 	}
 
 	file, err := open()
@@ -510,6 +527,9 @@ func (r *Registry) addFile(assetPath string, size int64, open OpenFunc, opts ass
 			return r.addIgnored(assetPath, size, open, opts)
 		}
 	}
+	if r.options.Development {
+		return r.addOpen(assetPath, open, false, opts)
+	}
 
 	file, err := open()
 	if err != nil {
@@ -543,6 +563,19 @@ func (r *Registry) addBytes(assetPath string, content []byte, generated bool, op
 			return fmt.Errorf("lazyassets: asset %q already registered", logical)
 		}
 	}
+	if r.options.Development {
+		asset := &Asset{
+			Path:        logical,
+			ContentType: firstNonEmpty(opts.contentType, contentTypeForName(logical, content)),
+			Size:        int64(len(content)),
+			Source:      opts.source,
+			Generated:   generated,
+			content:     append([]byte(nil), content...),
+			raw:         append([]byte(nil), content...),
+		}
+		r.register(asset, opts.replace)
+		return nil
+	}
 
 	digest := newHash(content)
 	contentType := firstNonEmpty(opts.contentType, contentTypeForName(logical, content))
@@ -558,6 +591,28 @@ func (r *Registry) addBytes(assetPath string, content []byte, generated bool, op
 		Generated:   generated,
 		content:     content,
 		raw:         append([]byte(nil), content...),
+	}
+	r.register(asset, opts.replace)
+	return nil
+}
+
+func (r *Registry) addOpen(assetPath string, open OpenFunc, generated bool, opts assetOptions) error {
+	logical, err := r.publicPath(assetPath)
+	if err != nil {
+		return err
+	}
+	if !opts.replace {
+		if _, exists := r.logical[logical]; exists {
+			return fmt.Errorf("lazyassets: asset %q already registered", logical)
+		}
+	}
+	asset := &Asset{
+		Path:        logical,
+		ContentType: firstNonEmpty(opts.contentType, contentTypeForName(logical, nil)),
+		Size:        -1,
+		Source:      opts.source,
+		Generated:   generated,
+		open:        open,
 	}
 	r.register(asset, opts.replace)
 	return nil

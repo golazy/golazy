@@ -75,6 +75,50 @@ func TestRegistryUsesPermanentURLs(t *testing.T) {
 	}
 }
 
+func TestRegistryDevelopmentModeServesLogicalFilesystemAssetsWithoutHashOrCache(t *testing.T) {
+	dir := t.TempDir()
+	writeAssetFile(t, filepath.Join(dir, "styles.css"), "body { color: black; }")
+	registry := New(WithDevelopmentMode(true))
+	if err := registry.AddFS(os.DirFS(dir)); err != nil {
+		t.Fatal(err)
+	}
+
+	assetPath, err := registry.Path("/styles.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if assetPath != "/styles.css" {
+		t.Fatalf("Path() = %q, want logical path", assetPath)
+	}
+	manifest := registry.Manifest()
+	if len(manifest.Assets) != 1 {
+		t.Fatalf("manifest assets = %d, want 1", len(manifest.Assets))
+	}
+	if asset := manifest.Assets[0]; asset.Permanent != "" || asset.Hash != "" || asset.ETag != "" || asset.Integrity != "" {
+		t.Fatalf("asset metadata = %#v, want no hashed development metadata", asset)
+	}
+
+	response := fetchAsset(registry, http.MethodGet, "/styles.css", nil)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+	if got := response.Header().Get("Cache-Control"); got != "" {
+		t.Fatalf("Cache-Control = %q, want empty", got)
+	}
+	if got := response.Header().Get("ETag"); got != "" {
+		t.Fatalf("ETag = %q, want empty", got)
+	}
+	if !strings.Contains(response.Body.String(), "color: black") {
+		t.Fatalf("body = %q, want original stylesheet", response.Body.String())
+	}
+
+	writeAssetFile(t, filepath.Join(dir, "styles.css"), "body { color: red; }")
+	response = fetchAsset(registry, http.MethodGet, "/styles.css", nil)
+	if !strings.Contains(response.Body.String(), "color: red") {
+		t.Fatalf("body = %q, want updated filesystem stylesheet", response.Body.String())
+	}
+}
+
 func TestRegistryStylesheetHelper(t *testing.T) {
 	registry := newBasicRegistry(t)
 	helper := registry.Helpers()["stylesheet"].(func(string) (lazyview.Fragment, error))
@@ -88,6 +132,16 @@ func TestRegistryStylesheetHelper(t *testing.T) {
 	}
 	if !regexp.MustCompile(`^<link rel="stylesheet" href="/styles-[a-f0-9]{12}\.css">$`).MatchString(fragment.Body) {
 		t.Fatalf("Body = %q, want stylesheet link with permanent URL", fragment.Body)
+	}
+}
+
+func writeAssetFile(t *testing.T, filename string, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(filename), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filename, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }
 

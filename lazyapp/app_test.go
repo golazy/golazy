@@ -22,6 +22,30 @@ import (
 	_ "golazy.dev/lazyview/gotmpl"
 )
 
+func testViewFS(t *testing.T, files map[string]string) func() (fs.FS, error) {
+	t.Helper()
+	configureLazyDevViewsForTest(t, files)
+	return func() (fs.FS, error) {
+		return testMapFS(files), nil
+	}
+}
+
+func testPublicFS(t *testing.T, files map[string]string) func() (fs.FS, error) {
+	t.Helper()
+	configureLazyDevPublicForTest(t, files)
+	return func() (fs.FS, error) {
+		return testMapFS(files), nil
+	}
+}
+
+func testMapFS(files map[string]string) fstest.MapFS {
+	result := make(fstest.MapFS, len(files))
+	for name, content := range files {
+		result[name] = &fstest.MapFile{Data: []byte(content)}
+	}
+	return result
+}
+
 func TestAppAddsDynamicETagToRoutesAndAssetETagToPublicFiles(t *testing.T) {
 	app := New(Config{
 		Name: "test",
@@ -31,11 +55,9 @@ func TestAppAddsDynamicETagToRoutesAndAssetETagToPublicFiles(t *testing.T) {
 				return nil
 			})
 		},
-		Public: func() (fs.FS, error) {
-			return fstest.MapFS{
-				"styles.css": {Data: []byte("body { color: black; }")},
-			}, nil
-		},
+		Public: testPublicFS(t, map[string]string{
+			"styles.css": "body { color: black; }",
+		}),
 	})
 
 	response := httptest.NewRecorder()
@@ -52,11 +74,20 @@ func TestAppAddsDynamicETagToRoutesAndAssetETagToPublicFiles(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("public status = %d, want %d", response.Code, http.StatusOK)
 	}
-	if response.Header().Get("ETag") == "" {
-		t.Fatal("public ETag is empty")
-	}
-	if got := response.Header().Get("Cache-Control"); got != "public, max-age=0, must-revalidate" {
-		t.Fatalf("public Cache-Control = %q, want asset logical cache policy", got)
+	if lazyDevTestBuild() {
+		if got := response.Header().Get("ETag"); got != "" {
+			t.Fatalf("public ETag = %q, want empty in lazydev", got)
+		}
+		if got := response.Header().Get("Cache-Control"); got != "" {
+			t.Fatalf("public Cache-Control = %q, want empty in lazydev", got)
+		}
+	} else {
+		if response.Header().Get("ETag") == "" {
+			t.Fatal("public ETag is empty")
+		}
+		if got := response.Header().Get("Cache-Control"); got != "public, max-age=0, must-revalidate" {
+			t.Fatalf("public Cache-Control = %q, want asset logical cache policy", got)
+		}
 	}
 }
 
@@ -215,13 +246,11 @@ func TestAppCanDisableMetadataFiles(t *testing.T) {
 
 func TestAppRegistersSEOHelpers(t *testing.T) {
 	app := New(Config{
-		Views: func() (fs.FS, error) {
-			return fstest.MapFS{
-				"pages/show.html.tpl":          {Data: []byte(`{{seo}}`)},
-				"layouts/app.html.tpl":         {Data: []byte(`<html lang="{{seo_lang}}"><head>{{.content}}</head></html>`)},
-				"layouts/turbo_frame.html.tpl": {Data: []byte(`{{.content}}`)},
-			}, nil
-		},
+		Views: testViewFS(t, map[string]string{
+			"pages/show.html.tpl":          `{{seo}}`,
+			"layouts/app.html.tpl":         `<html lang="{{seo_lang}}"><head>{{.content}}</head></html>`,
+			"layouts/turbo_frame.html.tpl": `{{.content}}`,
+		}),
 		Drawer: func(router *lazyroutes.Scope) {
 			router.Get("/", newSEOTestController, (*seoTestController).Show)
 		},
@@ -383,11 +412,9 @@ func (c *pathForController) Show(w http.ResponseWriter, _ *http.Request) error {
 func TestAppWiresRoutePathHelpersIntoControllers(t *testing.T) {
 	app := New(Config{
 		Name: "test",
-		Views: func() (fs.FS, error) {
-			return fstest.MapFS{
-				"layouts/app.html.tpl": {Data: []byte("{{.content}}")},
-			}, nil
-		},
+		Views: testViewFS(t, map[string]string{
+			"layouts/app.html.tpl": "{{.content}}",
+		}),
 		Drawer: func(router *lazyroutes.Scope) {
 			router.Get("/posts/{post_id}", newPathForController, (*pathForController).Show)
 		},
@@ -400,6 +427,104 @@ func TestAppWiresRoutePathHelpersIntoControllers(t *testing.T) {
 		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
 	}
 	if got, want := response.Body.String(), "/posts/hello%20world"; got != want {
+		t.Fatalf("body = %q, want %q", got, want)
+	}
+}
+
+type defaultErrorController struct {
+	lazycontroller.Base
+}
+
+func newDefaultErrorController(ctx context.Context) (*defaultErrorController, error) {
+	base, err := lazycontroller.NewBase(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &defaultErrorController{Base: base}, nil
+}
+
+func (c *defaultErrorController) Show(_ http.ResponseWriter, _ *http.Request) error {
+	return lazycontroller.Error(http.StatusTeapot, errors.New("short and stout"))
+}
+
+func TestAppProvidesFrameworkDefaultErrorViews(t *testing.T) {
+	app := New(Config{
+		Name: "test",
+		Drawer: func(router *lazyroutes.Scope) {
+			router.Get("/teapot", newDefaultErrorController, (*defaultErrorController).Show)
+		},
+	})
+
+	response := httptest.NewRecorder()
+	app.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/teapot", nil))
+
+	if response.Code != http.StatusTeapot {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusTeapot)
+	}
+	body := response.Body.String()
+	expected := []string{"GoLazy", "418 I&#39;m a teapot", "glz-error"}
+	if lazyDevTestBuild() {
+		expected = append(expected, "short and stout")
+	} else {
+		expected = append(expected, "The request could not be completed")
+	}
+	for _, want := range expected {
+		if !strings.Contains(body, want) {
+			t.Fatalf("body does not contain %q:\n%s", want, body)
+		}
+	}
+	if !lazyDevTestBuild() && strings.Contains(body, "short and stout") {
+		t.Fatalf("body exposed production error detail:\n%s", body)
+	}
+}
+
+func TestAppViewsOverrideFrameworkDefaultErrorViews(t *testing.T) {
+	app := New(Config{
+		Name: "test",
+		Views: testViewFS(t, map[string]string{
+			"layouts/app.html.tpl": `user layout {{.content}}`,
+			"app/error.html.tpl":   `user error {{.status}} {{.statusText}} {{if .error}}{{.error}}{{else}}safe{{end}}`,
+		}),
+		Drawer: func(router *lazyroutes.Scope) {
+			router.Get("/teapot", newDefaultErrorController, (*defaultErrorController).Show)
+		},
+	})
+
+	response := httptest.NewRecorder()
+	app.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/teapot", nil))
+
+	if response.Code != http.StatusTeapot {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusTeapot)
+	}
+	want := "user layout user error 418 I&#39;m a teapot safe"
+	if lazyDevTestBuild() {
+		want = "user layout user error 418 I&#39;m a teapot 418 I&#39;m a teapot: short and stout"
+	}
+	if got := response.Body.String(); got != want {
+		t.Fatalf("body = %q, want %q", got, want)
+	}
+}
+
+func TestAppDetailErrorsExposeErrorToErrorView(t *testing.T) {
+	app := New(Config{
+		Name:              "test",
+		ForceDetailErrors: true,
+		Views: testViewFS(t, map[string]string{
+			"layouts/app.html.tpl": `user layout {{.content}}`,
+			"app/error.html.tpl":   `detail {{.status}} {{.error}}`,
+		}),
+		Drawer: func(router *lazyroutes.Scope) {
+			router.Get("/teapot", newDefaultErrorController, (*defaultErrorController).Show)
+		},
+	})
+
+	response := httptest.NewRecorder()
+	app.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/teapot", nil))
+
+	if response.Code != http.StatusTeapot {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusTeapot)
+	}
+	if got, want := response.Body.String(), "user layout detail 418 418 I&#39;m a teapot: short and stout"; got != want {
 		t.Fatalf("body = %q, want %q", got, want)
 	}
 }
@@ -463,11 +588,9 @@ func TestAppServesStatic500ForUserRouteErrors(t *testing.T) {
 				panic("boom")
 			})
 		},
-		Public: func() (fs.FS, error) {
-			return fstest.MapFS{
-				"500.html": {Data: []byte("<h1>static 500</h1>")},
-			}, nil
-		},
+		Public: testPublicFS(t, map[string]string{
+			"500.html": "<h1>static 500</h1>",
+		}),
 	})
 
 	for _, path := range []string{"/returned", "/panic"} {
@@ -476,6 +599,12 @@ func TestAppServesStatic500ForUserRouteErrors(t *testing.T) {
 
 		if response.Code != http.StatusInternalServerError {
 			t.Fatalf("%s status = %d, want %d", path, response.Code, http.StatusInternalServerError)
+		}
+		if lazyDevTestBuild() {
+			if got := response.Body.String(); !strings.Contains(got, "broken") && !strings.Contains(got, "boom") {
+				t.Fatalf("%s body = %q, want detail error", path, got)
+			}
+			continue
 		}
 		if got, want := response.Body.String(), "<h1>static 500</h1>"; got != want {
 			t.Fatalf("%s body = %q, want %q", path, got, want)
@@ -493,11 +622,9 @@ func TestAppCanForceDetailErrors(t *testing.T) {
 				return errors.New("broken")
 			})
 		},
-		Public: func() (fs.FS, error) {
-			return fstest.MapFS{
-				"500.html": {Data: []byte("<h1>static 500</h1>")},
-			}, nil
-		},
+		Public: testPublicFS(t, map[string]string{
+			"500.html": "<h1>static 500</h1>",
+		}),
 	})
 
 	response := httptest.NewRecorder()

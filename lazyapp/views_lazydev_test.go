@@ -14,7 +14,11 @@ func TestOpenConfiguredViewsUsesLocalViewsInLazyDevBuild(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, "views", "layouts", "app.html.tpl"), "local")
 
-	t.Setenv(lazyDevViewsPathEnv, filepath.Join(dir, "views"))
+	previous := ViewsPath
+	ViewsPath = filepath.Join(dir, "views")
+	t.Cleanup(func() {
+		ViewsPath = previous
+	})
 
 	views, err := openConfiguredViews(func() (fs.FS, error) {
 		return fstest.MapFS{
@@ -30,6 +34,33 @@ func TestOpenConfiguredViewsUsesLocalViewsInLazyDevBuild(t *testing.T) {
 	}
 	if got, want := string(content), "local"; got != want {
 		t.Fatalf("layout = %q, want %q", got, want)
+	}
+}
+
+func TestOpenConfiguredPublicUsesLocalPublicInLazyDevBuild(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "public", "styles.css"), "local")
+
+	previous := PublicPath
+	PublicPath = filepath.Join(dir, "public")
+	t.Cleanup(func() {
+		PublicPath = previous
+	})
+
+	public, err := openConfiguredPublic(func() (fs.FS, error) {
+		return fstest.MapFS{
+			"styles.css": {Data: []byte("embedded")},
+		}, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	content, err := fs.ReadFile(public, "styles.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := string(content), "local"; got != want {
+		t.Fatalf("styles.css = %q, want %q", got, want)
 	}
 }
 

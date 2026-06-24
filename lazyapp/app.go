@@ -20,6 +20,7 @@ import (
 	"golazy.dev/lazyseo"
 	"golazy.dev/lazysession"
 	"golazy.dev/lazyturbo"
+	_ "golazy.dev/lazyview/gotmpl"
 )
 
 type Helpers []map[string]any
@@ -89,27 +90,34 @@ func New(config Config) *App {
 		ctx = lazysession.WithManager(ctx, sessions)
 	}
 
-	var renderer *lazycontroller.Renderer
+	defaultViews, err := lazycontroller.DefaultViews()
+	if err != nil {
+		panic(err)
+	}
+	views := defaultViews
 	if config.Views != nil {
-		views, err := openConfiguredViews(config.Views)
+		configuredViews, err := openConfiguredViews(config.Views)
 		if err != nil {
 			panic(fmt.Errorf("open views: %w", err))
 		}
-		renderer, err = lazycontroller.NewRenderer(views)
-		if err != nil {
-			panic(fmt.Errorf("initialize renderer: %w", err))
-		}
-		ctx = lazycontroller.WithRenderer(ctx, renderer)
+		views = overlayViewFS(configuredViews, defaultViews)
 	}
+	renderer, err := lazycontroller.NewRenderer(views)
+	if err != nil {
+		panic(fmt.Errorf("initialize renderer: %w", err))
+	}
+	ctx = lazycontroller.WithRenderer(ctx, renderer)
 	if config.ForceDetailErrors {
 		ctx = lazycontroller.WithDetailErrors(ctx)
 	}
 
-	assets := lazyassets.New(config.AssetOptions...)
+	assetOptions := append([]lazyassets.Option{}, config.AssetOptions...)
+	assetOptions = append(assetOptions, lazyDevAssetOptions()...)
+	assets := lazyassets.New(assetOptions...)
 	if config.Public != nil {
-		public, err := config.Public()
+		public, err := openConfiguredPublic(config.Public)
 		if err != nil {
-			panic(fmt.Errorf("open embedded public files: %w", err))
+			panic(fmt.Errorf("open public files: %w", err))
 		}
 		ctx = lazycontroller.WithErrorPages(ctx, public)
 		if err := assets.AddFS(public); err != nil {
@@ -140,18 +148,16 @@ func New(config Config) *App {
 		config.Drawer(router)
 	}
 	afterDraw(router)
-	if renderer != nil {
-		renderer.AddHelpers(router.RegisterHelpers())
-		renderer.AddHelpers(assets.Helpers())
-		renderer.AddHelpers(lazyforms.Helpers(router))
-		renderer.AddHelpers(lazyseo.Helpers(config.SEO...))
-		renderer.AddHelpers(lazyturbo.Helpers())
-		for _, helpers := range config.Helpers {
-			renderer.AddHelpers(helpers)
-		}
-		if err := renderer.Cache(); err != nil {
-			panic(fmt.Errorf("cache views: %w", err))
-		}
+	renderer.AddHelpers(router.RegisterHelpers())
+	renderer.AddHelpers(assets.Helpers())
+	renderer.AddHelpers(lazyforms.Helpers(router))
+	renderer.AddHelpers(lazyseo.Helpers(config.SEO...))
+	renderer.AddHelpers(lazyturbo.Helpers())
+	for _, helpers := range config.Helpers {
+		renderer.AddHelpers(helpers)
+	}
+	if err := renderer.Cache(); err != nil {
+		panic(fmt.Errorf("cache views: %w", err))
 	}
 
 	dispatcher := lazydispatch.NewDispatcher()

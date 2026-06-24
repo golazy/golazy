@@ -15,15 +15,24 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `Getenv[T]`, default field-to-env naming, struct tags for defaults and
   required values, slice entry loading, and optional `Validate() error`
   support.
+- Framework-owned default controller views for `layouts/app.html.tpl` and
+  `app/error.html.tpl`, used by `lazyapp` when an application does not provide
+  its own files at those paths.
 
 ### Changed
 
 - `lazyapp.Config.Dependencies` replaces `lazyapp.Config.Context`. The
   framework now creates a `*lazydeps.Scope`, passes it to the application
   dependency initializer, and keeps the resulting scope on `lazyapp.App`.
-- `lazyapp` now reads its framework-owned environment variables, including
-  `ADDR`, `PORT`, and `CONTROL_PLANE_ADDR`, through a local config struct
-  backed by `lazyconfig`.
+- `lazyapp` now reads its framework-owned runtime environment variables,
+  including `ADDR`, `PORT`, and `CONTROL_PLANE_ADDR`, through a local config
+  struct backed by `lazyconfig`.
+- In `lazydev` builds, `lazyapp` reads views and public files from build-time
+  paths, and `lazyassets` serves logical development asset paths without
+  permanent hashes or cache headers.
+- `lazycontroller.Base.HandleError` now renders the shared `app/error` view
+  before falling back to explicit static status files, and only exposes raw
+  error details to that view when detail errors are enabled.
 - Retracted pre-`v0.1.0` framework module versions, which were unstable
   snapshots before the current GoLazy release line.
 
@@ -87,9 +96,9 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- In `lazydev` builds, `lazyapp` reads the local view root from
-  `GOLAZY_VIEW_PATH`. Production builds continue to use the application
-  configured embedded view filesystem.
+- In `lazydev` builds, `lazyapp` reads the local view root from a path supplied
+  by `lazy`. Production builds continue to use the application configured
+  embedded view filesystem.
 
 ### Removed
 

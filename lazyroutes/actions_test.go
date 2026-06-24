@@ -343,7 +343,10 @@ func TestControllerPanicRendersAppFallback(t *testing.T) {
 	if strings.Contains(body, "partial") {
 		t.Fatalf("body contains stale partial response: %q", body)
 	}
-	if !strings.Contains(body, "error 500 Internal Server Error") || !strings.Contains(body, "panic: boom") {
+	if strings.Contains(body, "panic: boom") {
+		t.Fatalf("body exposed production panic detail: %q", body)
+	}
+	if !strings.Contains(body, "error 500 Internal Server Error") {
 		t.Fatalf("unexpected body: %q", body)
 	}
 }
@@ -410,7 +413,7 @@ func TestControllerErrorUsesDetailWhenEnabled(t *testing.T) {
 	}
 }
 
-func TestControllerHandleErrorCanServeStaticStatusPage(t *testing.T) {
+func TestControllerHandleErrorRendersAppErrorBeforeStaticStatusPage(t *testing.T) {
 	renderer, err := lazycontroller.NewRenderer(fstest.MapFS{
 		"layouts/app.html.tpl": {Data: []byte(`<main>{{.content}}</main>`)},
 		"app/error.html.tpl":   {Data: []byte(`dynamic {{.status}}`)},
@@ -433,7 +436,7 @@ func TestControllerHandleErrorCanServeStaticStatusPage(t *testing.T) {
 	if response.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d", response.Code, http.StatusNotFound)
 	}
-	if got, want := response.Body.String(), "<h1>static 404</h1>"; got != want {
+	if got, want := response.Body.String(), "<main>dynamic 404</main>"; got != want {
 		t.Fatalf("body = %q, want %q", got, want)
 	}
 }
@@ -453,7 +456,10 @@ func TestControllerErrorResetsBufferAndRendersAppFallback(t *testing.T) {
 	if strings.Contains(body, "partial") {
 		t.Fatalf("body contains stale partial response: %q", body)
 	}
-	if !strings.Contains(body, "error 404 Not Found") || !strings.Contains(body, "missing post") {
+	if strings.Contains(body, "missing post") {
+		t.Fatalf("body exposed production error detail: %q", body)
+	}
+	if !strings.Contains(body, "error 404 Not Found") {
 		t.Fatalf("unexpected body: %q", body)
 	}
 }

@@ -249,8 +249,8 @@ go build ./cmd/app
 Production builds embed views and public files, so the resulting binary is
 self-contained. Public files are registered as assets with content-hashed
 permanent URLs, ETags, integrity values, and cache headers. Development helpers
-such as `lazy` may use build tags like `lazydev` to read views from disk while
-editing.
+such as `lazy` use the `lazydev` build tag to read views and public files from
+disk while editing, without permanent asset hashes or asset cache headers.
 
 ## Documentation
 

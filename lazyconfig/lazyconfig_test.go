@@ -53,6 +53,27 @@ func TestGetenvUsesTags(t *testing.T) {
 	}
 }
 
+func TestGetenvUsesCompactDefaultNameFallback(t *testing.T) {
+	t.Setenv("GOWORK", "/tmp/app/go.work")
+	t.Setenv("LAZYCMD", "/tmp/lazy")
+
+	type config struct {
+		GoWork  string
+		LazyCmd string
+	}
+
+	got, err := Getenv[config]()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.GoWork != "/tmp/app/go.work" {
+		t.Fatalf("GoWork = %q", got.GoWork)
+	}
+	if got.LazyCmd != "/tmp/lazy" {
+		t.Fatalf("LazyCmd = %q", got.LazyCmd)
+	}
+}
+
 func TestGetenvFillsIndexedSliceSortedByIndex(t *testing.T) {
 	t.Setenv("LAZYCONFIG_TEST_LISTENER_20_NAME", "smtp")
 	t.Setenv("LAZYCONFIG_TEST_LISTENER_20_PORT", "25")

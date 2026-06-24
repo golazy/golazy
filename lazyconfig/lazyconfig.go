@@ -87,7 +87,7 @@ func (l loader) fillField(value reflect.Value, field reflect.StructField, prefix
 	}
 
 	if canSetScalar(value) {
-		return l.fillScalar(value, fieldEnvName(prefix, field), field)
+		return l.fillScalar(value, fieldEnvNames(prefix, field), field)
 	}
 
 	switch value.Kind() {
@@ -114,8 +114,7 @@ func (l loader) fillPointer(value reflect.Value, field reflect.StructField, pref
 		return l.fillStruct(value.Elem(), envName)
 	}
 
-	envName := fieldEnvName(prefix, field)
-	raw, found := l.lookupValue(envName, field)
+	envName, raw, found := l.lookupValue(fieldEnvNames(prefix, field), field)
 	if !found {
 		if required, reason := requirement(field); required {
 			return requiredError(envName, reason)
@@ -126,8 +125,8 @@ func (l loader) fillPointer(value reflect.Value, field reflect.StructField, pref
 	return setScalar(value.Elem(), envName, raw)
 }
 
-func (l loader) fillScalar(value reflect.Value, envName string, field reflect.StructField) error {
-	raw, found := l.lookupValue(envName, field)
+func (l loader) fillScalar(value reflect.Value, envNames []string, field reflect.StructField) error {
+	envName, raw, found := l.lookupValue(envNames, field)
 	required, reason := requirement(field)
 	if required && (!found || strings.TrimSpace(raw) == "") {
 		return requiredError(envName, reason)
@@ -196,14 +195,16 @@ func (l loader) fillSlice(value reflect.Value, prefix string, field reflect.Stru
 	return nil
 }
 
-func (l loader) lookupValue(envName string, field reflect.StructField) (string, bool) {
-	if value, ok := l.env[envName]; ok {
-		return value, true
+func (l loader) lookupValue(envNames []string, field reflect.StructField) (string, string, bool) {
+	for _, envName := range envNames {
+		if value, ok := l.env[envName]; ok {
+			return envName, value, true
+		}
 	}
 	if value, ok := field.Tag.Lookup("default"); ok {
-		return value, true
+		return envNames[0], value, true
 	}
-	return "", false
+	return envNames[0], "", false
 }
 
 func (l loader) hasDirectStructEnv(prefix string, typ reflect.Type) bool {
@@ -212,13 +213,14 @@ func (l loader) hasDirectStructEnv(prefix string, typ reflect.Type) bool {
 		if !field.IsExported() {
 			continue
 		}
-		envName := fieldEnvName(prefix, field)
-		if _, ok := l.env[envName]; ok {
-			return true
-		}
-		if field.Type.Kind() == reflect.Struct && !canSetScalarType(field.Type) {
-			if l.hasDirectStructEnv(envName, field.Type) {
+		for _, envName := range fieldEnvNames(prefix, field) {
+			if _, ok := l.env[envName]; ok {
 				return true
+			}
+			if field.Type.Kind() == reflect.Struct && !canSetScalarType(field.Type) {
+				if l.hasDirectStructEnv(envName, field.Type) {
+					return true
+				}
 			}
 		}
 	}
@@ -374,11 +376,19 @@ func setScalar(value reflect.Value, envName string, raw string) error {
 }
 
 func fieldEnvName(prefix string, field reflect.StructField) string {
-	name := envName(field)
+	return fieldEnvNames(prefix, field)[0]
+}
+
+func fieldEnvNames(prefix string, field reflect.StructField) []string {
+	names := envNames(field)
 	if prefix == "" || hasVarTag(field) {
-		return name
+		return names
 	}
-	return prefix + "_" + name
+	out := make([]string, 0, len(names))
+	for _, name := range names {
+		out = append(out, prefix+"_"+name)
+	}
+	return out
 }
 
 func sliceEnvName(prefix string, field reflect.StructField) string {
@@ -393,10 +403,19 @@ func sliceEnvName(prefix string, field reflect.StructField) string {
 }
 
 func envName(field reflect.StructField) string {
+	return envNames(field)[0]
+}
+
+func envNames(field reflect.StructField) []string {
 	if value, ok := field.Tag.Lookup("var"); ok && strings.TrimSpace(value) != "" {
-		return strings.TrimSpace(value)
+		return []string{strings.TrimSpace(value)}
 	}
-	return camelEnvName(field.Name)
+	name := camelEnvName(field.Name)
+	compact := strings.ReplaceAll(name, "_", "")
+	if compact != name {
+		return []string{name, compact}
+	}
+	return []string{name}
 }
 
 func hasVarTag(field reflect.StructField) bool {

@@ -7,10 +7,15 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log/slog"
-	"runtime/trace"
+	runtimetrace "runtime/trace"
 	"strings"
 	"sync"
 	"time"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
 type contextKey struct{}
@@ -48,14 +53,20 @@ type Span struct {
 	err        error
 	ended      bool
 
-	task   *trace.Task
-	region *trace.Region
+	otelSpan oteltrace.Span
+	task     *runtimetrace.Task
+	region   *runtimetrace.Region
 }
 
 // WithTraceContext attaches trace context to ctx.
 func WithTraceContext(ctx context.Context, traceContext TraceContext) context.Context {
 	if traceContext.TraceID == "" {
 		return ctx
+	}
+	if traceContext.Remote {
+		if spanContext := otelSpanContext(traceContext); spanContext.IsValid() {
+			ctx = oteltrace.ContextWithRemoteSpanContext(ctx, spanContext)
+		}
 	}
 	return context.WithValue(ctx, traceContextKey{}, traceContext)
 }
@@ -101,15 +112,28 @@ func StartSpan(ctx context.Context, name string, attributes ...slog.Attr) (conte
 		traceContext.TraceID = randomHex(16)
 	}
 	parentID := traceContext.SpanID
-	traceContext.SpanID = randomHex(8)
-	traceContext.Remote = false
-	ctx = WithTraceContext(ctx, traceContext)
-
-	var task *trace.Task
-	if parentID == "" {
-		ctx, task = trace.NewTask(ctx, name)
+	if spanContext := oteltrace.SpanContextFromContext(ctx); spanContext.IsValid() {
+		traceContext.TraceID = spanContext.TraceID().String()
+		parentID = spanContext.SpanID().String()
 	}
-	region := trace.StartRegion(ctx, name)
+	ctx, otelSpan := otel.Tracer("golazy.dev/lazytelemetry").Start(ctx, name,
+		oteltrace.WithAttributes(slogAttrsToOTel(attributes)...),
+	)
+	spanContext := otelSpan.SpanContext()
+	if spanContext.IsValid() && spanContext.SpanID().String() != parentID {
+		traceContext.TraceID = spanContext.TraceID().String()
+		traceContext.SpanID = spanContext.SpanID().String()
+	} else {
+		traceContext.SpanID = randomHex(8)
+	}
+	traceContext.Remote = false
+	ctx = context.WithValue(ctx, traceContextKey{}, traceContext)
+
+	var task *runtimetrace.Task
+	if parentID == "" {
+		ctx, task = runtimetrace.NewTask(ctx, name)
+	}
+	region := runtimetrace.StartRegion(ctx, name)
 
 	span := &Span{
 		name:       name,
@@ -118,6 +142,7 @@ func StartSpan(ctx context.Context, name string, attributes ...slog.Attr) (conte
 		parentID:   parentID,
 		startedAt:  time.Now(),
 		attributes: append([]slog.Attr(nil), attributes...),
+		otelSpan:   otelSpan,
 		task:       task,
 		region:     region,
 	}
@@ -178,6 +203,26 @@ func (s *Span) ParentID() string {
 	return s.parentID
 }
 
+// StartedAt returns the time the span started.
+func (s *Span) StartedAt() time.Time {
+	if s == nil {
+		return time.Time{}
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.startedAt
+}
+
+// EndedAt returns the time the span ended, or the zero time when it is still open.
+func (s *Span) EndedAt() time.Time {
+	if s == nil {
+		return time.Time{}
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.endedAt
+}
+
 // AddAttributes appends attributes to the span.
 func (s *Span) AddAttributes(attributes ...slog.Attr) {
 	if s == nil || len(attributes) == 0 {
@@ -186,6 +231,9 @@ func (s *Span) AddAttributes(attributes ...slog.Attr) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.attributes = append(s.attributes, attributes...)
+	if s.otelSpan != nil {
+		s.otelSpan.SetAttributes(slogAttrsToOTel(attributes)...)
+	}
 }
 
 // Attributes returns a copy of the span attributes.
@@ -210,6 +258,9 @@ func (s *Span) AddEvent(name string, attributes ...slog.Attr) {
 		Time:       time.Now(),
 		Attributes: append([]slog.Attr(nil), attributes...),
 	})
+	if s.otelSpan != nil {
+		s.otelSpan.AddEvent(name, oteltrace.WithAttributes(slogAttrsToOTel(attributes)...))
+	}
 }
 
 // Events returns a copy of recorded span events.
@@ -229,6 +280,10 @@ func (s *Span) RecordError(err error) {
 	}
 	s.mu.Lock()
 	s.err = err
+	if s.otelSpan != nil {
+		s.otelSpan.RecordError(err)
+		s.otelSpan.SetStatus(codes.Error, err.Error())
+	}
 	s.mu.Unlock()
 	s.AddEvent("exception", slog.String("error", err.Error()))
 }
@@ -257,6 +312,7 @@ func (s *Span) End() {
 	s.endedAt = time.Now()
 	region := s.region
 	task := s.task
+	otelSpan := s.otelSpan
 	s.mu.Unlock()
 
 	if region != nil {
@@ -264,6 +320,9 @@ func (s *Span) End() {
 	}
 	if task != nil {
 		task.End()
+	}
+	if otelSpan != nil {
+		otelSpan.End()
 	}
 }
 
@@ -305,4 +364,67 @@ func allZero(value string) bool {
 		}
 	}
 	return true
+}
+
+func otelSpanContext(traceContext TraceContext) oteltrace.SpanContext {
+	traceID, err := oteltrace.TraceIDFromHex(traceContext.TraceID)
+	if err != nil {
+		return oteltrace.SpanContext{}
+	}
+	spanID, err := oteltrace.SpanIDFromHex(traceContext.SpanID)
+	if err != nil {
+		return oteltrace.SpanContext{}
+	}
+	traceFlags := oteltrace.TraceFlags(0)
+	if traceContext.TraceFlags == "01" {
+		traceFlags = oteltrace.FlagsSampled
+	}
+	traceState, err := oteltrace.ParseTraceState(traceContext.TraceState)
+	if err != nil {
+		traceState = oteltrace.TraceState{}
+	}
+	return oteltrace.NewSpanContext(oteltrace.SpanContextConfig{
+		TraceID:    traceID,
+		SpanID:     spanID,
+		TraceFlags: traceFlags,
+		TraceState: traceState,
+		Remote:     traceContext.Remote,
+	})
+}
+
+func slogAttrsToOTel(attrs []slog.Attr) []attribute.KeyValue {
+	if len(attrs) == 0 {
+		return nil
+	}
+	values := make([]attribute.KeyValue, 0, len(attrs))
+	for _, attr := range attrs {
+		if attr.Key == "" {
+			continue
+		}
+		values = append(values, slogAttrToOTel(attr))
+	}
+	return values
+}
+
+func slogAttrToOTel(attr slog.Attr) attribute.KeyValue {
+	value := attr.Value.Resolve()
+	key := attribute.Key(attr.Key)
+	switch value.Kind() {
+	case slog.KindBool:
+		return key.Bool(value.Bool())
+	case slog.KindDuration:
+		return key.String(value.Duration().String())
+	case slog.KindFloat64:
+		return key.Float64(value.Float64())
+	case slog.KindInt64:
+		return key.Int64(value.Int64())
+	case slog.KindString:
+		return key.String(value.String())
+	case slog.KindTime:
+		return key.String(value.Time().Format(time.RFC3339Nano))
+	case slog.KindUint64:
+		return key.Int64(int64(value.Uint64()))
+	default:
+		return key.String(value.String())
+	}
 }

@@ -212,6 +212,29 @@ func hasEnabledExporter(exporters []string) bool {
 	return false
 }
 
+// PrometheusMetrics reports whether the Prometheus metrics exporter is enabled.
+func (config Config) PrometheusMetrics() bool {
+	if config.SDKDisabled {
+		return false
+	}
+	for _, exporter := range config.MetricsExporter {
+		if strings.TrimSpace(strings.ToLower(exporter)) == "prometheus" {
+			return true
+		}
+	}
+	return false
+}
+
+func (config Config) captureRequestFiles() bool {
+	if config.SDKDisabled {
+		return false
+	}
+	return hasEnabledExporter(config.TracesExporter) ||
+		hasEnabledExporter(config.MetricsExporter) ||
+		hasEnabledExporter(config.LogsExporter) ||
+		config.Exporter.configured()
+}
+
 func (config Config) metricConfigConfigured() bool {
 	return config.MetricsExemplarFilter != "" ||
 		config.MetricExportInterval != 0 ||

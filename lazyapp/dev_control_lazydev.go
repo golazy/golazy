@@ -32,6 +32,14 @@ func lazyDevControlPlane(controlPlane *lazycontrolplane.ControlPlane, renderer *
 	return controlPlane
 }
 
+func (app *App) controlPlaneInServeHTTP() *lazycontrolplane.ControlPlane {
+	return app.ControlPlane
+}
+
+func (app *App) controlPlaneWithoutListenAddress() *lazycontrolplane.ControlPlane {
+	return app.ControlPlane
+}
+
 func registerLazyDevViewHandlers(controlPlane *lazycontrolplane.ControlPlane, renderer *lazycontroller.Renderer) {
 	var reloadMu sync.Mutex
 	reloadViews := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

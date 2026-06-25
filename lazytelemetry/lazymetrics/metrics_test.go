@@ -1,7 +1,9 @@
 package lazymetrics
 
 import (
+	"bytes"
 	"context"
+	"strings"
 	"testing"
 )
 
@@ -29,6 +31,38 @@ func TestRegistryRecordsCounterGaugeAndHistogram(t *testing.T) {
 	histogram := findHistogram(snapshot.Histograms, "request_duration_seconds", Labels{"method": "GET"})
 	if histogram.Count != 2 || histogram.Sum != 1.0 || histogram.Min != 0.25 || histogram.Max != 0.75 {
 		t.Fatalf("histogram = %#v", histogram)
+	}
+	if got := histogramBucket(histogram, 0.25); got != 1 {
+		t.Fatalf("0.25 bucket = %d, want 1", got)
+	}
+	if got := histogramBucket(histogram, 1); got != 2 {
+		t.Fatalf("1 bucket = %d, want 2", got)
+	}
+}
+
+func TestWritePrometheus(t *testing.T) {
+	registry := NewRegistry()
+
+	registry.NewCounter("requests_total", "method").WithLabelValues("GET").Inc()
+	registry.NewHistogram("request_duration_seconds", "method").WithLabelValues("GET").Observe(0.25)
+
+	var out bytes.Buffer
+	if err := WritePrometheus(&out, registry.Snapshot()); err != nil {
+		t.Fatal(err)
+	}
+	body := out.String()
+	for _, want := range []string{
+		"# TYPE requests_total counter\n",
+		`requests_total{method="GET"} 1` + "\n",
+		"# TYPE request_duration_seconds histogram\n",
+		`request_duration_seconds_bucket{le="0.25",method="GET"} 1` + "\n",
+		`request_duration_seconds_bucket{le="+Inf",method="GET"} 1` + "\n",
+		`request_duration_seconds_sum{method="GET"} 0.25` + "\n",
+		`request_duration_seconds_count{method="GET"} 1` + "\n",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("Prometheus output missing %q in:\n%s", want, body)
+		}
 	}
 }
 
@@ -62,6 +96,15 @@ func findHistogram(metrics []HistogramSnapshot, name string, labels Labels) Hist
 		}
 	}
 	return HistogramSnapshot{}
+}
+
+func histogramBucket(histogram HistogramSnapshot, boundary float64) int64 {
+	for _, bucket := range histogram.Buckets {
+		if bucket.Le == boundary {
+			return bucket.Count
+		}
+	}
+	return 0
 }
 
 func sameLabels(left, right Labels) bool {

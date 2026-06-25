@@ -10,6 +10,9 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	otelmetric "go.opentelemetry.io/otel/metric"
 	"golazy.dev/lazydispatch"
 	"golazy.dev/lazytelemetry/lazylogs"
 	"golazy.dev/lazytelemetry/lazymetrics"
@@ -25,8 +28,11 @@ type middleware struct {
 	logger   *slog.Logger
 	registry *lazymetrics.Registry
 
-	requestsTotal   *lazymetrics.CounterVec
-	requestDuration *lazymetrics.HistogramVec
+	requestsTotal       *lazymetrics.CounterVec
+	requestDuration     *lazymetrics.HistogramVec
+	otelRequestsTotal   otelmetric.Int64Counter
+	otelRequestDuration otelmetric.Float64Histogram
+	captureRequestFiles bool
 }
 
 // Middleware returns the default telemetry middleware.
@@ -47,8 +53,9 @@ func EnvironmentMiddleware(options ...MiddlewareOption) (lazydispatch.Middleware
 // MiddlewareFromConfig returns a middleware configured from config.
 func MiddlewareFromConfig(config Config, options ...MiddlewareOption) lazydispatch.Middleware {
 	middleware := &middleware{
-		logger:   NewLogger(config, nil),
-		registry: lazymetrics.NewRegistry(),
+		logger:              NewLogger(config, nil),
+		registry:            lazymetrics.NewRegistry(),
+		captureRequestFiles: config.captureRequestFiles(),
 	}
 	for _, option := range options {
 		if option != nil {
@@ -63,6 +70,13 @@ func MiddlewareFromConfig(config Config, options ...MiddlewareOption) lazydispat
 	}
 	middleware.requestsTotal = middleware.registry.NewCounter("http_server_requests_total", "method", "route", "status_class")
 	middleware.requestDuration = middleware.registry.NewHistogram("http_server_request_duration_seconds", "method", "route", "status_class")
+	meter := otel.Meter("golazy.dev/lazytelemetry")
+	middleware.otelRequestsTotal, _ = meter.Int64Counter("http.server.requests",
+		otelmetric.WithUnit("{request}"),
+	)
+	middleware.otelRequestDuration, _ = meter.Float64Histogram("http.server.request.duration",
+		otelmetric.WithUnit("s"),
+	)
 	return middleware
 }
 
@@ -91,6 +105,7 @@ func (middleware *middleware) Handler(next http.Handler) http.Handler {
 		if requestID == "" {
 			requestID = generateRequestID()
 		}
+		capture := beginRequestCapture(middleware.captureRequestFiles, requestID)
 
 		ctx := WithRequestID(r.Context(), requestID)
 		ctx = lazylogs.WithLogger(ctx, middleware.logger)
@@ -124,12 +139,20 @@ func (middleware *middleware) Handler(next http.Handler) http.Handler {
 		defer func() {
 			recovered := recover()
 			status := recorder.Status()
-			duration := time.Since(startedAt)
+			endedAt := time.Now()
+			duration := endedAt.Sub(startedAt)
 			labels := lazymetrics.LabelsFromContext(ctx)
 			labels["status_class"] = statusClass(status)
 
 			middleware.requestsTotal.With(labels).Inc()
 			middleware.requestDuration.With(labels).Observe(duration.Seconds())
+			otelAttributes := requestMetricAttributes(labels, status)
+			if middleware.otelRequestsTotal != nil {
+				middleware.otelRequestsTotal.Add(ctx, 1, otelmetric.WithAttributes(otelAttributes...))
+			}
+			if middleware.otelRequestDuration != nil {
+				middleware.otelRequestDuration.Record(ctx, duration.Seconds(), otelmetric.WithAttributes(otelAttributes...))
+			}
 			span.AddAttributes(
 				slog.Int("http.response.status_code", status),
 				slog.Duration("duration", duration),
@@ -142,19 +165,51 @@ func (middleware *middleware) Handler(next http.Handler) http.Handler {
 					slog.Duration("duration", duration),
 					slog.Any("panic", recovered),
 				)
-				span.End()
+			} else {
+				lazylogs.Info(ctx, "request completed",
+					slog.Int("status", status),
+					slog.Duration("duration", duration),
+					slog.Int("bytes", recorder.BytesWritten()),
+				)
+			}
+			span.End()
+			if capture != nil {
+				capture.Finish(requestCaptureResult{
+					RequestID: requestID,
+					Method:    r.Method,
+					Path:      r.URL.Path,
+					Status:    status,
+					Bytes:     recorder.BytesWritten(),
+					StartedAt: startedAt,
+					EndedAt:   endedAt,
+					Duration:  duration,
+					Panic:     recovered,
+				}, span)
+			}
+			if recovered != nil {
 				panic(recovered)
 			}
-			lazylogs.Info(ctx, "request completed",
-				slog.Int("status", status),
-				slog.Duration("duration", duration),
-				slog.Int("bytes", recorder.BytesWritten()),
-			)
-			span.End()
 		}()
 
 		next.ServeHTTP(recorder, request)
 	})
+}
+
+func requestMetricAttributes(labels lazymetrics.Labels, status int) []attribute.KeyValue {
+	route := strings.TrimSpace(labels["route"])
+	if route == "" {
+		route = "unknown"
+	}
+	method := strings.TrimSpace(labels["method"])
+	if method == "" {
+		method = "UNKNOWN"
+	}
+	return []attribute.KeyValue{
+		attribute.String("http.request.method", method),
+		attribute.String("http.route", route),
+		attribute.Int("http.response.status_code", status),
+		attribute.String("http.response.status_class", statusClass(status)),
+	}
 }
 
 func requestIDFromHeaders(header http.Header) string {

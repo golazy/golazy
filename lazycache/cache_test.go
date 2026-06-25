@@ -1,8 +1,10 @@
 package lazycache
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -133,5 +135,39 @@ func TestCacheContext(t *testing.T) {
 	got, ok := FromContext(ctx)
 	if !ok || got != cache {
 		t.Fatalf("FromContext = %#v, %v; want cache, true", got, ok)
+	}
+}
+
+func TestWritePrometheus(t *testing.T) {
+	cache, err := New(Options{Backend: &memoryBackend{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cache.Set("Ada", "user"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cache.Get("user"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cache.Get("missing"); !errors.Is(err, ErrMiss) {
+		t.Fatalf("missing get err = %v, want ErrMiss", err)
+	}
+
+	var out bytes.Buffer
+	if err := WritePrometheus(&out, cache); err != nil {
+		t.Fatal(err)
+	}
+	body := out.String()
+	for _, want := range []string{
+		"# TYPE golazy_cache_enabled gauge\n",
+		"golazy_cache_enabled 1\n",
+		"golazy_cache_entries 1\n",
+		"golazy_cache_hits_total 1\n",
+		"golazy_cache_misses_total 1\n",
+		"golazy_cache_sets_total 1\n",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("Prometheus output missing %q in:\n%s", want, body)
+		}
 	}
 }

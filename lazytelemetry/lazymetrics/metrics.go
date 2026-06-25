@@ -30,10 +30,11 @@ type metricKey struct {
 }
 
 type histogramState struct {
-	count int64
-	sum   float64
-	min   float64
-	max   float64
+	count   int64
+	sum     float64
+	min     float64
+	max     float64
+	buckets map[float64]int64
 }
 
 // MetricSnapshot is a point-in-time counter or gauge value.
@@ -45,12 +46,19 @@ type MetricSnapshot struct {
 
 // HistogramSnapshot is a point-in-time histogram summary.
 type HistogramSnapshot struct {
-	Name   string
-	Labels Labels
-	Count  int64
-	Sum    float64
-	Min    float64
-	Max    float64
+	Name    string
+	Labels  Labels
+	Count   int64
+	Sum     float64
+	Min     float64
+	Max     float64
+	Buckets []HistogramBucketSnapshot
+}
+
+// HistogramBucketSnapshot is a cumulative histogram bucket.
+type HistogramBucketSnapshot struct {
+	Le    float64
+	Count int64
 }
 
 // Snapshot contains all metrics in a registry.
@@ -207,9 +215,18 @@ func (h Histogram) Observe(value float64) {
 	if state.count == 0 {
 		state.min = value
 		state.max = value
+		state.buckets = map[float64]int64{}
 	} else {
 		state.min = math.Min(state.min, value)
 		state.max = math.Max(state.max, value)
+	}
+	if state.buckets == nil {
+		state.buckets = map[float64]int64{}
+	}
+	for _, bucket := range defaultHistogramBuckets {
+		if value <= bucket {
+			state.buckets[bucket]++
+		}
 	}
 	state.count++
 	state.sum += value
@@ -240,12 +257,13 @@ func (r *Registry) Snapshot() Snapshot {
 	}
 	for key, value := range r.histograms {
 		snapshot.Histograms = append(snapshot.Histograms, HistogramSnapshot{
-			Name:   key.name,
-			Labels: decodeLabels(key.labels),
-			Count:  value.count,
-			Sum:    value.sum,
-			Min:    value.min,
-			Max:    value.max,
+			Name:    key.name,
+			Labels:  decodeLabels(key.labels),
+			Count:   value.count,
+			Sum:     value.sum,
+			Min:     value.min,
+			Max:     value.max,
+			Buckets: histogramBuckets(value),
 		})
 	}
 	sortMetricSnapshots(snapshot.Counters)
@@ -390,6 +408,31 @@ func sortHistogramSnapshots(snapshots []HistogramSnapshot) {
 	sort.Slice(snapshots, func(i, j int) bool {
 		return snapshotKey(snapshots[i].Name, snapshots[i].Labels) < snapshotKey(snapshots[j].Name, snapshots[j].Labels)
 	})
+}
+
+var defaultHistogramBuckets = []float64{
+	0.005,
+	0.01,
+	0.025,
+	0.05,
+	0.1,
+	0.25,
+	0.5,
+	1,
+	2.5,
+	5,
+	10,
+}
+
+func histogramBuckets(state histogramState) []HistogramBucketSnapshot {
+	buckets := make([]HistogramBucketSnapshot, 0, len(defaultHistogramBuckets))
+	for _, boundary := range defaultHistogramBuckets {
+		buckets = append(buckets, HistogramBucketSnapshot{
+			Le:    boundary,
+			Count: state.buckets[boundary],
+		})
+	}
+	return buckets
 }
 
 func snapshotKey(name string, labels Labels) string {

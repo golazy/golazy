@@ -16,6 +16,7 @@ func TestLoadConfigReadsOTELEnvironment(t *testing.T) {
 	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://collector:4318")
 	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "http://traces:4318")
 	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_HEADERS", "api-key=secret")
+	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_PROTOCOL", "grpc")
 	t.Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf")
 	t.Setenv("OTEL_EXPORTER_OTLP_TIMEOUT", "10s")
 	t.Setenv("OTEL_BSP_SCHEDULE_DELAY", "5000")
@@ -59,6 +60,9 @@ func TestLoadConfigReadsOTELEnvironment(t *testing.T) {
 	}
 	if config.Exporter.OTLP.TracesHeaders != "api-key=secret" {
 		t.Fatalf("OTLP.TracesHeaders = %q", config.Exporter.OTLP.TracesHeaders)
+	}
+	if config.Exporter.OTLP.TracesProtocol != "grpc" {
+		t.Fatalf("OTLP.TracesProtocol = %q", config.Exporter.OTLP.TracesProtocol)
 	}
 	if config.Exporter.OTLP.Protocol != "http/protobuf" {
 		t.Fatalf("OTLP.Protocol = %q", config.Exporter.OTLP.Protocol)
@@ -137,6 +141,44 @@ func TestConfigEnabledUsesOTELEnvironment(t *testing.T) {
 				t.Fatalf("Enabled = %v, want %v", got, test.want)
 			}
 		})
+	}
+}
+
+func TestConfigCaptureRequestFilesRequiresExporter(t *testing.T) {
+	tests := []struct {
+		name   string
+		config Config
+		want   bool
+	}{
+		{name: "empty", config: Config{}, want: false},
+		{name: "sdk disabled", config: Config{SDKDisabled: true, TracesExporter: []string{"otlp"}}, want: false},
+		{name: "service name only", config: Config{ServiceName: "sample"}, want: false},
+		{name: "traces exporter", config: Config{TracesExporter: []string{"otlp"}}, want: true},
+		{name: "logs exporter", config: Config{LogsExporter: []string{"otlp"}}, want: true},
+		{name: "metrics exporter", config: Config{MetricsExporter: []string{"otlp"}}, want: true},
+		{name: "prometheus metrics exporter", config: Config{MetricsExporter: []string{"prometheus"}}, want: true},
+		{name: "none exporter", config: Config{TracesExporter: []string{"none"}, LogsExporter: []string{"none"}}, want: false},
+		{name: "otlp protocol", config: Config{Exporter: ExporterConfig{OTLP: OTLPExporterConfig{Protocol: "http/protobuf"}}}, want: true},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := test.config.captureRequestFiles(); got != test.want {
+				t.Fatalf("captureRequestFiles = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
+func TestConfigPrometheusMetrics(t *testing.T) {
+	if !(Config{MetricsExporter: []string{"prometheus"}}).PrometheusMetrics() {
+		t.Fatal("PrometheusMetrics = false for prometheus exporter")
+	}
+	if (Config{SDKDisabled: true, MetricsExporter: []string{"prometheus"}}).PrometheusMetrics() {
+		t.Fatal("PrometheusMetrics = true when SDK is disabled")
+	}
+	if (Config{MetricsExporter: []string{"otlp"}}).PrometheusMetrics() {
+		t.Fatal("PrometheusMetrics = true for otlp exporter")
 	}
 }
 

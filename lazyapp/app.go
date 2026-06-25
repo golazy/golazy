@@ -22,6 +22,7 @@ import (
 	"golazy.dev/lazyseo"
 	"golazy.dev/lazysession"
 	"golazy.dev/lazytelemetry"
+	"golazy.dev/lazytelemetry/lazymetrics"
 	"golazy.dev/lazyturbo"
 	_ "golazy.dev/lazyview/gotmpl"
 )
@@ -73,6 +74,8 @@ func MustSub(fsys fs.FS, dir string) func() (fs.FS, error) {
 
 func New(config Config) *App {
 	ctx := context.Background()
+	telemetryConfig := lazytelemetry.MustLoadConfig()
+	telemetryRegistry := lazymetrics.NewRegistry()
 	var controlPlane *lazycontrolplane.ControlPlane
 	if config.ControlPlane != nil {
 		controlPlane = config.ControlPlane.BuildControlPlane()
@@ -182,13 +185,14 @@ func New(config Config) *App {
 		renderer.AddHelpers(helpers)
 	}
 	controlPlane = lazyDevControlPlane(controlPlane, renderer, router, cache)
+	controlPlane = telemetryControlPlane(controlPlane, telemetryConfig, telemetryRegistry, cache)
 	if err := renderer.Cache(); err != nil {
 		panic(fmt.Errorf("cache views: %w", err))
 	}
 
 	dispatcher := lazydispatch.NewDispatcher()
-	if telemetry, ok := lazytelemetry.EnvironmentMiddleware(); ok {
-		dispatcher.Use(telemetry)
+	if telemetryConfig.Enabled() {
+		dispatcher.Use(lazytelemetry.MiddlewareFromConfig(telemetryConfig, lazytelemetry.WithMetricsRegistry(telemetryRegistry)))
 	}
 	dispatcher.Use(lazydispatch.RouteOnly(
 		router,
@@ -229,8 +233,8 @@ func New(config Config) *App {
 }
 
 func (app *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if app.ControlPlane != nil && app.ControlPlane.HandlesPath(r.URL.Path) {
-		app.ControlPlane.ServeHTTP(w, r)
+	if controlPlane := app.controlPlaneInServeHTTP(); controlPlane != nil && controlPlane.HandlesPath(r.URL.Path) {
+		controlPlane.ServeHTTP(w, r)
 		return
 	}
 	app.Dispatcher.ServeHTTP(w, r)
@@ -296,13 +300,13 @@ func isLocalListenHost(host string) bool {
 }
 
 func (app *App) controlPlaneForListen(controlAddrSet bool) *lazycontrolplane.ControlPlane {
+	if !controlAddrSet {
+		return app.controlPlaneWithoutListenAddress()
+	}
 	if app.ControlPlane != nil {
 		return app.ControlPlane
 	}
-	if controlAddrSet {
-		return lazycontrolplane.New(lazycontrolplane.Config{})
-	}
-	return nil
+	return lazycontrolplane.New(lazycontrolplane.Config{})
 }
 
 func (app *App) handlersForListen(appAddr string, controlAddr string, controlAddrSet bool) (http.Handler, http.Handler) {
@@ -311,7 +315,7 @@ func (app *App) handlersForListen(appAddr string, controlAddr string, controlAdd
 	if controlPlane == nil {
 		return appHandler, nil
 	}
-	if !controlAddrSet || sameListenAddr(appAddr, controlAddr) {
+	if sameListenAddr(appAddr, controlAddr) {
 		return controlPlane.Handler(appHandler), nil
 	}
 	return appHandler, controlPlane

@@ -18,3 +18,18 @@ func lazyDevContext(ctx context.Context) context.Context {
 func lazyDevControlPlane(controlPlane *lazycontrolplane.ControlPlane, _ *lazycontroller.Renderer, _ *lazyroutes.Scope, _ *lazycache.Cache) *lazycontrolplane.ControlPlane {
 	return controlPlane
 }
+
+func (app *App) controlPlaneInServeHTTP() *lazycontrolplane.ControlPlane {
+	if app.ControlPlane == nil {
+		return nil
+	}
+	controlAddr, controlAddrSet := controlPlaneListenAddr()
+	if !controlAddrSet || !sameListenAddr(listenAddr(), controlAddr) {
+		return nil
+	}
+	return app.ControlPlane
+}
+
+func (app *App) controlPlaneWithoutListenAddress() *lazycontrolplane.ControlPlane {
+	return nil
+}

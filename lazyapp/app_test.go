@@ -968,7 +968,7 @@ func TestAppDoesNotInstallControlPlaneByDefault(t *testing.T) {
 	}
 }
 
-func TestAppInstallsConfiguredControlPlaneBeforeRoutes(t *testing.T) {
+func TestAppKeepsConfiguredControlPlaneOffDirectHandlerByDefault(t *testing.T) {
 	app := New(Config{
 		Name:         "test",
 		ControlPlane: lazycontrolplane.Config{},
@@ -989,8 +989,90 @@ func TestAppInstallsConfiguredControlPlaneBeforeRoutes(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
 	}
+	if lazyDevTestBuild() {
+		if got := response.Body.String(); got != "live\n" {
+			t.Fatalf("body = %q, want lazydev control plane route", got)
+		}
+		return
+	}
+	if got := response.Body.String(); got != "app livez" {
+		t.Fatalf("body = %q, want app route", got)
+	}
+}
+
+func TestConfiguredControlPlaneMountsWhenListenAddressesMatch(t *testing.T) {
+	app := New(Config{
+		Name:         "test",
+		ControlPlane: lazycontrolplane.Config{},
+		Drawer: func(router *lazyroutes.Scope) {
+			router.HandleFunc(http.MethodGet, "/livez", func(w http.ResponseWriter, _ *http.Request) error {
+				_, _ = fmt.Fprint(w, "app livez")
+				return nil
+			})
+		},
+	})
+
+	appHandler, controlHandler := app.handlersForListen(defaultListenAddr, "3000", true)
+	if controlHandler != nil {
+		t.Fatal("control handler is not nil for matching app and control-plane addresses")
+	}
+
+	response := httptest.NewRecorder()
+	appHandler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/livez", nil))
 	if got := response.Body.String(); got != "live\n" {
 		t.Fatalf("body = %q, want control plane route", got)
+	}
+}
+
+func TestAppMountsPrometheusMetricsFromOTELEnv(t *testing.T) {
+	t.Setenv("OTEL_SDK_DISABLED", "false")
+	t.Setenv("OTEL_METRICS_EXPORTER", "prometheus")
+	t.Setenv("CONTROL_PLANE_ADDR", defaultListenAddr)
+	reloadEnvironmentForTest(t)
+
+	app := New(Config{
+		Name: "test",
+		Drawer: func(router *lazyroutes.Scope) {
+			router.HandleFunc(http.MethodGet, "/", func(w http.ResponseWriter, _ *http.Request) error {
+				_, _ = fmt.Fprint(w, "ok")
+				return nil
+			})
+		},
+	})
+	if app.ControlPlane == nil {
+		t.Fatal("app ControlPlane is nil")
+	}
+
+	response := httptest.NewRecorder()
+	app.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("route status = %d, want %d", response.Code, http.StatusOK)
+	}
+	if err := app.Cache.Set("Ada", "user"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := app.Cache.Get("user"); err != nil {
+		t.Fatal(err)
+	}
+
+	response = httptest.NewRecorder()
+	app.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("metrics status = %d, want %d: %s", response.Code, http.StatusOK, response.Body.String())
+	}
+	body := response.Body.String()
+	for _, want := range []string{
+		"# TYPE http_server_requests_total counter\n",
+		`http_server_requests_total{method="GET",route="unknown",status_class="2xx"} 1` + "\n",
+		"# TYPE http_server_request_duration_seconds histogram\n",
+		`http_server_request_duration_seconds_bucket{le="+Inf",method="GET",route="unknown",status_class="2xx"} 1` + "\n",
+		"golazy_cache_enabled 1\n",
+		"golazy_cache_hits_total 1\n",
+		"golazy_cache_sets_total 1\n",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("metrics body missing %q in:\n%s", want, body)
+		}
 	}
 }
 
@@ -1023,8 +1105,11 @@ func TestControlPlaneForListenActivatesFromEnvAddress(t *testing.T) {
 		Name:         "test",
 		ControlPlane: lazycontrolplane.Config{},
 	})
-	if configured.controlPlaneForListen(false) != configured.ControlPlane {
+	if lazyDevTestBuild() && configured.controlPlaneForListen(false) != configured.ControlPlane {
 		t.Fatal("configured control plane was not reused")
+	}
+	if !lazyDevTestBuild() && configured.controlPlaneForListen(false) != nil {
+		t.Fatal("configured control plane active without CONTROL_PLANE_ADDR")
 	}
 }
 

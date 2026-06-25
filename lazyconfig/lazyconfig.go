@@ -23,11 +23,15 @@ type loader struct {
 	env map[string]string
 }
 
+// Option changes how Getenv and MustGetenv read environment variables.
+type Option func(*loader)
+
 // Getenv fills a configuration struct from environment variables.
-func Getenv[T any]() (T, error) {
+func Getenv[T any](options ...Option) (T, error) {
 	var config T
 	value := reflect.ValueOf(&config).Elem()
-	if err := newLoader().fillRoot(value); err != nil {
+	loader := newLoader(options...)
+	if err := loader.fillRoot(value); err != nil {
 		return config, err
 	}
 	if validatable, ok := any(&config).(validator); ok {
@@ -39,7 +43,50 @@ func Getenv[T any]() (T, error) {
 	return config, nil
 }
 
-func newLoader() loader {
+// MustGetenv fills a configuration struct from environment variables and
+// panics when the environment is invalid.
+func MustGetenv[T any](options ...Option) T {
+	config, err := Getenv[T](options...)
+	if err != nil {
+		panic(err)
+	}
+	return config
+}
+
+// RemoveEnvNamePrefix makes environment variables with prefix available without
+// that prefix. RemoveEnvNamePrefix("OTEL") lets field SDKDisabled match
+// OTEL_SDK_DISABLED as SDK_DISABLED.
+//
+// Existing unprefixed environment variables keep precedence over generated
+// aliases.
+func RemoveEnvNamePrefix(prefix string) Option {
+	prefix = strings.TrimSpace(strings.TrimSuffix(prefix, "_"))
+	return func(loader *loader) {
+		if prefix == "" {
+			return
+		}
+		marker := prefix + "_"
+		aliases := make(map[string]string)
+		for name, value := range loader.env {
+			if !strings.HasPrefix(name, marker) {
+				continue
+			}
+			alias := strings.TrimPrefix(name, marker)
+			if alias == "" {
+				continue
+			}
+			if _, ok := loader.env[alias]; ok {
+				continue
+			}
+			aliases[alias] = value
+		}
+		for name, value := range aliases {
+			loader.env[name] = value
+		}
+	}
+}
+
+func newLoader(options ...Option) loader {
 	env := make(map[string]string)
 	for _, item := range os.Environ() {
 		name, value, ok := strings.Cut(item, "=")
@@ -47,7 +94,13 @@ func newLoader() loader {
 			env[name] = value
 		}
 	}
-	return loader{env: env}
+	loader := loader{env: env}
+	for _, option := range options {
+		if option != nil {
+			option(&loader)
+		}
+	}
+	return loader
 }
 
 func (l loader) fillRoot(value reflect.Value) error {
@@ -157,12 +210,20 @@ func (l loader) fillSlice(value reflect.Value, prefix string, field reflect.Stru
 			values = append(values, item)
 		}
 	} else if canSetScalarType(elemType) {
-		if raw, ok := l.env[prefix]; ok {
-			item := reflect.New(elemType).Elem()
-			if err := setScalar(item, prefix, raw); err != nil {
-				return err
+		if envName, raw, ok := l.lookupValue([]string{prefix}, field); ok {
+			if elemType.Kind() == reflect.String {
+				for _, part := range splitStringSlice(raw) {
+					item := reflect.New(elemType).Elem()
+					item.SetString(part)
+					values = append(values, item)
+				}
+			} else {
+				item := reflect.New(elemType).Elem()
+				if err := setScalar(item, envName, raw); err != nil {
+					return err
+				}
+				values = append(values, item)
 			}
-			values = append(values, item)
 		}
 		for _, index := range l.scalarIndexes(prefix) {
 			envName := fmt.Sprintf("%s_%d", prefix, index)
@@ -198,11 +259,11 @@ func (l loader) fillSlice(value reflect.Value, prefix string, field reflect.Stru
 func (l loader) lookupValue(envNames []string, field reflect.StructField) (string, string, bool) {
 	for _, envName := range envNames {
 		if value, ok := l.env[envName]; ok {
-			return envName, value, true
+			return envName, strings.TrimSpace(value), true
 		}
 	}
 	if value, ok := field.Tag.Lookup("default"); ok {
-		return envNames[0], value, true
+		return envNames[0], strings.TrimSpace(value), true
 	}
 	return envNames[0], "", false
 }
@@ -318,6 +379,7 @@ func canSetScalarType(typ reflect.Type) bool {
 }
 
 func setScalar(value reflect.Value, envName string, raw string) error {
+	raw = strings.TrimSpace(raw)
 	if value.Type() == durationType {
 		parsed, err := time.ParseDuration(raw)
 		if err != nil {
@@ -346,11 +408,7 @@ func setScalar(value reflect.Value, envName string, raw string) error {
 	case reflect.String:
 		value.SetString(raw)
 	case reflect.Bool:
-		parsed, err := strconv.ParseBool(raw)
-		if err != nil {
-			return fmt.Errorf("lazyconfig: parse %s: %w", envName, err)
-		}
-		value.SetBool(parsed)
+		value.SetBool(parseBool(raw))
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		parsed, err := strconv.ParseInt(raw, 10, value.Type().Bits())
 		if err != nil {
@@ -373,6 +431,27 @@ func setScalar(value reflect.Value, envName string, raw string) error {
 		return fmt.Errorf("lazyconfig: %s has unsupported type %s", envName, value.Type())
 	}
 	return nil
+}
+
+func parseBool(raw string) bool {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "yes", "true", "1":
+		return true
+	case "no", "false", "0":
+		return false
+	default:
+		return false
+	}
+}
+
+func splitStringSlice(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	return strings.FieldsFunc(raw, func(char rune) bool {
+		return char == ',' || unicode.IsSpace(char)
+	})
 }
 
 func fieldEnvName(prefix string, field reflect.StructField) string {

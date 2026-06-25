@@ -3,7 +3,6 @@
 package lazyapp
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -12,8 +11,10 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"golazy.dev/lazycache"
 	"golazy.dev/lazycontroller"
 	"golazy.dev/lazyroutes"
 )
@@ -64,7 +65,7 @@ func TestLazyDevControlPlaneReloadsViewsWithoutRebuildingApp(t *testing.T) {
 	assertLazyDevReloadBody(t, app, "before")
 
 	response := httptest.NewRecorder()
-	app.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/_golazy/views/reload", nil))
+	app.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/views", nil))
 	if response.Code != http.StatusOK {
 		t.Fatalf("reload status = %d, want %d: %s", response.Code, http.StatusOK, response.Body.String())
 	}
@@ -75,207 +76,117 @@ func TestLazyDevControlPlaneReloadsViewsWithoutRebuildingApp(t *testing.T) {
 		t.Fatalf("reload Cache-Control = %q, want no-store", got)
 	}
 	assertLazyDevReloadBody(t, app, "after")
+
+	response = httptest.NewRecorder()
+	app.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/_golazy/views/reload", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("legacy reload status = %d, want %d: %s", response.Code, http.StatusOK, response.Body.String())
+	}
 }
 
-func TestLazyDevControlPlaneOpensEditor(t *testing.T) {
-	file := filepath.Join(t.TempDir(), "app", "controllers", "home.go")
-	writeLazyDevControlFile(t, file, "package controllers\n")
-
-	var gotName string
-	var gotArgs []string
-	previousStartEditorCommand := startEditorCommand
-	startEditorCommand = func(name string, args ...string) error {
-		gotName = name
-		gotArgs = append([]string(nil), args...)
-		return nil
-	}
-	t.Cleanup(func() {
-		startEditorCommand = previousStartEditorCommand
-	})
-	t.Setenv("EDITOR", "code --reuse-window")
-
+func TestLazyDevControlPlaneAggregatesPackageHandlers(t *testing.T) {
 	app := New(Config{Name: "test"})
-	requestBody, err := json.Marshal(openEditorRequest{File: file, Line: 27})
-	if err != nil {
+	if app.ControlPlane == nil {
+		t.Fatal("lazydev app did not install a control plane")
+	}
+
+	for _, path := range []string{
+		lazyDevControlViewsPath,
+		lazyDevReloadViewsPath,
+		lazyroutes.LazyDevRoutesPath,
+		lazycontroller.LazyDevOpenEditorPath,
+		lazycache.LazyDevCachePath,
+		lazycache.LazyDevCacheOnPath,
+		lazycache.LazyDevCacheOffPath,
+	} {
+		if !app.ControlPlane.HandlesPath(path) {
+			t.Fatalf("control plane does not handle %s", path)
+		}
+	}
+}
+
+func TestLazyDevControlPlaneServesCache(t *testing.T) {
+	app := New(Config{Name: "test"})
+	if app.ControlPlane == nil {
+		t.Fatal("lazydev app did not install a control plane")
+	}
+	if err := app.Cache.Set("Ada", "users", 1); err != nil {
 		t.Fatal(err)
 	}
+
+	got := requestLazyAppDevCache(t, app, http.MethodGet, lazycache.LazyDevCachePath)
+	if !got.Enabled {
+		t.Fatal("cache enabled = false, want true")
+	}
+	if got.Stats.Entries != 1 || got.Stats.Sets != 1 {
+		t.Fatalf("cache stats = %#v, want entries=1 sets=1", got.Stats)
+	}
+	if len(got.Keys) != 1 || got.Keys[0] != "users-1" {
+		t.Fatalf("cache keys = %#v, want [users-1]", got.Keys)
+	}
+
+	got = requestLazyAppDevCache(t, app, http.MethodPost, lazycache.LazyDevCacheOffPath)
+	if got.Enabled {
+		t.Fatal("cache enabled = true after off")
+	}
+	if _, err := app.Cache.Get("users", 1); !errors.Is(err, lazycache.ErrMiss) {
+		t.Fatalf("Get while disabled error = %v, want ErrMiss", err)
+	}
+
+	got = requestLazyAppDevCache(t, app, http.MethodPost, lazycache.LazyDevCacheOnPath)
+	if !got.Enabled {
+		t.Fatal("cache enabled = false after on")
+	}
+	if value, err := lazycache.Get[string](app.Cache, "users", 1); err != nil || value != "Ada" {
+		t.Fatalf("Get after on = %q, %v; want Ada, nil", value, err)
+	}
+}
+
+func TestLazyDevControlPlaneServesRoutes(t *testing.T) {
+	app := New(Config{
+		Name: "test",
+		Drawer: func(router *lazyroutes.Scope) {
+			router.Get("/", newLazyDevReloadController, (*lazyDevReloadController).Index)
+		},
+	})
+	if app.ControlPlane == nil {
+		t.Fatal("lazydev app did not install a control plane")
+	}
+
 	response := httptest.NewRecorder()
-	app.ServeHTTP(response, httptest.NewRequest(http.MethodPost, lazyDevOpenEditorPath, bytes.NewReader(requestBody)))
-
-	if response.Code != http.StatusNoContent {
-		t.Fatalf("open editor status = %d, want %d: %s", response.Code, http.StatusNoContent, response.Body.String())
+	app.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/routes", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("routes status = %d, want %d: %s", response.Code, http.StatusOK, response.Body.String())
 	}
-	if gotName != "code" {
-		t.Fatalf("editor command = %q, want code", gotName)
+	if got := response.Header().Get("Content-Type"); got != "application/json; charset=utf-8" {
+		t.Fatalf("routes Content-Type = %q, want JSON", got)
 	}
-	wantArgs := []string{"--reuse-window", "-g", file + ":27"}
-	if !stringSlicesEqual(gotArgs, wantArgs) {
-		t.Fatalf("editor args = %#v, want %#v", gotArgs, wantArgs)
+	if !strings.Contains(response.Body.String(), `"path":"/"`) {
+		t.Fatalf("routes body = %s, want root route", response.Body.String())
 	}
 }
 
-func TestEditorCommandLineConventions(t *testing.T) {
-	withoutDetectedTerminal(t)
-
-	file := filepath.Join(t.TempDir(), "app name.go")
-	tests := []struct {
-		name     string
-		editor   string
-		wantName string
-		wantArgs []string
-	}{
-		{
-			name:     "code",
-			editor:   "code --reuse-window",
-			wantName: "code",
-			wantArgs: []string{"--reuse-window", "-g", file + ":12"},
-		},
-		{
-			name:     "nvim without terminal",
-			editor:   "nvim -p",
-			wantName: "nvim",
-			wantArgs: []string{"-p", file, "+12"},
-		},
-		{
-			name:     "emacs",
-			editor:   "emacs",
-			wantName: "emacs",
-			wantArgs: []string{file, "+12"},
-		},
-		{
-			name:     "unknown",
-			editor:   "custom-editor --flag",
-			wantName: "custom-editor",
-			wantArgs: []string{"--flag", file},
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			gotName, gotArgs, err := editorCommand(test.editor, file, 12)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if gotName != test.wantName {
-				t.Fatalf("name = %q, want %q", gotName, test.wantName)
-			}
-			if !stringSlicesEqual(gotArgs, test.wantArgs) {
-				t.Fatalf("args = %#v, want %#v", gotArgs, test.wantArgs)
-			}
-		})
-	}
+type lazyDevCacheTestResponse struct {
+	Enabled bool            `json:"enabled"`
+	Stats   lazycache.Stats `json:"stats"`
+	Keys    []string        `json:"keys"`
 }
 
-func TestEditorCommandUsesLinuxTerminalFromEnvironment(t *testing.T) {
-	isolateEditorCommandEnvironment(t)
-	currentGOOS = "linux"
-	t.Setenv("TERMINAL", "alacritty --class golazy")
-	findExecutable = func(name string) (string, error) {
-		if name == "alacritty" {
-			return name, nil
-		}
-		return "", errors.New("not found")
+func requestLazyAppDevCache(t *testing.T, app *App, method string, path string) lazyDevCacheTestResponse {
+	t.Helper()
+	response := httptest.NewRecorder()
+	app.ServeHTTP(response, httptest.NewRequest(method, path, nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("%s %s status = %d, want %d: %s", method, path, response.Code, http.StatusOK, response.Body.String())
 	}
-
-	file := filepath.Join(t.TempDir(), "app.go")
-	gotName, gotArgs, err := editorCommand("nvim -p", file, 12)
-	if err != nil {
-		t.Fatal(err)
+	if got := response.Header().Get("Content-Type"); got != "application/json; charset=utf-8" {
+		t.Fatalf("cache Content-Type = %q, want JSON", got)
 	}
-	if gotName != "alacritty" {
-		t.Fatalf("name = %q, want alacritty", gotName)
+	var out lazyDevCacheTestResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &out); err != nil {
+		t.Fatalf("decode cache response: %v\n%s", err, response.Body.String())
 	}
-	wantArgs := []string{"--class", "golazy", "-e", "nvim", "-p", file, "+12"}
-	if !stringSlicesEqual(gotArgs, wantArgs) {
-		t.Fatalf("args = %#v, want %#v", gotArgs, wantArgs)
-	}
-}
-
-func TestEditorCommandUsesLinuxDefaultTerminal(t *testing.T) {
-	isolateEditorCommandEnvironment(t)
-	currentGOOS = "linux"
-	findExecutable = func(name string) (string, error) {
-		if name == "xdg-terminal-exec" {
-			return name, nil
-		}
-		return "", errors.New("not found")
-	}
-
-	file := filepath.Join(t.TempDir(), "app.go")
-	gotName, gotArgs, err := editorCommand("vim", file, 9)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if gotName != "xdg-terminal-exec" {
-		t.Fatalf("name = %q, want xdg-terminal-exec", gotName)
-	}
-	wantArgs := []string{"vim", file, "+9"}
-	if !stringSlicesEqual(gotArgs, wantArgs) {
-		t.Fatalf("args = %#v, want %#v", gotArgs, wantArgs)
-	}
-}
-
-func TestEditorCommandUsesLinuxParentTerminal(t *testing.T) {
-	isolateEditorCommandEnvironment(t)
-	currentGOOS = "linux"
-	processParent = func() int { return 20 }
-	findExecutable = func(name string) (string, error) {
-		if name == "kitty" {
-			return name, nil
-		}
-		return "", errors.New("not found")
-	}
-	readProcLink = func(path string) (string, error) {
-		if path == "/proc/10/exe" {
-			return "/usr/bin/kitty", nil
-		}
-		return "", errors.New("not found")
-	}
-	readProcFile = func(path string) ([]byte, error) {
-		switch path {
-		case "/proc/20/comm":
-			return []byte("bash\n"), nil
-		case "/proc/20/stat":
-			return []byte("20 (bash) S 10 0 0 0 0 0 0"), nil
-		}
-		return nil, errors.New("not found")
-	}
-
-	file := filepath.Join(t.TempDir(), "app.go")
-	gotName, gotArgs, err := editorCommand("vim", file, 27)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if gotName != "kitty" {
-		t.Fatalf("name = %q, want kitty", gotName)
-	}
-	wantArgs := []string{"--", "vim", file, "+27"}
-	if !stringSlicesEqual(gotArgs, wantArgs) {
-		t.Fatalf("args = %#v, want %#v", gotArgs, wantArgs)
-	}
-}
-
-func TestEditorCommandUsesMacTerminal(t *testing.T) {
-	isolateEditorCommandEnvironment(t)
-	currentGOOS = "darwin"
-
-	file := filepath.Join(t.TempDir(), "app name.go")
-	gotName, gotArgs, err := editorCommand("vim", file, 33)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if gotName != "osascript" {
-		t.Fatalf("name = %q, want osascript", gotName)
-	}
-	wantArgs := []string{
-		"-e",
-		"tell application \"Terminal\" to do script \"vim '" + file + "' +33\"",
-		"-e",
-		"tell application \"Terminal\" to activate",
-	}
-	if !stringSlicesEqual(gotArgs, wantArgs) {
-		t.Fatalf("args = %#v, want %#v", gotArgs, wantArgs)
-	}
+	return out
 }
 
 func assertLazyDevReloadBody(t *testing.T, app *App, want string) {
@@ -298,43 +209,4 @@ func writeLazyDevControlFile(t *testing.T, filename string, content string) {
 	if err := os.WriteFile(filename, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
-}
-
-func withoutDetectedTerminal(t *testing.T) {
-	t.Helper()
-	isolateEditorCommandEnvironment(t)
-	currentGOOS = "linux"
-	findExecutable = func(string) (string, error) { return "", errors.New("not found") }
-	processParent = func() int { return 1 }
-	readProcFile = func(string) ([]byte, error) { return nil, errors.New("not found") }
-	readProcLink = func(string) (string, error) { return "", errors.New("not found") }
-}
-
-func isolateEditorCommandEnvironment(t *testing.T) {
-	t.Helper()
-	previousGOOS := currentGOOS
-	previousFindExecutable := findExecutable
-	previousProcessParent := processParent
-	previousReadProcFile := readProcFile
-	previousReadProcLink := readProcLink
-	t.Setenv("TERMINAL", "")
-	t.Cleanup(func() {
-		currentGOOS = previousGOOS
-		findExecutable = previousFindExecutable
-		processParent = previousProcessParent
-		readProcFile = previousReadProcFile
-		readProcLink = previousReadProcLink
-	})
-}
-
-func stringSlicesEqual(left []string, right []string) bool {
-	if len(left) != len(right) {
-		return false
-	}
-	for index := range left {
-		if left[index] != right[index] {
-			return false
-		}
-	}
-	return true
 }

@@ -343,7 +343,7 @@ func TestControllerPanicRendersAppFallback(t *testing.T) {
 	if strings.Contains(body, "partial") {
 		t.Fatalf("body contains stale partial response: %q", body)
 	}
-	if strings.Contains(body, "panic: boom") {
+	if !lazycontroller.DetailErrors(context.Background()) && strings.Contains(body, "panic: boom") {
 		t.Fatalf("body exposed production panic detail: %q", body)
 	}
 	if !strings.Contains(body, "error 500 Internal Server Error") {
@@ -375,6 +375,12 @@ func TestControllerErrorUsesStaticFallbackWhenErrorTemplateFails(t *testing.T) {
 	body := response.Body.String()
 	if strings.Contains(body, "partial") {
 		t.Fatalf("body contains stale partial response: %q", body)
+	}
+	if lazycontroller.DetailErrors(ctx) {
+		if !strings.Contains(body, "lazyview: view not found") {
+			t.Fatalf("body = %q, want detail render error", body)
+		}
+		return
 	}
 	if got, want := body, "<h1>static 500</h1>"; got != want {
 		t.Fatalf("body = %q, want %q", got, want)
@@ -456,7 +462,7 @@ func TestControllerErrorResetsBufferAndRendersAppFallback(t *testing.T) {
 	if strings.Contains(body, "partial") {
 		t.Fatalf("body contains stale partial response: %q", body)
 	}
-	if strings.Contains(body, "missing post") {
+	if !lazycontroller.DetailErrors(context.Background()) && strings.Contains(body, "missing post") {
 		t.Fatalf("body exposed production error detail: %q", body)
 	}
 	if !strings.Contains(body, "error 404 Not Found") {

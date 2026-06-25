@@ -1,0 +1,20 @@
+//go:build !lazydev
+
+package lazyapp
+
+import (
+	"context"
+
+	"golazy.dev/lazycache"
+	"golazy.dev/lazycontroller"
+	"golazy.dev/lazycontrolplane"
+	"golazy.dev/lazyroutes"
+)
+
+func lazyDevContext(ctx context.Context) context.Context {
+	return ctx
+}
+
+func lazyDevControlPlane(controlPlane *lazycontrolplane.ControlPlane, _ *lazycontroller.Renderer, _ *lazyroutes.Scope, _ *lazycache.Cache) *lazycontrolplane.ControlPlane {
+	return controlPlane
+}

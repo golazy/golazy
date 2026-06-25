@@ -181,7 +181,7 @@ func New(config Config) *App {
 	for _, helpers := range config.Helpers {
 		renderer.AddHelpers(helpers)
 	}
-	controlPlane = lazyDevControlPlane(controlPlane, renderer)
+	controlPlane = lazyDevControlPlane(controlPlane, renderer, router, cache)
 	if err := renderer.Cache(); err != nil {
 		panic(fmt.Errorf("cache views: %w", err))
 	}

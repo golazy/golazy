@@ -171,6 +171,135 @@ func (d Duration) Duration() time.Duration {
 	return time.Duration(d)
 }
 
+// Enabled reports whether telemetry should be installed.
+func (config Config) Enabled() bool {
+	if config.SDKDisabled {
+		return false
+	}
+	if hasEnabledExporter(config.TracesExporter) ||
+		hasEnabledExporter(config.MetricsExporter) ||
+		hasEnabledExporter(config.LogsExporter) {
+		return true
+	}
+	if config.ServiceName != "" ||
+		config.Entities != "" ||
+		config.ResourceAttributes != "" ||
+		len(config.Propagators) > 0 ||
+		config.TracesSampler != "" ||
+		config.TracesSamplerArg != "" ||
+		config.LogLevel != "" ||
+		config.ConfigFile != "" ||
+		config.ExperimentalConfigFile != "" {
+		return true
+	}
+	if config.BSP.configured() ||
+		config.BLRP.configured() ||
+		config.Exporter.configured() ||
+		config.metricConfigConfigured() ||
+		config.limitConfigured() {
+		return true
+	}
+	return false
+}
+
+func hasEnabledExporter(exporters []string) bool {
+	for _, exporter := range exporters {
+		exporter = strings.TrimSpace(strings.ToLower(exporter))
+		if exporter != "" && exporter != "none" {
+			return true
+		}
+	}
+	return false
+}
+
+func (config Config) metricConfigConfigured() bool {
+	return config.MetricsExemplarFilter != "" ||
+		config.MetricExportInterval != 0 ||
+		config.MetricExportTimeout != 0
+}
+
+func (config Config) limitConfigured() bool {
+	return config.AttributeValueLengthLimit != 0 ||
+		config.AttributeCountLimit != 0 ||
+		config.SpanAttributeValueLengthLimit != 0 ||
+		config.SpanAttributeCountLimit != 0 ||
+		config.SpanEventCountLimit != 0 ||
+		config.SpanLinkCountLimit != 0 ||
+		config.EventAttributeCountLimit != 0 ||
+		config.LinkAttributeCountLimit != 0 ||
+		config.LogrecordAttributeValueLengthLimit != 0 ||
+		config.LogrecordAttributeCountLimit != 0
+}
+
+func (config BatchSpanProcessorConfig) configured() bool {
+	return config.ScheduleDelay != 0 ||
+		config.ExportTimeout != 0 ||
+		config.MaxQueueSize != 0 ||
+		config.MaxExportBatchSize != 0
+}
+
+func (config BatchLogRecordProcessorConfig) configured() bool {
+	return config.ScheduleDelay != 0 ||
+		config.ExportTimeout != 0 ||
+		config.MaxQueueSize != 0 ||
+		config.MaxExportBatchSize != 0
+}
+
+func (config ExporterConfig) configured() bool {
+	return config.OTLP.configured() ||
+		config.Zipkin.configured() ||
+		config.Prometheus.configured()
+}
+
+func (config OTLPExporterConfig) configured() bool {
+	return config.Endpoint != "" ||
+		config.TracesEndpoint != "" ||
+		config.MetricsEndpoint != "" ||
+		config.LogsEndpoint != "" ||
+		config.Insecure ||
+		config.TracesInsecure ||
+		config.MetricsInsecure ||
+		config.LogsInsecure ||
+		config.Certificate != "" ||
+		config.TracesCertificate != "" ||
+		config.MetricsCertificate != "" ||
+		config.LogsCertificate != "" ||
+		config.ClientKey != "" ||
+		config.TracesClientKey != "" ||
+		config.MetricsClientKey != "" ||
+		config.LogsClientKey != "" ||
+		config.ClientCertificate != "" ||
+		config.TracesClientCertificate != "" ||
+		config.MetricsClientCertificate != "" ||
+		config.LogsClientCertificate != "" ||
+		config.Headers != "" ||
+		config.TracesHeaders != "" ||
+		config.MetricsHeaders != "" ||
+		config.LogsHeaders != "" ||
+		config.Compression != "" ||
+		config.TracesCompression != "" ||
+		config.MetricsCompression != "" ||
+		config.LogsCompression != "" ||
+		config.Timeout != 0 ||
+		config.TracesTimeout != 0 ||
+		config.MetricsTimeout != 0 ||
+		config.LogsTimeout != 0 ||
+		config.Protocol != "" ||
+		config.TracesProtocol != "" ||
+		config.MetricsProtocol != "" ||
+		config.LogsProtocol != "" ||
+		config.SpanInsecure ||
+		config.MetricInsecure
+}
+
+func (config ZipkinExporterConfig) configured() bool {
+	return config.Endpoint != "" || config.Timeout != 0 || config.Protocol != ""
+}
+
+func (config PrometheusExporterConfig) configured() bool {
+	return config.Host != "" || config.Port != 0
+}
+
 // LoadConfig reads Config from the process environment.
 func LoadConfig() (Config, error) {
 	return lazyconfig.Getenv[Config](lazyconfig.RemoveEnvNamePrefix("OTEL"))
@@ -178,5 +307,9 @@ func LoadConfig() (Config, error) {
 
 // MustLoadConfig reads Config and panics when the environment is invalid.
 func MustLoadConfig() Config {
-	return lazyconfig.MustGetenv[Config](lazyconfig.RemoveEnvNamePrefix("OTEL"))
+	config, err := LoadConfig()
+	if err != nil {
+		panic(err)
+	}
+	return config
 }

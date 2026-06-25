@@ -19,6 +19,7 @@ import (
 	"golazy.dev/lazyroutes"
 	"golazy.dev/lazyseo"
 	"golazy.dev/lazysession"
+	"golazy.dev/lazytelemetry"
 	"golazy.dev/lazyturbo"
 	_ "golazy.dev/lazyview/gotmpl"
 )
@@ -162,6 +163,9 @@ func New(config Config) *App {
 	}
 
 	dispatcher := lazydispatch.NewDispatcher()
+	if telemetry, ok := lazytelemetry.EnvironmentMiddleware(); ok {
+		dispatcher.Use(telemetry)
+	}
 	dispatcher.Use(lazydispatch.RouteOnly(
 		router,
 		middlewares.MethodOverride(),

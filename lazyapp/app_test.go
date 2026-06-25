@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -638,6 +639,54 @@ func TestAppCanForceDetailErrors(t *testing.T) {
 	}
 }
 
+func TestAppInstallsTelemetryFromOTELEnvironment(t *testing.T) {
+	unsetOTELForTest(t)
+	t.Setenv("OTEL_SERVICE_NAME", "sample")
+
+	app := New(Config{
+		Name: "test",
+		Drawer: func(router *lazyroutes.Scope) {
+			router.HandleFunc(http.MethodGet, "/", func(w http.ResponseWriter, r *http.Request) error {
+				if got := r.Header.Get("X-Request-ID"); got != "" {
+					t.Fatalf("request header X-Request-ID = %q, want unset", got)
+				}
+				_, _ = fmt.Fprint(w, "ok")
+				return nil
+			})
+		},
+	})
+
+	response := httptest.NewRecorder()
+	app.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	if response.Header().Get("X-Request-ID") == "" {
+		t.Fatal("response X-Request-ID is empty")
+	}
+}
+
+func TestAppSkipsTelemetryWhenOTELSDKDisabled(t *testing.T) {
+	unsetOTELForTest(t)
+	t.Setenv("OTEL_SDK_DISABLED", "true")
+	t.Setenv("OTEL_SERVICE_NAME", "sample")
+
+	app := New(Config{
+		Name: "test",
+		Drawer: func(router *lazyroutes.Scope) {
+			router.HandleFunc(http.MethodGet, "/", func(w http.ResponseWriter, _ *http.Request) error {
+				_, _ = fmt.Fprint(w, "ok")
+				return nil
+			})
+		},
+	})
+
+	response := httptest.NewRecorder()
+	app.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	if got := response.Header().Get("X-Request-ID"); got != "" {
+		t.Fatalf("response X-Request-ID = %q, want empty", got)
+	}
+}
+
 func TestMustSubReturnsSubFS(t *testing.T) {
 	fsys := fstest.MapFS{
 		"public/styles.css": {Data: []byte("body { color: black; }")},
@@ -692,6 +741,34 @@ func TestListenAddr(t *testing.T) {
 			}
 		})
 	}
+}
+
+func unsetOTELForTest(t *testing.T) {
+	t.Helper()
+	var names []string
+	oldValues := make(map[string]string)
+	hadValues := make(map[string]bool)
+	for _, item := range os.Environ() {
+		name, _, ok := strings.Cut(item, "=")
+		if ok && strings.HasPrefix(name, "OTEL_") {
+			names = append(names, name)
+			oldValues[name], hadValues[name] = os.LookupEnv(name)
+		}
+	}
+	for _, name := range names {
+		if err := os.Unsetenv(name); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Cleanup(func() {
+		for _, name := range names {
+			if hadValues[name] {
+				_ = os.Setenv(name, oldValues[name])
+			} else {
+				_ = os.Unsetenv(name)
+			}
+		}
+	})
 }
 
 func TestAppDoesNotInstallControlPlaneByDefault(t *testing.T) {

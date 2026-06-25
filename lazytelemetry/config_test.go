@@ -117,6 +117,29 @@ func TestConfigJSONLogs(t *testing.T) {
 	}
 }
 
+func TestConfigEnabledUsesOTELEnvironment(t *testing.T) {
+	tests := []struct {
+		name   string
+		config Config
+		want   bool
+	}{
+		{name: "empty", config: Config{}, want: false},
+		{name: "sdk disabled", config: Config{SDKDisabled: true, ServiceName: "sample"}, want: false},
+		{name: "service name", config: Config{ServiceName: "sample"}, want: true},
+		{name: "otlp traces exporter", config: Config{TracesExporter: []string{"otlp"}}, want: true},
+		{name: "none traces exporter", config: Config{TracesExporter: []string{"none"}}, want: false},
+		{name: "otlp endpoint", config: Config{Exporter: ExporterConfig{OTLP: OTLPExporterConfig{Endpoint: "http://127.0.0.1:4318"}}}, want: true},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := test.config.Enabled(); got != test.want {
+				t.Fatalf("Enabled = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
 func stringSlicesEqual(left, right []string) bool {
 	if len(left) != len(right) {
 		return false

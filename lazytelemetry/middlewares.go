@@ -31,7 +31,21 @@ type middleware struct {
 
 // Middleware returns the default telemetry middleware.
 func Middleware(options ...MiddlewareOption) lazydispatch.Middleware {
+	return MiddlewareFromConfig(MustLoadConfig(), options...)
+}
+
+// EnvironmentMiddleware returns a middleware when environment configuration
+// activates telemetry.
+func EnvironmentMiddleware(options ...MiddlewareOption) (lazydispatch.Middleware, bool) {
 	config := MustLoadConfig()
+	if !config.Enabled() {
+		return nil, false
+	}
+	return MiddlewareFromConfig(config, options...), true
+}
+
+// MiddlewareFromConfig returns a middleware configured from config.
+func MiddlewareFromConfig(config Config, options ...MiddlewareOption) lazydispatch.Middleware {
 	middleware := &middleware{
 		logger:   NewLogger(config, nil),
 		registry: lazymetrics.NewRegistry(),

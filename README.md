@@ -196,6 +196,9 @@ registry:
 ```html
 <a href="{{path_for "posts"}}">Posts</a>
 <a href="{{path_for "post" .Post.Param}}">{{.Post.Title}}</a>
+{{link_to "Posts" (path_for "posts") (attr "class" "nav-link")}}
+{{link_to .Post.Title (path_for "post" .Post.Param) (data "turbo-frame" "post")}}
+{{link_to "Posts" (path_for "posts") (unless_current)}}
 {{stylesheet "/styles.css"}}
 ```
 

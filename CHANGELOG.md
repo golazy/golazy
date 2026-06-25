@@ -7,6 +7,12 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Template route helpers `link_to`, `attr`, `data`, and `unless_current`, so
+  views can render escaped anchors around `path_for` destinations and omit the
+  anchor for the current page.
+
 ## [0.1.15] - 2026-06-25
 
 ### Added

@@ -111,6 +111,7 @@ func New(config Config) *App {
 	if config.ForceDetailErrors {
 		ctx = lazycontroller.WithDetailErrors(ctx)
 	}
+	ctx = lazyDevContext(ctx)
 
 	assetOptions := append([]lazyassets.Option{}, config.AssetOptions...)
 	assetOptions = append(assetOptions, lazyDevAssetOptions()...)

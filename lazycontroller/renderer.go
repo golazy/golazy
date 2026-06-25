@@ -338,8 +338,12 @@ func (b *Base) HandleError(w http.ResponseWriter, r *http.Request, err error) er
 	b.Set("detailErrors", detailErrors)
 	if detailErrors {
 		b.Set("error", err.Error())
+		b.Set("backtrace", errorBacktrace(err))
+		b.Set("openEditorPath", openEditorPath(b.ctx))
 	} else {
 		b.Set("error", "")
+		b.Set("backtrace", []errorFrame(nil))
+		b.Set("openEditorPath", "")
 	}
 
 	if b.renderer == nil {

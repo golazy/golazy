@@ -18,6 +18,8 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Framework-owned default controller views for `layouts/app.html.tpl` and
   `app/error.html.tpl`, used by `lazyapp` when an application does not provide
   its own files at those paths.
+- `golazy.dev/lazyerrors`, an application error helper that prefixes errors
+  with the caller, preserves `%w` wrapping, and records typed backtrace frames.
 
 ### Changed
 
@@ -33,7 +35,11 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   permanent hashes or cache headers.
 - `lazycontroller.Base.HandleError` now renders the shared `app/error` view
   before falling back to explicit static status files, and only exposes raw
-  error details to that view when detail errors are enabled.
+  error details plus `lazyerrors` and recovered panic backtraces to that view
+  when detail errors are enabled. The default error view shortens frame paths
+  for display and, in `lazydev`, can open clicked frames in `$EDITOR` through
+  `/_golazy/open-editor`, using VS Code's `-g file:line` form or a discovered
+  terminal for terminal editors.
 - Retracted pre-`v0.1.0` framework module versions, which were unstable
   snapshots before the current GoLazy release line.
 

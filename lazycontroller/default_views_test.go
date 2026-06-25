@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"golazy.dev/lazyerrors"
 	"golazy.dev/lazyview"
 	_ "golazy.dev/lazyview/gotmpl"
 )
@@ -93,4 +94,94 @@ func TestDefaultViewsRenderErrorDetailWhenEnabled(t *testing.T) {
 	if body := response.Body.String(); !strings.Contains(body, "missing post") {
 		t.Fatalf("body does not contain detail error:\n%s", body)
 	}
+}
+
+func TestDefaultViewsRenderLazyErrorBacktraceWhenDetailEnabled(t *testing.T) {
+	views, err := DefaultViews()
+	if err != nil {
+		t.Fatal(err)
+	}
+	renderer, err := NewRenderer(views)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := WithDetailErrors(WithRenderer(context.Background(), renderer))
+	base, err := NewBase(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/missing", nil)
+	if err := base.BindRequest(response, request, lazyview.Route{Controller: "posts", Action: "Show"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := base.HandleError(response, request, Error(http.StatusInternalServerError, tracedDefaultViewError())); err != nil {
+		t.Fatal(err)
+	}
+
+	if response.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusInternalServerError)
+	}
+	body := response.Body.String()
+	expected := []string{"Backtrace", "tracedDefaultViewError", "default_views_test.go"}
+	for _, want := range expected {
+		if !strings.Contains(body, want) {
+			t.Fatalf("body does not contain %q:\n%s", want, body)
+		}
+	}
+}
+
+//go:noinline
+func tracedDefaultViewError() error {
+	return lazyerrors.New("load post %q", "hello")
+}
+
+func TestDefaultViewsRenderPanicBacktraceWhenDetailEnabled(t *testing.T) {
+	views, err := DefaultViews()
+	if err != nil {
+		t.Fatal(err)
+	}
+	renderer, err := NewRenderer(views)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := WithDetailErrors(WithRenderer(context.Background(), renderer))
+	base, err := NewBase(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/panic", nil)
+	if err := base.BindRequest(response, request, lazyview.Route{Controller: "posts", Action: "Show"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := base.HandleError(response, request, recoveredDefaultViewPanicError()); err != nil {
+		t.Fatal(err)
+	}
+
+	if response.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusInternalServerError)
+	}
+	body := response.Body.String()
+	expected := []string{"panic: boom", "Backtrace", "panicDefaultViewSource", "default_views_test.go"}
+	for _, want := range expected {
+		if !strings.Contains(body, want) {
+			t.Fatalf("body does not contain %q:\n%s", want, body)
+		}
+	}
+}
+
+func recoveredDefaultViewPanicError() (err error) {
+	defer func() {
+		err = PanicError(recover())
+	}()
+	panicDefaultViewSource()
+	return nil
+}
+
+//go:noinline
+func panicDefaultViewSource() {
+	panic("boom")
 }

@@ -18,6 +18,7 @@ import (
 	"golazy.dev/lazycontroller"
 	"golazy.dev/lazycontrolplane"
 	"golazy.dev/lazydeps"
+	"golazy.dev/lazyerrors"
 	"golazy.dev/lazyroutes"
 	"golazy.dev/lazyseo"
 	"golazy.dev/lazysession"
@@ -449,6 +450,10 @@ func (c *defaultErrorController) Show(_ http.ResponseWriter, _ *http.Request) er
 	return lazycontroller.Error(http.StatusTeapot, errors.New("short and stout"))
 }
 
+func (c *defaultErrorController) Traced(_ http.ResponseWriter, _ *http.Request) error {
+	return lazycontroller.Error(http.StatusInternalServerError, tracedAppError())
+}
+
 func TestAppProvidesFrameworkDefaultErrorViews(t *testing.T) {
 	app := New(Config{
 		Name: "test",
@@ -477,6 +482,40 @@ func TestAppProvidesFrameworkDefaultErrorViews(t *testing.T) {
 	}
 	if !lazyDevTestBuild() && strings.Contains(body, "short and stout") {
 		t.Fatalf("body exposed production error detail:\n%s", body)
+	}
+}
+
+func TestAppUsesFrameworkDefaultErrorViewWithAppLayout(t *testing.T) {
+	app := New(Config{
+		Name:              "test",
+		ForceDetailErrors: true,
+		Views: testViewFS(t, map[string]string{
+			"layouts/app.html.tpl": `sample layout {{.content}}`,
+		}),
+		Drawer: func(router *lazyroutes.Scope) {
+			router.Get("/traced", newDefaultErrorController, (*defaultErrorController).Traced)
+		},
+	})
+
+	response := httptest.NewRecorder()
+	app.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/traced", nil))
+
+	if response.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusInternalServerError)
+	}
+	body := response.Body.String()
+	expected := []string{
+		"sample layout",
+		"glz-error",
+		"Backtrace",
+		"tracedAppError",
+		"app_test.go",
+		"load post",
+	}
+	for _, want := range expected {
+		if !strings.Contains(body, want) {
+			t.Fatalf("body does not contain %q:\n%s", want, body)
+		}
 	}
 }
 
@@ -529,6 +568,11 @@ func TestAppDetailErrorsExposeErrorToErrorView(t *testing.T) {
 	if got, want := response.Body.String(), "user layout detail 418 418 I&#39;m a teapot: short and stout"; got != want {
 		t.Fatalf("body = %q, want %q", got, want)
 	}
+}
+
+//go:noinline
+func tracedAppError() error {
+	return lazyerrors.New("load post %q", "hello")
 }
 
 func TestAppKeepsConfiguredSessionName(t *testing.T) {

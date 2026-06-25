@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"golazy.dev/lazyassets"
+	"golazy.dev/lazycache"
 	"golazy.dev/lazyconfig"
 	"golazy.dev/lazycontroller"
 	"golazy.dev/lazycontrolplane"
@@ -208,6 +209,27 @@ func TestAppInitializesDependencies(t *testing.T) {
 
 	if got := app.Context.Value(contextKey{}); got != "initialized" {
 		t.Fatalf("context value = %v, want initialized", got)
+	}
+}
+
+func TestAppInitializesDefaultCache(t *testing.T) {
+	app := New(Config{})
+	if app.Cache == nil {
+		t.Fatal("app Cache is nil")
+	}
+	cache, ok := lazycache.FromContext(app.Context)
+	if !ok || cache != app.Cache {
+		t.Fatalf("context cache = %#v, %v; want app cache", cache, ok)
+	}
+	if err := app.Cache.Set("Ada", "user", 1); err != nil {
+		t.Fatal(err)
+	}
+	value, err := lazycache.Get[string](app.Cache, "user", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value != "Ada" {
+		t.Fatalf("cache value = %q, want Ada", value)
 	}
 }
 

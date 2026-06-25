@@ -3,12 +3,14 @@ package lazycontroller
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"net/http"
 	"strconv"
 	"strings"
 
+	"golazy.dev/lazycache"
 	"golazy.dev/lazyturbo"
 	"golazy.dev/lazyview"
 )
@@ -48,6 +50,13 @@ type Base struct {
 	frameOpts  []lazyturbo.FrameOption
 	format     Format
 	variants   []string
+	cacheKey   cacheKeySpec
+}
+
+type cacheKeySpec struct {
+	set   bool
+	full  bool
+	parts []any
 }
 
 func NewBase(ctx context.Context, viewPath ...string) (Base, error) {
@@ -105,6 +114,7 @@ func (b *Base) BindRequest(w http.ResponseWriter, r *http.Request, route lazyvie
 	b.helpers = make(map[string]any)
 	b.frameOpts = nil
 	b.variants = nil
+	b.cacheKey = cacheKeySpec{}
 	return nil
 }
 
@@ -120,6 +130,7 @@ func (b *Base) ResetRequest() {
 	b.helpers = nil
 	b.frameOpts = nil
 	b.variants = nil
+	b.cacheKey = cacheKeySpec{}
 }
 
 type appContext struct {
@@ -173,6 +184,30 @@ func (b *Base) Helper(name string, helper any) {
 
 func (b *Base) Request() *http.Request {
 	return b.request
+}
+
+func (b *Base) Cache() *lazycache.Cache {
+	if b == nil {
+		return nil
+	}
+	cache, _ := lazycache.FromContext(b.ctx)
+	return cache
+}
+
+func (b *Base) CacheKey(parts ...any) error {
+	if _, err := lazycache.Key(parts...); err != nil {
+		return err
+	}
+	b.cacheKey = cacheKeySpec{set: true, parts: append([]any(nil), parts...)}
+	return nil
+}
+
+func (b *Base) CacheKeyF(parts ...any) error {
+	if _, err := lazycache.Key(parts...); err != nil {
+		return err
+	}
+	b.cacheKey = cacheKeySpec{set: true, full: true, parts: append([]any(nil), parts...)}
+	return nil
 }
 
 func (b *Base) Helpers(helpers map[string]any) {
@@ -231,7 +266,7 @@ func (b *Base) render(view string, format Format) error {
 
 	addVary(b.writer.Header(), "Accept")
 	if b.IsTurboFrame() {
-		return b.renderTurboFrame(lazyturbo.FrameID(b.request), b.frameOpts)
+		return b.renderTurboFrame(lazyturbo.FrameID(b.request), b.frameOpts, view)
 	}
 
 	return b.renderView(lazyview.Options{
@@ -262,15 +297,20 @@ func (b *Base) RenderTurboFrame(id string, opts ...lazyturbo.FrameOption) error 
 	if b.writer == nil || b.renderer == nil {
 		return fmt.Errorf("controller base is not initialized")
 	}
-	return b.renderTurboFrame(id, opts)
+	return b.renderTurboFrame(id, opts, strings.TrimSpace(id)+"_frame")
 }
 
-func (b *Base) renderTurboFrame(id string, opts []lazyturbo.FrameOption) error {
+func (b *Base) renderTurboFrame(id string, opts []lazyturbo.FrameOption, action string) error {
 	id = strings.TrimSpace(id)
 	if err := lazyturbo.ValidateFrameID(id); err != nil {
 		return err
 	}
 	addVary(b.writer.Header(), "Accept", "Turbo-Frame")
+	if key, ok, err := b.renderCacheKey(action, b.Format()); err != nil {
+		return err
+	} else if ok {
+		return b.renderCachedTurboFrame(id, opts, key)
+	}
 
 	body, err := b.renderer.RenderString(lazyview.Options{
 		Context:    b.ctx,
@@ -301,6 +341,55 @@ func (b *Base) renderTurboFrame(id string, opts []lazyturbo.FrameOption) error {
 	return b.writeBufferedResponse(buffer)
 }
 
+func (b *Base) renderCachedTurboFrame(id string, opts []lazyturbo.FrameOption, key string) error {
+	cache := b.Cache()
+	if cache == nil {
+		return fmt.Errorf("lazycontroller: cache is missing from application context")
+	}
+	if body, err := lazycache.Get[string](cache, key); err == nil {
+		buffer := newBufferedResponse()
+		copyHeaders(buffer.Header(), b.writer.Header())
+		if buffer.Header().Get("Content-Type") == "" {
+			buffer.Header().Set("Content-Type", contentTypeForFormat(HTML))
+		}
+		_, _ = buffer.Write([]byte(body))
+		return b.writeBufferedResponse(buffer)
+	} else if err != nil && !errors.Is(err, lazycache.ErrMiss) {
+		return err
+	}
+
+	body, err := b.renderer.RenderString(lazyview.Options{
+		Context:    b.ctx,
+		Request:    b.request,
+		Variables:  b.data,
+		Helpers:    b.helpers,
+		Route:      b.route,
+		Namespace:  b.route.Namespace,
+		Controller: b.controller,
+		Partial:    id + "_frame",
+		Format:     string(HTML),
+		Variants:   b.variants,
+		UseLayout:  false,
+	})
+	if err != nil {
+		return err
+	}
+	frame, err := lazyturbo.FrameTag(id, body, opts...)
+	if err != nil {
+		return err
+	}
+	if err := cache.Set(frame.Body, key); err != nil {
+		return err
+	}
+	if b.writer.Header().Get("Content-Type") == "" {
+		b.writer.Header().Set("Content-Type", frame.ContentType)
+	}
+	buffer := newBufferedResponse()
+	copyHeaders(buffer.Header(), b.writer.Header())
+	_, _ = buffer.Write([]byte(frame.Body))
+	return b.writeBufferedResponse(buffer)
+}
+
 func (b *Base) renderView(options lazyview.Options, format Format) error {
 	options.Format = string(format)
 	if b.IsTurboFrame() {
@@ -308,6 +397,11 @@ func (b *Base) renderView(options lazyview.Options, format Format) error {
 	}
 	if options.Format != string(HTML) {
 		options.UseLayout = false
+	}
+	if key, ok, err := b.renderCacheKey(options.Action, format); err != nil {
+		return err
+	} else if ok {
+		return b.renderCachedView(options, format, key)
 	}
 
 	buffer := newBufferedResponse()
@@ -317,6 +411,64 @@ func (b *Base) renderView(options lazyview.Options, format Format) error {
 		return err
 	}
 	return b.writeBufferedResponse(buffer)
+}
+
+func (b *Base) renderCachedView(options lazyview.Options, format Format, key string) error {
+	cache := b.Cache()
+	if cache == nil {
+		return fmt.Errorf("lazycontroller: cache is missing from application context")
+	}
+	if body, err := lazycache.Get[string](cache, key); err == nil {
+		buffer := newBufferedResponse()
+		copyHeaders(buffer.Header(), b.writer.Header())
+		if buffer.Header().Get("Content-Type") == "" {
+			buffer.Header().Set("Content-Type", contentTypeForFormat(format))
+		}
+		_, _ = buffer.Write([]byte(body))
+		return b.writeBufferedResponse(buffer)
+	} else if err != nil && !errors.Is(err, lazycache.ErrMiss) {
+		return err
+	}
+
+	buffer := newBufferedResponse()
+	copyHeaders(buffer.Header(), b.writer.Header())
+	options.Writer = buffer
+	if err := b.renderer.Render(options); err != nil {
+		return err
+	}
+	if err := cache.Set(buffer.body.String(), key); err != nil {
+		return err
+	}
+	return b.writeBufferedResponse(buffer)
+}
+
+func contentTypeForFormat(format Format) string {
+	switch format {
+	case JSON:
+		return "application/json; charset=utf-8"
+	case TurboStream:
+		return "text/vnd.turbo-stream.html; charset=utf-8"
+	default:
+		return "text/html; charset=utf-8"
+	}
+}
+
+func (b *Base) renderCacheKey(action string, format Format) (string, bool, error) {
+	if !b.cacheKey.set {
+		return "", false, nil
+	}
+	if b.cacheKey.full {
+		key, err := lazycache.Key(b.cacheKey.parts...)
+		return key, true, err
+	}
+	parts := []any{}
+	if strings.TrimSpace(b.route.Namespace) != "" {
+		parts = append(parts, b.route.Namespace)
+	}
+	parts = append(parts, b.controller, action, string(format))
+	parts = append(parts, b.cacheKey.parts...)
+	key, err := lazycache.Key(parts...)
+	return key, true, err
 }
 
 func (b *Base) HandleError(w http.ResponseWriter, r *http.Request, err error) error {

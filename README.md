@@ -44,6 +44,8 @@ framework itself is just Go packages.
 ```text
 golazy.dev/lazyapp                 Application composition
 golazy.dev/lazyassets              Asset registry, fingerprints, and serving
+golazy.dev/lazycache               Application cache contract and helpers
+golazy.dev/lazycache/inmemorycache In-process LRU-capable cache backend
 golazy.dev/lazycontrolplane        Liveness, readiness, metrics, and diagnostics
 golazy.dev/lazycontroller          Request-local controllers and render state
 golazy.dev/lazycookie              Signed and encrypted secure cookies

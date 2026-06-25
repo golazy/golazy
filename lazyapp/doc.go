@@ -3,8 +3,8 @@
 //
 // Most applications use lazyapp.New at the application boundary. It wires the
 // application context, route scope, view renderer, helper registry, asset
-// registry, session manager, robots and configured sitemap endpoints, optional
-// control plane, middleware chain, and public asset fallback into one
+// registry, cache, session manager, robots and configured sitemap endpoints,
+// optional control plane, middleware chain, and public asset fallback into one
 // http.Handler.
 //
 // The lower-level packages remain independently usable. Use lazyroutes directly

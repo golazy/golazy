@@ -1,6 +1,7 @@
 // Package lazycontroller provides request-local controller state, rendering
-// helpers, response helpers, typed HTTP errors, redirects, content negotiation,
-// SEO convenience methods, and Server-Sent Events entrypoints.
+// helpers, response helpers, cache-key helpers, typed HTTP errors, redirects,
+// content negotiation, SEO convenience methods, and Server-Sent Events
+// entrypoints.
 //
 // In a normal GoLazy app, lazyapp creates a renderer, stores it in context, and
 // lazyroutes binds a fresh controller instance to each request. Controllers then

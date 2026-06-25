@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"golazy.dev/lazyassets"
+	"golazy.dev/lazycache"
+	"golazy.dev/lazycache/inmemorycache"
 	"golazy.dev/lazycontroller"
 	"golazy.dev/lazycontrolplane"
 	"golazy.dev/lazydeps"
@@ -36,6 +38,7 @@ type Config struct {
 	SEO               func(context.Context) []lazyseo.Option
 	Assets            []lazyassets.Source
 	AssetOptions      []lazyassets.Option
+	Cache             lazycache.Options
 	Robots            RobotsConfig
 	Sitemap           SitemapConfig
 	Sessions          lazysession.Config
@@ -50,6 +53,7 @@ type App struct {
 	Dispatcher   *lazydispatch.Dispatcher
 	Router       *lazyroutes.Scope
 	Assets       *lazyassets.Registry
+	Cache        *lazycache.Cache
 	Sessions     *lazysession.Manager
 	ControlPlane *lazycontrolplane.ControlPlane
 	Dependencies *lazydeps.Scope
@@ -76,6 +80,19 @@ func New(config Config) *App {
 			panic("lazyapp: control plane builder returned nil")
 		}
 	}
+	cacheOptions := config.Cache
+	if cacheOptions.Backend == nil {
+		backend, err := inmemorycache.New(inmemorycache.Options{})
+		if err != nil {
+			panic(fmt.Errorf("initialize cache backend: %w", err))
+		}
+		cacheOptions.Backend = backend
+	}
+	cache, err := lazycache.New(cacheOptions)
+	if err != nil {
+		panic(fmt.Errorf("initialize cache: %w", err))
+	}
+	ctx = lazycache.WithCache(ctx, cache)
 
 	var sessions *lazysession.Manager
 	if config.Sessions.Enabled() {
@@ -160,6 +177,7 @@ func New(config Config) *App {
 	renderer.AddHelpers(lazyforms.Helpers(router))
 	renderer.AddHelpers(lazyseo.Helpers(seo...))
 	renderer.AddHelpers(lazyturbo.Helpers())
+	renderer.AddHelpers(cacheHelpers())
 	for _, helpers := range config.Helpers {
 		renderer.AddHelpers(helpers)
 	}
@@ -203,6 +221,7 @@ func New(config Config) *App {
 		Dispatcher:   dispatcher,
 		Router:       router,
 		Assets:       assets,
+		Cache:        cache,
 		Sessions:     sessions,
 		ControlPlane: controlPlane,
 		Dependencies: dependencies,

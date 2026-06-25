@@ -10,11 +10,37 @@ import (
 	"testing/fstest"
 	"time"
 
+	"golazy.dev/lazycache"
 	"golazy.dev/lazyseo"
 	"golazy.dev/lazyseo/jsonld"
 	"golazy.dev/lazyview"
 	_ "golazy.dev/lazyview/gotmpl"
 )
+
+type rendererCacheBackend struct {
+	values map[string]any
+	keys   []string
+}
+
+func (b *rendererCacheBackend) Get(key string) (any, error) {
+	if value, ok := b.values[key]; ok {
+		return value, nil
+	}
+	return nil, lazycache.ErrMiss
+}
+
+func (b *rendererCacheBackend) Set(key string, value any) error {
+	if b.values == nil {
+		b.values = map[string]any{}
+	}
+	b.values[key] = value
+	b.keys = append(b.keys, key)
+	return nil
+}
+
+func (b *rendererCacheBackend) Stats() lazycache.Stats {
+	return lazycache.Stats{Entries: len(b.values)}
+}
 
 func TestRenderEscapesDataAndComposesLayout(t *testing.T) {
 	views := fstest.MapFS{
@@ -306,6 +332,115 @@ func TestRenderUsesResponseHelpers(t *testing.T) {
 	}
 	if got, want := response.Body.String(), "layout created"; got != want {
 		t.Fatalf("body = %q, want %q", got, want)
+	}
+}
+
+func TestRenderUsesControllerCacheKey(t *testing.T) {
+	views := fstest.MapFS{
+		"layouts/app.html.tpl":      {Data: []byte(`<main>{{.content}}</main>`)},
+		"admin/posts/show.html.tpl": {Data: []byte(`<p>{{.title}}</p>`)},
+		"posts/show.html.tpl":       {Data: []byte(`wrong`)},
+	}
+	renderer, err := NewRenderer(views)
+	if err != nil {
+		t.Fatal(err)
+	}
+	backend := &rendererCacheBackend{}
+	cache, err := lazycache.New(lazycache.Options{Backend: backend})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := lazycache.WithCache(WithRenderer(context.Background(), renderer), cache)
+
+	first := httptest.NewRecorder()
+	base, err := NewBase(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := base.BindRequest(first, httptest.NewRequest(http.MethodGet, "/admin/posts/1", nil), lazyview.Route{
+		Namespace:  "admin",
+		Controller: "posts",
+		Action:     "Show",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	base.Set("title", "First")
+	if err := base.CacheKey(1, "stamp"); err != nil {
+		t.Fatal(err)
+	}
+	if err := base.Render(""); err != nil {
+		t.Fatal(err)
+	}
+
+	second := httptest.NewRecorder()
+	base, err = NewBase(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := base.BindRequest(second, httptest.NewRequest(http.MethodGet, "/admin/posts/1", nil), lazyview.Route{
+		Namespace:  "admin",
+		Controller: "posts",
+		Action:     "Show",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	base.Set("title", "Second")
+	if err := base.CacheKey(1, "stamp"); err != nil {
+		t.Fatal(err)
+	}
+	if err := base.Render(""); err != nil {
+		t.Fatal(err)
+	}
+
+	if got, want := first.Body.String(), `<main><p>First</p></main>`; got != want {
+		t.Fatalf("first body = %q, want %q", got, want)
+	}
+	if got, want := second.Body.String(), first.Body.String(); got != want {
+		t.Fatalf("second body = %q, want cached %q", got, want)
+	}
+	if len(backend.keys) != 1 {
+		t.Fatalf("cache writes = %v, want one write", backend.keys)
+	}
+	if got, want := backend.keys[0], "admin-posts-show-html-1-stamp"; got != want {
+		t.Fatalf("cache key = %q, want %q", got, want)
+	}
+}
+
+func TestRenderUsesControllerFullCacheKey(t *testing.T) {
+	views := fstest.MapFS{
+		"layouts/app.html.tpl": {Data: []byte(`{{.content}}`)},
+		"posts/show.html.tpl":  {Data: []byte(`{{.title}}`)},
+	}
+	renderer, err := NewRenderer(views)
+	if err != nil {
+		t.Fatal(err)
+	}
+	backend := &rendererCacheBackend{}
+	cache, err := lazycache.New(lazycache.Options{Backend: backend})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := lazycache.WithCache(WithRenderer(context.Background(), renderer), cache)
+	response := httptest.NewRecorder()
+	base, err := NewBase(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := base.BindRequest(response, httptest.NewRequest(http.MethodGet, "/posts/1", nil), lazyview.Route{
+		Controller: "posts",
+		Action:     "Show",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	base.Set("title", "Post")
+	if err := base.CacheKeyF("post", 1, "stamp"); err != nil {
+		t.Fatal(err)
+	}
+	if err := base.Render(""); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := backend.keys[0], "post-1-stamp"; got != want {
+		t.Fatalf("cache key = %q, want %q", got, want)
 	}
 }
 

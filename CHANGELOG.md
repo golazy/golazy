@@ -7,6 +7,8 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.15] - 2026-06-25
+
 ### Added
 
 - `golazy.dev/lazydeps`, a dependency-initialization helper that records service
@@ -387,7 +389,8 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Route construction with embedded public-file fallback.
 - Method-not-allowed handling for application routes.
 
-[Unreleased]: https://github.com/golazy/golazy/compare/v0.1.14...HEAD
+[Unreleased]: https://github.com/golazy/golazy/compare/v0.1.15...HEAD
+[0.1.15]: https://github.com/golazy/golazy/compare/v0.1.14...v0.1.15
 [0.1.14]: https://github.com/golazy/golazy/compare/v0.1.13...v0.1.14
 [0.1.13]: https://github.com/golazy/golazy/compare/v0.1.12...v0.1.13
 [0.1.12]: https://github.com/golazy/golazy/compare/v0.1.11...v0.1.12

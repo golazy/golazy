@@ -211,7 +211,7 @@ func (app *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	app.Dispatcher.ServeHTTP(w, r)
 }
 
-// ListenAndServe starts the app server on ADDR, PORT, or :3000.
+// ListenAndServe starts the app server on ADDR, PORT, or 127.0.0.1:3000.
 //
 // It installs app.Context as the server base context, so every request context
 // includes the dependencies initialized by New. When using a custom http.Server,

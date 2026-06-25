@@ -1,43 +1,32 @@
 package lazyapp
 
 import (
-	"fmt"
 	"strconv"
 
 	"golazy.dev/lazyconfig"
 )
 
-type environmentConfig struct {
-	Addr             string `var:"ADDR"`
-	Port             string `var:"PORT"`
-	ControlPlaneAddr string `var:"CONTROL_PLANE_ADDR"`
-}
+const defaultListenAddr = "127.0.0.1:3000"
 
-func loadEnvironmentConfig() environmentConfig {
-	config, err := lazyconfig.Getenv[environmentConfig]()
-	if err != nil {
-		panic(fmt.Errorf("lazyapp: read environment config: %w", err))
-	}
-	return config
-}
+var environment = lazyconfig.MustGetenv[struct {
+	Addr             string `default:"127.0.0.1:3000"`
+	Port             int    `default:"0"`
+	ControlPlaneAddr string
+}]()
 
 func listenAddr() string {
-	config := loadEnvironmentConfig()
-	if config.Addr != "" {
-		return normalizeListenAddr(config.Addr)
+	normalizedAddr := normalizeListenAddr(environment.Addr)
+	if environment.Port != 0 && (normalizedAddr == "" || normalizedAddr == defaultListenAddr) {
+		return ":" + strconv.Itoa(environment.Port)
 	}
-	if config.Port != "" {
-		return normalizeListenAddr(config.Port)
-	}
-	return ":3000"
+	return normalizedAddr
 }
 
 func controlPlaneListenAddr() (string, bool) {
-	config := loadEnvironmentConfig()
-	if config.ControlPlaneAddr == "" {
+	if environment.ControlPlaneAddr == "" {
 		return "", false
 	}
-	return normalizeListenAddr(config.ControlPlaneAddr), true
+	return normalizeListenAddr(environment.ControlPlaneAddr), true
 }
 
 func normalizeListenAddr(addr string) string {

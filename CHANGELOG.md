@@ -12,9 +12,9 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `golazy.dev/lazydeps`, a dependency-initialization helper that records service
   nodes and dependency edges while returning typed service references.
 - `golazy.dev/lazyconfig`, a small environment-backed configuration loader with
-  `Getenv[T]`, default field-to-env naming, struct tags for defaults and
-  required values, slice entry loading, and optional `Validate() error`
-  support.
+  `Getenv[T]`, `MustGetenv[T]`, default field-to-env naming, struct tags for
+  defaults and required values, slice entry loading, and optional
+  `Validate() error` support.
 - Framework-owned default controller views for `layouts/app.html.tpl` and
   `app/error.html.tpl`, used by `lazyapp` when an application does not provide
   its own files at those paths.
@@ -26,7 +26,8 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   dependency initializer, and keeps the resulting scope on `lazyapp.App`.
 - `lazyapp` now reads its framework-owned runtime environment variables,
   including `ADDR`, `PORT`, and `CONTROL_PLANE_ADDR`, through a local config
-  struct backed by `lazyconfig`.
+  struct backed by `lazyconfig`; the default application listen address is
+  `127.0.0.1:3000`.
 - In `lazydev` builds, `lazyapp` reads views and public files from build-time
   paths, and `lazyassets` serves logical development asset paths without
   permanent hashes or cache headers.

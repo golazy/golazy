@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"golazy.dev/lazyassets"
+	"golazy.dev/lazyconfig"
 	"golazy.dev/lazycontroller"
 	"golazy.dev/lazycontrolplane"
 	"golazy.dev/lazydeps"
@@ -723,9 +724,8 @@ func TestListenAddr(t *testing.T) {
 		port string
 		want string
 	}{
-		{name: "unset", want: ":3000"},
-		{name: "port only", port: "9191", want: ":9191"},
-		{name: "port with colon", port: ":9191", want: ":9191"},
+		{name: "unset", want: defaultListenAddr},
+		{name: "port only", port: " 9191 ", want: ":9191"},
 		{name: "addr overrides port", addr: "127.0.0.1:8181", port: "9191", want: "127.0.0.1:8181"},
 		{name: "numeric addr", addr: "8181", want: ":8181"},
 		{name: "all interfaces", addr: ":8181", want: ":8181"},
@@ -733,14 +733,41 @@ func TestListenAddr(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			t.Setenv("ADDR", test.addr)
-			t.Setenv("PORT", test.port)
+			unsetenv(t, "ADDR", "PORT")
+			if test.addr != "" {
+				t.Setenv("ADDR", test.addr)
+			}
+			if test.port != "" {
+				t.Setenv("PORT", test.port)
+			}
+			reloadEnvironmentForTest(t)
 
 			if got := listenAddr(); got != test.want {
 				t.Fatalf("listenAddr() = %q, want %q", got, test.want)
 			}
 		})
 	}
+}
+
+func unsetenv(t *testing.T, names ...string) {
+	t.Helper()
+	oldValues := make(map[string]string, len(names))
+	hadValues := make(map[string]bool, len(names))
+	for _, name := range names {
+		oldValues[name], hadValues[name] = os.LookupEnv(name)
+		if err := os.Unsetenv(name); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Cleanup(func() {
+		for _, name := range names {
+			if hadValues[name] {
+				_ = os.Setenv(name, oldValues[name])
+			} else {
+				_ = os.Unsetenv(name)
+			}
+		}
+	})
 }
 
 func unsetOTELForTest(t *testing.T) {
@@ -768,6 +795,19 @@ func unsetOTELForTest(t *testing.T) {
 				_ = os.Unsetenv(name)
 			}
 		}
+	})
+}
+
+func reloadEnvironmentForTest(t *testing.T) {
+	t.Helper()
+	oldEnvironment := environment
+	environment = lazyconfig.MustGetenv[struct {
+		Addr             string `default:"127.0.0.1:3000"`
+		Port             int    `default:"0"`
+		ControlPlaneAddr string
+	}]()
+	t.Cleanup(func() {
+		environment = oldEnvironment
 	})
 }
 
@@ -827,6 +867,7 @@ func TestAppInstallsConfiguredControlPlaneBeforeRoutes(t *testing.T) {
 
 func TestControlPlaneListenAddr(t *testing.T) {
 	t.Setenv("CONTROL_PLANE_ADDR", "9090")
+	reloadEnvironmentForTest(t)
 
 	addr, ok := controlPlaneListenAddr()
 	if !ok {
@@ -861,7 +902,7 @@ func TestControlPlaneForListenActivatesFromEnvAddress(t *testing.T) {
 func TestHandlersForListenMountControlPlaneWhenAddressesMatch(t *testing.T) {
 	app := New(Config{Name: "test"})
 
-	appHandler, controlHandler := app.handlersForListen(":3000", "3000", true)
+	appHandler, controlHandler := app.handlersForListen(defaultListenAddr, "3000", true)
 	if controlHandler != nil {
 		t.Fatal("control handler is not nil for matching app and control-plane addresses")
 	}
@@ -885,7 +926,7 @@ func TestHandlersForListenSeparateControlPlaneWhenAddressesDiffer(t *testing.T) 
 		},
 	})
 
-	appHandler, controlHandler := app.handlersForListen(":3000", ":9090", true)
+	appHandler, controlHandler := app.handlersForListen(defaultListenAddr, ":9090", true)
 	if controlHandler == nil {
 		t.Fatal("control handler is nil for separate control-plane address")
 	}
@@ -911,7 +952,7 @@ func TestSameListenAddr(t *testing.T) {
 		want  bool
 	}{
 		{name: "same normalized port", left: ":3000", right: "3000", want: true},
-		{name: "same default addr", left: ":3000", right: ":3000", want: true},
+		{name: "same default addr", left: defaultListenAddr, right: "3000", want: true},
 		{name: "wildcard overlaps localhost", left: "0.0.0.0:3000", right: "127.0.0.1:3000", want: true},
 		{name: "localhost aliases overlap", left: "localhost:3000", right: "127.0.0.1:3000", want: true},
 		{name: "different ports", left: ":3000", right: ":3001", want: false},

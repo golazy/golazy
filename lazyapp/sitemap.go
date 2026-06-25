@@ -9,6 +9,10 @@ import (
 	"time"
 )
 
+func (config SitemapConfig) enabled() bool {
+	return !config.Disabled && (strings.TrimSpace(config.BaseURL) != "" || len(config.URLs) > 0 || len(config.Sources) > 0)
+}
+
 func (m *metadataFiles) renderSitemap() ([]byte, time.Time, error) {
 	urls, err := m.sitemapURLs()
 	if err != nil {

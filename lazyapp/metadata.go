@@ -70,7 +70,7 @@ func newMetadataFiles(robots RobotsConfig, sitemap SitemapConfig) (*metadataFile
 		}
 		files.body["/robots.txt"] = body
 	}
-	if !sitemap.Disabled {
+	if sitemap.enabled() {
 		body, updated, err := files.renderSitemap()
 		if err != nil {
 			return nil, err

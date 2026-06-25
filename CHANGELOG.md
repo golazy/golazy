@@ -26,6 +26,12 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `lazyapp.Config.Dependencies` replaces `lazyapp.Config.Context`. The
   framework now creates a `*lazydeps.Scope`, passes it to the application
   dependency initializer, and keeps the resulting scope on `lazyapp.App`.
+- `lazyapp.Config.SEO` is now a `func(context.Context) []lazyseo.Option`, so
+  application SEO defaults are initialized after dependencies and can read
+  dependency-backed values from the app context.
+- `lazyapp` no longer serves an empty `/sitemap.xml` by default. Sitemap
+  generation is enabled when `lazyapp.Config.Sitemap` has a base URL, URLs, or
+  sources; `robots.txt` only advertises the generated sitemap when it exists.
 - `lazyapp` now reads its framework-owned runtime environment variables,
   including `ADDR`, `PORT`, and `CONTROL_PLANE_ADDR`, through a local config
   struct backed by `lazyconfig`; the default application listen address is

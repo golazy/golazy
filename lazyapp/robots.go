@@ -54,7 +54,7 @@ func writeRobotPaths(out *strings.Builder, directive string, paths []string) {
 
 func writeRobotSitemaps(out *strings.Builder, sitemaps []string, sitemap SitemapConfig) {
 	sitemaps = append([]string(nil), sitemaps...)
-	if len(sitemaps) == 0 && !sitemap.Disabled {
+	if len(sitemaps) == 0 && sitemap.enabled() {
 		sitemaps = append(sitemaps, "/sitemap.xml")
 	}
 	for _, value := range sitemaps {

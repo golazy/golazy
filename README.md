@@ -79,7 +79,6 @@ import (
     "os"
 
     "golazy.dev/lazyapp"
-    "golazy.dev/lazycontrolplane"
     "golazy.dev/lazysession"
     _ "golazy.dev/lazyview/gotmpl"
     "my_app/app"
@@ -92,7 +91,6 @@ func App() *lazyapp.App {
         Public:  app.Public,
         Views:   app.Views,
         Dependencies: Dependencies,
-        ControlPlane: lazycontrolplane.Config{},
         Sessions: lazysession.Config{
             Key: os.Getenv("SECURE_COOKIE_KEY"),
         },
@@ -117,10 +115,10 @@ func main() {
 }
 ```
 
-`lazycontrolplane.Config{}` exposes `GET /livez` and `GET /readyz`. When
-`CONTROL_PLANE_ADDR` is set, `ListenAndServe` starts the control plane on that
-address unless it is the same as the application address, in which case the
-control plane is mounted into the app server.
+Set `CONTROL_PLANE_ADDR` when an app should expose the default control plane on
+`GET /livez` and `GET /readyz`. Pass `lazycontrolplane.Config{}` to
+`lazyapp.Config.ControlPlane` when the app needs same-handler probes, custom
+readiness checks, metrics, or pprof.
 
 Routes are drawn through `lazyroutes.Scope`:
 

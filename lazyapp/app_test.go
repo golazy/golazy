@@ -155,6 +155,29 @@ func TestAppServesDefaultRobotsAndSitemap(t *testing.T) {
 	}
 }
 
+func TestAppDoesNotServeSitemapByDefault(t *testing.T) {
+	app := New(Config{})
+
+	response := httptest.NewRecorder()
+	app.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/robots.txt", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("robots status = %d, want %d", response.Code, http.StatusOK)
+	}
+	robots := response.Body.String()
+	if !strings.Contains(robots, "User-agent: *\n") || !strings.Contains(robots, "Allow: /\n") {
+		t.Fatalf("unexpected robots.txt:\n%s", robots)
+	}
+	if strings.Contains(robots, "Sitemap:") {
+		t.Fatalf("robots.txt advertises sitemap without sitemap config:\n%s", robots)
+	}
+
+	response = httptest.NewRecorder()
+	app.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/sitemap.xml", nil))
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("sitemap status = %d, want %d", response.Code, http.StatusNotFound)
+	}
+}
+
 func TestAppPanicsWhenDependencyInitializationFails(t *testing.T) {
 	defer func() {
 		recovered := recover()
@@ -257,10 +280,12 @@ func TestAppRegistersSEOHelpers(t *testing.T) {
 		Drawer: func(router *lazyroutes.Scope) {
 			router.Get("/", newSEOTestController, (*seoTestController).Show)
 		},
-		SEO: []lazyseo.Option{
-			lazyseo.SiteName("Example"),
-			lazyseo.Language("de"),
-			lazyseo.TwitterCardType("summary"),
+		SEO: func(context.Context) []lazyseo.Option {
+			return []lazyseo.Option{
+				lazyseo.SiteName("Example"),
+				lazyseo.Language("de"),
+				lazyseo.TwitterCardType("summary"),
+			}
 		},
 	})
 
@@ -273,6 +298,44 @@ func TestAppRegistersSEOHelpers(t *testing.T) {
 		`<meta name="description" content="Page description">`,
 		`<meta name="twitter:card" content="summary">`,
 		`"@type":"WebPage"`,
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("response does not contain %q:\n%s", expected, body)
+		}
+	}
+}
+
+func TestAppInitializesDependenciesBeforeSEO(t *testing.T) {
+	type contextKey struct{}
+
+	app := New(Config{
+		Views: testViewFS(t, map[string]string{
+			"pages/show.html.tpl":          `{{seo}}`,
+			"layouts/app.html.tpl":         `<html lang="{{seo_lang}}"><head>{{.content}}</head></html>`,
+			"layouts/turbo_frame.html.tpl": `{{.content}}`,
+		}),
+		Dependencies: func(deps *lazydeps.Scope) error {
+			deps.SetContext(context.WithValue(deps.Context(), contextKey{}, "Dependency Site"))
+			return nil
+		},
+		Drawer: func(router *lazyroutes.Scope) {
+			router.Get("/", newSEOTestController, (*seoTestController).Show)
+		},
+		SEO: func(ctx context.Context) []lazyseo.Option {
+			siteName, _ := ctx.Value(contextKey{}).(string)
+			return []lazyseo.Option{
+				lazyseo.SiteName(siteName),
+				lazyseo.Language("en"),
+			}
+		},
+	})
+
+	response := httptest.NewRecorder()
+	app.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/", nil))
+	body := response.Body.String()
+	for _, expected := range []string{
+		`<html lang="en">`,
+		`<title>Hello - Dependency Site</title>`,
 	} {
 		if !strings.Contains(body, expected) {
 			t.Fatalf("response does not contain %q:\n%s", expected, body)

@@ -33,7 +33,7 @@ type Config struct {
 	Views             func() (fs.FS, error)
 	Dependencies      func(*lazydeps.Scope) error
 	Helpers           Helpers
-	SEO               []lazyseo.Option
+	SEO               func(context.Context) []lazyseo.Option
 	Assets            []lazyassets.Source
 	AssetOptions      []lazyassets.Option
 	Robots            RobotsConfig
@@ -143,6 +143,11 @@ func New(config Config) *App {
 		ctx = dependencies.Context()
 	}
 
+	var seo []lazyseo.Option
+	if config.SEO != nil {
+		seo = config.SEO(ctx)
+	}
+
 	router := lazyroutes.New(ctx)
 	ctx = lazycontroller.WithPathFor(ctx, router.PathFor)
 	router.Context = ctx
@@ -153,7 +158,7 @@ func New(config Config) *App {
 	renderer.AddHelpers(router.RegisterHelpers())
 	renderer.AddHelpers(assets.Helpers())
 	renderer.AddHelpers(lazyforms.Helpers(router))
-	renderer.AddHelpers(lazyseo.Helpers(config.SEO...))
+	renderer.AddHelpers(lazyseo.Helpers(seo...))
 	renderer.AddHelpers(lazyturbo.Helpers())
 	for _, helpers := range config.Helpers {
 		renderer.AddHelpers(helpers)

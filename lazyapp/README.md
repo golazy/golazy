@@ -14,7 +14,6 @@ app := lazyapp.New(lazyapp.Config{
     Dependencies: Dependencies,
     Helpers: lazyapp.Helpers{helpers.RegisterHelpers()},
     Assets:  []lazyassets.Source{generatedAssets},
-    ControlPlane: lazycontrolplane.Config{},
     Sessions: lazysession.Config{
         Key: os.Getenv("SECURE_COOKIE_KEY"),
     },
@@ -30,13 +29,16 @@ log.Fatal(app.ListenAndServe())
 - Registers public and generated assets.
 - Creates the root `lazyroutes.Scope`.
 - Calls the route drawer.
-- Registers router helpers, asset helpers, form helpers, and application helpers.
+- Evaluates SEO defaults with the dependency-initialized context.
+- Registers router helpers, asset helpers, form helpers, SEO helpers, and
+  application helpers.
 - Caches views after helpers are registered.
 - Creates a `lazydispatch.Dispatcher`.
 - Installs route-only method override, response buffering, and ETag handling.
 - Builds an optional control plane for liveness, readiness, metrics, and Go
   diagnostics.
 - Installs application middleware.
+- Installs generated `robots.txt` and configured sitemap middleware.
 - Installs the router middleware.
 - Installs asset serving as the public fallback.
 

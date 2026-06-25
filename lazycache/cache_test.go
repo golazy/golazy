@@ -35,6 +35,14 @@ func (b *memoryBackend) Stats() Stats {
 	return b.stats
 }
 
+func (b *memoryBackend) Keys() []string {
+	keys := make([]string, 0, len(b.values))
+	for key := range b.values {
+		keys = append(keys, key)
+	}
+	return keys
+}
+
 func TestNewRequiresBackend(t *testing.T) {
 	if _, err := New(Options{}); err == nil {
 		t.Fatal("New succeeded, want backend error")
@@ -85,6 +93,9 @@ func TestCacheOffBypassesBackend(t *testing.T) {
 		t.Fatal(err)
 	}
 	cache.Off()
+	if cache.Enabled() {
+		t.Fatal("Enabled = true after Off")
+	}
 	if err := cache.Set("Ada", "user"); err != nil {
 		t.Fatal(err)
 	}
@@ -96,6 +107,9 @@ func TestCacheOffBypassesBackend(t *testing.T) {
 	}
 
 	cache.On()
+	if !cache.Enabled() {
+		t.Fatal("Enabled = false after On")
+	}
 	if err := cache.Set("Ada", "user"); err != nil {
 		t.Fatal(err)
 	}
@@ -104,6 +118,9 @@ func TestCacheOffBypassesBackend(t *testing.T) {
 	}
 	if cache.Stats().Hits != 1 {
 		t.Fatalf("Hits = %d, want 1", cache.Stats().Hits)
+	}
+	if got := cache.Keys(); len(got) != 1 || got[0] != "user" {
+		t.Fatalf("Keys = %#v, want [user]", got)
 	}
 }
 

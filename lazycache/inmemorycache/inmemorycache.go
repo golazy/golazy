@@ -3,6 +3,7 @@ package inmemorycache
 import (
 	"container/list"
 	"fmt"
+	"sort"
 	"sync"
 
 	"golazy.dev/lazycache"
@@ -100,6 +101,19 @@ func (c *Cache) Stats() lazycache.Stats {
 	stats.Entries = len(c.items)
 	stats.MaxEntries = c.maxEntries
 	return stats
+}
+
+// Keys returns a stable snapshot of stored keys.
+func (c *Cache) Keys() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	keys := make([]string, 0, len(c.items))
+	for key := range c.items {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func (c *Cache) enforceMaxEntries() {

@@ -15,12 +15,12 @@ var ErrMiss = errors.New("lazycache: miss")
 
 // Stats is the common cache statistics shape returned by every backend.
 type Stats struct {
-	Entries    int
-	MaxEntries int
-	Hits       uint64
-	Misses     uint64
-	Sets       uint64
-	Evictions  uint64
+	Entries    int    `json:"entries"`
+	MaxEntries int    `json:"max_entries"`
+	Hits       uint64 `json:"hits"`
+	Misses     uint64 `json:"misses"`
+	Sets       uint64 `json:"sets"`
+	Evictions  uint64 `json:"evictions"`
 }
 
 // Backend is the storage boundary used by Cache.
@@ -28,6 +28,11 @@ type Backend interface {
 	Get(key string) (any, error)
 	Set(key string, value any) error
 	Stats() Stats
+}
+
+// KeyLister is an optional backend capability used by development tooling.
+type KeyLister interface {
+	Keys() []string
 }
 
 // Options configures a Cache.
@@ -65,6 +70,11 @@ func (c *Cache) Off() {
 		return
 	}
 	c.enabled.Store(false)
+}
+
+// Enabled reports whether reads and writes are active.
+func (c *Cache) Enabled() bool {
+	return c != nil && c.enabled.Load()
 }
 
 // Get returns a cached value for the key built from parts.
@@ -110,6 +120,18 @@ func (c *Cache) Stats() Stats {
 		return Stats{}
 	}
 	return c.backend.Stats()
+}
+
+// Keys returns the backend keys when the backend exposes them.
+func (c *Cache) Keys() []string {
+	if c == nil || c.backend == nil {
+		return nil
+	}
+	lister, ok := c.backend.(KeyLister)
+	if !ok {
+		return nil
+	}
+	return lister.Keys()
 }
 
 // Get returns a cached value with a concrete type.

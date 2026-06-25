@@ -3,6 +3,7 @@ package inmemorycache
 import (
 	"errors"
 	"fmt"
+	"reflect"
 	"sync"
 	"testing"
 
@@ -64,6 +65,26 @@ func TestUnboundedDefaultDoesNotEvict(t *testing.T) {
 	stats := backend.Stats()
 	if stats.Entries != 10 || stats.Evictions != 0 || stats.MaxEntries != 0 {
 		t.Fatalf("Stats = %#v, want unbounded entries", stats)
+	}
+}
+
+func TestKeysReturnsSortedSnapshot(t *testing.T) {
+	backend, err := New(Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"posts-2", "posts-1", "home"} {
+		if err := backend.Set(key, key); err != nil {
+			t.Fatal(err)
+		}
+	}
+	lister, ok := backend.(lazycache.KeyLister)
+	if !ok {
+		t.Fatal("backend does not implement KeyLister")
+	}
+	want := []string{"home", "posts-1", "posts-2"}
+	if got := lister.Keys(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("Keys = %#v, want %#v", got, want)
 	}
 }
 

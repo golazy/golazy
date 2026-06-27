@@ -7,11 +7,28 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.16] - 2026-06-27
+
 ### Added
 
+- `golazy.dev/lazycache`, a cache contract with typed `Get` / `Set` helpers,
+  in-memory storage, stats, runtime On/Off switching, and controller, partial,
+  and Turbo frame caching helpers wired through `lazyapp.App`.
+- `lazycontroller.Base.SetLater` and `SetWhenNeeded` for request-local deferred
+  view data that templates resolve only when `.Value` is read.
 - Template route helpers `link_to`, `attr`, `data`, and `unless_current`, so
   views can render escaped anchors around `path_for` destinations and omit the
   anchor for the current page.
+- OpenTelemetry-backed request telemetry, including OTEL environment config,
+  request IDs, trace spans, context-aware logs, in-memory metrics, and
+  Prometheus metrics on the control plane when configured.
+
+### Changed
+
+- `lazydev` control-plane handlers are now owned by their framework packages,
+  and `lazyapp` aggregates them for development builds.
+- `lazyapp` includes cache statistics in its Prometheus scrape output when
+  telemetry metrics are enabled.
 
 ## [0.1.15] - 2026-06-25
 
@@ -395,7 +412,8 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Route construction with embedded public-file fallback.
 - Method-not-allowed handling for application routes.
 
-[Unreleased]: https://github.com/golazy/golazy/compare/v0.1.15...HEAD
+[Unreleased]: https://github.com/golazy/golazy/compare/v0.1.16...HEAD
+[0.1.16]: https://github.com/golazy/golazy/compare/v0.1.15...v0.1.16
 [0.1.15]: https://github.com/golazy/golazy/compare/v0.1.14...v0.1.15
 [0.1.14]: https://github.com/golazy/golazy/compare/v0.1.13...v0.1.14
 [0.1.13]: https://github.com/golazy/golazy/compare/v0.1.12...v0.1.13

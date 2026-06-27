@@ -1,9 +1,12 @@
 package lazydeps
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -66,4 +69,56 @@ func TestRefUsePanicsOutsideServiceInitialization(t *testing.T) {
 		}
 	}()
 	db.Use()
+}
+
+func TestShutdownCancelsDependentsBeforeDependencies(t *testing.T) {
+	var logs bytes.Buffer
+	u := New(context.Background(), WithLogger(slog.New(slog.NewTextHandler(&logs, nil))))
+	events := []string{}
+
+	db, err := Service(u, "db", func(ctx context.Context) (context.Context, string, error, context.CancelFunc) {
+		return ctx, "db", nil, func() {
+			events = append(events, "db:"+context.Cause(ctx).Error())
+		}
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = Service(u, "posts", func(ctx context.Context) (context.Context, string, error, context.CancelFunc) {
+		_ = db.Use()
+		return ctx, "posts", nil, func() {
+			events = append(events, "posts:"+context.Cause(ctx).Error())
+		}
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := u.Shutdown(context.Background(), "deploy"); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"posts:deploy", "db:deploy"}
+	if !slices.Equal(events, want) {
+		t.Fatalf("events = %#v, want %#v", events, want)
+	}
+
+	if err := u.Shutdown(context.Background(), "second"); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(events, want) {
+		t.Fatalf("events after second shutdown = %#v, want idempotent %#v", events, want)
+	}
+
+	output := logs.String()
+	for _, part := range []string{
+		"lazydeps: canceling service context",
+		"service=posts",
+		"reason=deploy",
+		"lazydeps: service cleanup finished",
+		"duration=",
+	} {
+		if !strings.Contains(output, part) {
+			t.Fatalf("logs %q do not contain %q", output, part)
+		}
+	}
 }

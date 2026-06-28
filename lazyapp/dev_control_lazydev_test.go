@@ -102,6 +102,7 @@ func TestLazyDevControlPlaneAggregatesPackageHandlers(t *testing.T) {
 		lazytelemetry.LazyDevRequestMonitoringPath,
 		lazytelemetry.LazyDevRequestMonitoringOnPath,
 		lazytelemetry.LazyDevRequestMonitoringOffPath,
+		lazytelemetry.LazyDevRequestTracesPath,
 	} {
 		if !app.ControlPlane.HandlesPath(path) {
 			t.Fatalf("control plane does not handle %s", path)

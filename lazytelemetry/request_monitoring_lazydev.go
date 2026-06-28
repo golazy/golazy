@@ -24,6 +24,7 @@ func RegisterLazyDevHandlers(controlPlane *lazycontrolplane.ControlPlane) {
 		SetRequestMonitoringEnabled(false)
 		handleRequestMonitoring(w, r)
 	}))
+	controlPlane.Handle("GET "+LazyDevRequestTracesPath, http.HandlerFunc(handleRequestTraces))
 }
 
 func handleRequestMonitoring(w http.ResponseWriter, _ *http.Request) {

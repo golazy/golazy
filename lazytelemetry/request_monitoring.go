@@ -14,6 +14,10 @@ const LazyDevRequestMonitoringOnPath = "/requests/monitoring/on"
 // LazyDevRequestMonitoringOffPath disables detailed lazydev request monitoring.
 const LazyDevRequestMonitoringOffPath = "/requests/monitoring/off"
 
+// LazyDevRequestTracesPath is the lazydev control-plane endpoint for recorded
+// request trace summaries.
+const LazyDevRequestTracesPath = "/requests/traces"
+
 var requestMonitoringEnabled atomic.Bool
 
 // RequestMonitoringSnapshot describes detailed lazydev request monitoring.

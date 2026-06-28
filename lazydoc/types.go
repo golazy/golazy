@@ -17,6 +17,7 @@ type Package struct {
 	Name       string    `json:"name"`
 	Synopsis   string    `json:"synopsis"`
 	Doc        string    `json:"doc"`
+	Source     *Source   `json:"source,omitempty"`
 	Constants  []Value   `json:"constants,omitempty"`
 	Variables  []Value   `json:"variables,omitempty"`
 	Functions  []Func    `json:"functions,omitempty"`
@@ -24,16 +25,23 @@ type Package struct {
 	Examples   []Example `json:"examples,omitempty"`
 }
 
+type Source struct {
+	File string `json:"file"`
+	Line int    `json:"line"`
+}
+
 type Value struct {
-	Names []string `json:"names"`
-	Doc   string   `json:"doc"`
-	Decl  string   `json:"decl"`
+	Names  []string `json:"names"`
+	Doc    string   `json:"doc"`
+	Decl   string   `json:"decl"`
+	Source *Source  `json:"source,omitempty"`
 }
 
 type Func struct {
 	Name     string    `json:"name"`
 	Doc      string    `json:"doc"`
 	Decl     string    `json:"decl"`
+	Source   *Source   `json:"source,omitempty"`
 	Examples []Example `json:"examples,omitempty"`
 }
 
@@ -41,6 +49,7 @@ type Type struct {
 	Name      string    `json:"name"`
 	Doc       string    `json:"doc"`
 	Decl      string    `json:"decl"`
+	Source    *Source   `json:"source,omitempty"`
 	Constants []Value   `json:"constants,omitempty"`
 	Variables []Value   `json:"variables,omitempty"`
 	Funcs     []Func    `json:"functions,omitempty"`

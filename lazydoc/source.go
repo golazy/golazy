@@ -101,68 +101,123 @@ func loadPackageDir(dir, moduleRoot, modulePath string) (Package, bool, error) {
 	if rel != "." {
 		importPath += "/" + filepath.ToSlash(rel)
 	}
+	source := packageSource(fset, moduleRoot, parsed)
 	docPackage, err := doc.NewFromFiles(fset, parsed, importPath, doc.Mode(0))
 	if err != nil {
 		return Package{}, false, fmt.Errorf("build docs for %s: %w", dir, err)
 	}
-	return convertPackage(fset, importPath, docPackage), true, nil
+	return convertPackage(fset, moduleRoot, importPath, docPackage, source), true, nil
 }
 
-func convertPackage(fset *token.FileSet, importPath string, pkg *doc.Package) Package {
+func convertPackage(fset *token.FileSet, moduleRoot, importPath string, pkg *doc.Package, source *Source) Package {
 	out := Package{
 		ImportPath: importPath,
 		Name:       pkg.Name,
 		Synopsis:   doc.Synopsis(pkg.Doc),
 		Doc:        strings.TrimSpace(pkg.Doc),
-		Constants:  convertValues(fset, pkg.Consts),
-		Variables:  convertValues(fset, pkg.Vars),
-		Functions:  convertFuncs(fset, pkg.Funcs, pkg.Examples),
-		Types:      convertTypes(fset, pkg.Types),
+		Source:     source,
+		Constants:  convertValues(fset, moduleRoot, pkg.Consts),
+		Variables:  convertValues(fset, moduleRoot, pkg.Vars),
+		Functions:  convertFuncs(fset, moduleRoot, pkg.Funcs, pkg.Examples),
+		Types:      convertTypes(fset, moduleRoot, pkg.Types),
 		Examples:   convertExamples(fset, pkg.Examples, ""),
 	}
 	return out
 }
 
-func convertValues(fset *token.FileSet, values []*doc.Value) []Value {
+func convertValues(fset *token.FileSet, moduleRoot string, values []*doc.Value) []Value {
 	out := make([]Value, 0, len(values))
 	for _, value := range values {
 		out = append(out, Value{
-			Names: append([]string(nil), value.Names...),
-			Doc:   strings.TrimSpace(value.Doc),
-			Decl:  nodeString(fset, value.Decl),
+			Names:  append([]string(nil), value.Names...),
+			Doc:    strings.TrimSpace(value.Doc),
+			Decl:   nodeString(fset, value.Decl),
+			Source: nodeSource(fset, moduleRoot, value.Decl),
 		})
 	}
 	return out
 }
 
-func convertFuncs(fset *token.FileSet, funcs []*doc.Func, examples []*doc.Example) []Func {
+func convertFuncs(fset *token.FileSet, moduleRoot string, funcs []*doc.Func, examples []*doc.Example) []Func {
 	out := make([]Func, 0, len(funcs))
 	for _, fn := range funcs {
 		out = append(out, Func{
 			Name:     fn.Name,
 			Doc:      strings.TrimSpace(fn.Doc),
 			Decl:     nodeString(fset, fn.Decl),
+			Source:   nodeSource(fset, moduleRoot, fn.Decl),
 			Examples: convertExamples(fset, examples, fn.Name),
 		})
 	}
 	return out
 }
 
-func convertTypes(fset *token.FileSet, types []*doc.Type) []Type {
+func convertTypes(fset *token.FileSet, moduleRoot string, types []*doc.Type) []Type {
 	out := make([]Type, 0, len(types))
 	for _, typ := range types {
 		out = append(out, Type{
 			Name:      typ.Name,
 			Doc:       strings.TrimSpace(typ.Doc),
 			Decl:      nodeString(fset, typ.Decl),
-			Constants: convertValues(fset, typ.Consts),
-			Variables: convertValues(fset, typ.Vars),
-			Funcs:     convertFuncs(fset, typ.Funcs, typ.Examples),
-			Methods:   convertFuncs(fset, typ.Methods, typ.Examples),
+			Source:    nodeSource(fset, moduleRoot, typ.Decl),
+			Constants: convertValues(fset, moduleRoot, typ.Consts),
+			Variables: convertValues(fset, moduleRoot, typ.Vars),
+			Funcs:     convertFuncs(fset, moduleRoot, typ.Funcs, typ.Examples),
+			Methods:   convertFuncs(fset, moduleRoot, typ.Methods, typ.Examples),
 			Examples:  convertExamples(fset, typ.Examples, typ.Name),
 		})
 	}
 	return out
+}
+
+func packageSource(fset *token.FileSet, moduleRoot string, files []*ast.File) *Source {
+	for _, file := range files {
+		if file.Doc != nil {
+			return tokenSource(fset, moduleRoot, file.Doc.Pos())
+		}
+	}
+	for _, file := range files {
+		return tokenSource(fset, moduleRoot, file.Package)
+	}
+	return nil
+}
+
+func nodeSource(fset *token.FileSet, moduleRoot string, node ast.Node) *Source {
+	if node == nil {
+		return nil
+	}
+	return tokenSource(fset, moduleRoot, node.Pos())
+}
+
+func tokenSource(fset *token.FileSet, moduleRoot string, pos token.Pos) *Source {
+	if fset == nil || pos == token.NoPos {
+		return nil
+	}
+	position := fset.Position(pos)
+	if position.Filename == "" || position.Line <= 0 {
+		return nil
+	}
+	file, ok := relativeSourceFile(moduleRoot, position.Filename)
+	if !ok {
+		return nil
+	}
+	return &Source{File: file, Line: position.Line}
+}
+
+func relativeSourceFile(moduleRoot, file string) (string, bool) {
+	rel, err := filepath.Rel(moduleRoot, file)
+	if err != nil || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || rel == ".." || filepath.IsAbs(rel) {
+		moduleAbs, moduleErr := filepath.Abs(moduleRoot)
+		fileAbs, fileErr := filepath.Abs(file)
+		if moduleErr != nil || fileErr != nil {
+			return "", false
+		}
+		rel, err = filepath.Rel(moduleAbs, fileAbs)
+		if err != nil || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || rel == ".." || filepath.IsAbs(rel) {
+			return "", false
+		}
+	}
+	return filepath.ToSlash(rel), true
 }
 
 func convertExamples(fset *token.FileSet, examples []*doc.Example, name string) []Example {

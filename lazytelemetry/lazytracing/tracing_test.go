@@ -78,6 +78,38 @@ func TestStartSpanUsesIncomingTraceContext(t *testing.T) {
 	}
 }
 
+func TestStartRegionCreatesChildSpan(t *testing.T) {
+	ctx, root := StartSpan(context.Background(), "http.server.request")
+	defer root.End()
+
+	regionCtx, region := StartRegion(ctx, "router", slog.String("http.route", "/posts"))
+	if region == nil {
+		t.Fatal("region span is nil")
+	}
+	defer region.End()
+
+	if SpanFromContext(regionCtx) != region {
+		t.Fatal("region span not attached to context")
+	}
+	if region.ParentID() != root.SpanID() {
+		t.Fatalf("region parent = %q, want %q", region.ParentID(), root.SpanID())
+	}
+	children := root.Children()
+	if len(children) != 1 || children[0] != region {
+		t.Fatalf("children = %#v, want region child", children)
+	}
+}
+
+func TestStartRegionRequiresActiveSpan(t *testing.T) {
+	ctx, region := StartRegion(context.Background(), "router")
+	if region != nil {
+		t.Fatalf("region = %#v, want nil", region)
+	}
+	if SpanFromContext(ctx) != nil {
+		t.Fatal("span attached to context without active parent")
+	}
+}
+
 type assertErr string
 
 func (e assertErr) Error() string {

@@ -211,7 +211,7 @@ func (capture *requestCapture) document(result requestCaptureResult, span *lazyt
 			GoroutinesEnd:   endGoroutines,
 		},
 		Memory: memorySummary(capture.startMem, endMem),
-		Spans:  []requestSpanDocument{spanDocument(span)},
+		Spans:  spanDocuments(span),
 		Errors: append([]string(nil), capture.errors...),
 	}
 }
@@ -237,23 +237,25 @@ func (capture *requestCapture) writeLogs(result requestCaptureResult, span *lazy
 	if span == nil {
 		return nil
 	}
-	for _, event := range span.Events() {
-		if event.Name != "log" {
-			continue
-		}
-		record := map[string]interface{}{
-			"time":       event.Time.Format(time.RFC3339Nano),
-			"request_id": result.RequestID,
-			"trace_id":   span.TraceID(),
-			"span_id":    span.SpanID(),
-			"method":     result.Method,
-			"path":       result.Path,
-		}
-		for key, value := range attrsMap(event.Attributes) {
-			record[key] = value
-		}
-		if err := encoder.Encode(record); err != nil {
-			return err
+	for _, eventSpan := range spansInOrder(span) {
+		for _, event := range eventSpan.Events() {
+			if event.Name != "log" {
+				continue
+			}
+			record := map[string]interface{}{
+				"time":       event.Time.Format(time.RFC3339Nano),
+				"request_id": result.RequestID,
+				"trace_id":   eventSpan.TraceID(),
+				"span_id":    eventSpan.SpanID(),
+				"method":     result.Method,
+				"path":       result.Path,
+			}
+			for key, value := range attrsMap(event.Attributes) {
+				record[key] = value
+			}
+			if err := encoder.Encode(record); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -283,6 +285,29 @@ func traceFileID(requestID string) string {
 		return "request"
 	}
 	return builder.String()
+}
+
+func spansInOrder(span *lazytracing.Span) []*lazytracing.Span {
+	if span == nil {
+		return nil
+	}
+	spans := []*lazytracing.Span{span}
+	for _, child := range span.Children() {
+		spans = append(spans, spansInOrder(child)...)
+	}
+	return spans
+}
+
+func spanDocuments(span *lazytracing.Span) []requestSpanDocument {
+	if span == nil {
+		return nil
+	}
+	spans := spansInOrder(span)
+	documents := make([]requestSpanDocument, 0, len(spans))
+	for _, current := range spans {
+		documents = append(documents, spanDocument(current))
+	}
+	return documents
 }
 
 func spanDocument(span *lazytracing.Span) requestSpanDocument {

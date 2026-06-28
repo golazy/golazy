@@ -12,6 +12,10 @@ func ResponseBuffer() Middleware {
 
 type responseBuffer struct{}
 
+func (responseBuffer) MiddlewareName() string {
+	return "lazydispatch.ResponseBuffer"
+}
+
 func (responseBuffer) Handler(next http.Handler) http.Handler {
 	if next == nil {
 		next = http.NotFoundHandler()

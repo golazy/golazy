@@ -14,6 +14,10 @@ func ETag() Middleware {
 
 type etagMiddleware struct{}
 
+func (etagMiddleware) MiddlewareName() string {
+	return "lazydispatch.ETag"
+}
+
 func (etagMiddleware) Handler(next http.Handler) http.Handler {
 	if next == nil {
 		next = http.NotFoundHandler()

@@ -31,7 +31,11 @@ func TestMiddlewareWritesRequestCaptureFilesWhenMonitoringEnabled(t *testing.T) 
 		WithMetricsRegistry(lazymetrics.NewRegistry()),
 	)
 	handler := middleware.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		lazylogs.Info(r.Context(), "inside handler", slog.String("handler", "ok"))
+		ctx, span := StartRegion(r.Context(), "handler.region", slog.String("handler", "ok"))
+		if span != nil {
+			defer span.End()
+		}
+		lazylogs.Info(ctx, "inside handler", slog.String("handler", "ok"))
 		_, _ = w.Write([]byte("ok"))
 	}))
 	request := httptest.NewRequest(http.MethodGet, "/articles", nil)
@@ -68,6 +72,7 @@ func TestMiddlewareWritesRequestCaptureFilesWhenMonitoringEnabled(t *testing.T) 
 		Spans []struct {
 			Name     string `json:"name"`
 			TraceID  string `json:"trace_id"`
+			SpanID   string `json:"span_id"`
 			ParentID string `json:"parent_id"`
 			Events   []struct {
 				Name       string                 `json:"name"`
@@ -87,7 +92,7 @@ func TestMiddlewareWritesRequestCaptureFilesWhenMonitoringEnabled(t *testing.T) 
 	if spans.Runtime.GoVersion == "" {
 		t.Fatal("runtime.go_version is empty")
 	}
-	if len(spans.Spans) != 1 {
+	if len(spans.Spans) != 2 {
 		t.Fatalf("spans = %#v", spans.Spans)
 	}
 	if spans.Spans[0].Name != "http.server.request" {
@@ -99,11 +104,17 @@ func TestMiddlewareWritesRequestCaptureFilesWhenMonitoringEnabled(t *testing.T) 
 	if spans.Spans[0].ParentID != "00f067aa0ba902b7" {
 		t.Fatalf("parent_id = %q", spans.Spans[0].ParentID)
 	}
-	if !spanEventsContainMessage(spans.Spans[0].Events, "inside handler") {
-		t.Fatalf("span events = %#v, want inside handler log", spans.Spans[0].Events)
-	}
 	if !spanEventsContainMessage(spans.Spans[0].Events, "request completed") {
 		t.Fatalf("span events = %#v, want request completed log", spans.Spans[0].Events)
+	}
+	if spans.Spans[1].Name != "handler.region" {
+		t.Fatalf("child span name = %q", spans.Spans[1].Name)
+	}
+	if spans.Spans[1].ParentID != spans.Spans[0].SpanID {
+		t.Fatalf("child parent_id = %q, want %q", spans.Spans[1].ParentID, spans.Spans[0].SpanID)
+	}
+	if !spanEventsContainMessage(spans.Spans[1].Events, "inside handler") {
+		t.Fatalf("child span events = %#v, want inside handler log", spans.Spans[1].Events)
 	}
 
 	logData, err := os.ReadFile(logPath)

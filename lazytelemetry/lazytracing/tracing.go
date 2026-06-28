@@ -50,9 +50,11 @@ type Span struct {
 	endedAt    time.Time
 	attributes []slog.Attr
 	events     []Event
+	children   []*Span
 	err        error
 	ended      bool
 
+	parent   *Span
 	otelSpan oteltrace.Span
 	task     *runtimetrace.Task
 	region   *runtimetrace.Region
@@ -107,12 +109,15 @@ func StartSpan(ctx context.Context, name string, attributes ...slog.Attr) (conte
 	if name == "" {
 		name = "span"
 	}
+	parentSpan := SpanFromContext(ctx)
 	traceContext, ok := TraceContextFromContext(ctx)
 	if !ok || traceContext.TraceID == "" {
 		traceContext.TraceID = randomHex(16)
 	}
 	parentID := traceContext.SpanID
-	if spanContext := oteltrace.SpanContextFromContext(ctx); spanContext.IsValid() {
+	if parentSpan != nil {
+		parentID = parentSpan.SpanID()
+	} else if spanContext := oteltrace.SpanContextFromContext(ctx); spanContext.IsValid() {
 		traceContext.TraceID = spanContext.TraceID().String()
 		parentID = spanContext.SpanID().String()
 	}
@@ -142,11 +147,25 @@ func StartSpan(ctx context.Context, name string, attributes ...slog.Attr) (conte
 		parentID:   parentID,
 		startedAt:  time.Now(),
 		attributes: append([]slog.Attr(nil), attributes...),
+		parent:     parentSpan,
 		otelSpan:   otelSpan,
 		task:       task,
 		region:     region,
 	}
+	if parentSpan != nil {
+		parentSpan.addChild(span)
+	}
 	return context.WithValue(ctx, contextKey{}, span), span
+}
+
+// StartRegion starts a child span and Go runtime trace region when ctx already
+// carries an active span. It returns ctx unchanged and a nil span when telemetry
+// is not active for the request.
+func StartRegion(ctx context.Context, name string, attributes ...slog.Attr) (context.Context, *Span) {
+	if SpanFromContext(ctx) == nil {
+		return ctx, nil
+	}
+	return StartSpan(ctx, name, attributes...)
 }
 
 // SpanFromContext returns the active span attached to ctx.
@@ -271,6 +290,25 @@ func (s *Span) Events() []Event {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append([]Event(nil), s.events...)
+}
+
+// Children returns a copy of direct child spans.
+func (s *Span) Children() []*Span {
+	if s == nil {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]*Span(nil), s.children...)
+}
+
+func (s *Span) addChild(child *Span) {
+	if s == nil || child == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.children = append(s.children, child)
 }
 
 // RecordError records err on the span.

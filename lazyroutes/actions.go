@@ -3,12 +3,16 @@ package lazyroutes
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"reflect"
+	"strings"
 	"sync"
 
 	"golazy.dev/lazycontroller"
 	"golazy.dev/lazyroutes/actioncall"
+	"golazy.dev/lazytelemetry"
+	"golazy.dev/lazytelemetry/lazytracing"
 	"golazy.dev/lazyview"
 )
 
@@ -93,6 +97,17 @@ type controllerBinding struct {
 
 func (b *controllerBinding) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w = ensureResponseState(w)
+	route := routeForRequest(r)
+	ctx, dispatchSpan := lazytelemetry.StartRegion(r.Context(), routeOperationName("dispatch", route),
+		slog.String("http.route", route.Path),
+		slog.String("route.name", route.Name),
+		slog.String("controller", route.Controller),
+		slog.String("action", route.Action),
+	)
+	if dispatchSpan != nil {
+		defer dispatchSpan.End()
+		r = r.WithContext(ctx)
+	}
 	var controller any
 	var controllerValue reflect.Value
 	defer func() {
@@ -110,30 +125,61 @@ func (b *controllerBinding) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	controllerValue = b.pool.Get().(reflect.Value)
-	controllerValue.Elem().Set(b.prototype.Elem())
-	controller = controllerValue.Interface()
-	if binder, ok := controller.(lazycontroller.RequestBinder); ok {
-		if err := binder.BindRequest(w, r, routeForRequest(r)); err != nil {
-			handleControllerError(b.ctx, w, r, controller, err)
-			return
+	controllerReady := func() bool {
+		_, controllerSpan := lazytelemetry.StartRegion(r.Context(), routeOperationName("controller", route),
+			slog.String("http.route", route.Path),
+			slog.String("route.name", route.Name),
+			slog.String("controller", route.Controller),
+			slog.String("action", route.Action),
+		)
+		if controllerSpan != nil {
+			defer controllerSpan.End()
 		}
-	}
-	if requester, ok := controller.(interface{ Request() *http.Request }); ok {
-		if request := requester.Request(); request != nil {
-			r = request
+
+		controllerValue = b.pool.Get().(reflect.Value)
+		controllerValue.Elem().Set(b.prototype.Elem())
+		controller = controllerValue.Interface()
+		if binder, ok := controller.(lazycontroller.RequestBinder); ok {
+			if err := binder.BindRequest(w, r, route); err != nil {
+				if controllerSpan != nil {
+					controllerSpan.RecordError(err)
+				}
+				handleControllerError(b.ctx, w, r, controller, err)
+				return false
+			}
 		}
-	}
-	lazycontroller.ReportController(r, controller)
-	if before, ok := controller.(lazycontroller.BeforeAction); ok {
-		if err := before.BeforeAction(); err != nil {
-			handleControllerError(b.ctx, w, r, controller, err)
-			return
+		if requester, ok := controller.(interface{ Request() *http.Request }); ok {
+			if request := requester.Request(); request != nil {
+				r = request
+			}
 		}
+		lazycontroller.ReportController(r, controller)
+		if before, ok := controller.(lazycontroller.BeforeAction); ok {
+			if err := before.BeforeAction(); err != nil {
+				if controllerSpan != nil {
+					controllerSpan.RecordError(err)
+				}
+				handleControllerError(b.ctx, w, r, controller, err)
+				return false
+			}
+		}
+		return true
+	}()
+	if !controllerReady {
+		return
 	}
 
-	if err := b.actionPlan.Call(controllerValue, w, r); err != nil {
-		handleControllerError(b.ctx, w, r, controller, err)
+	actionRequest, actionSpan := requestRegion(r, routeOperationName("controller.action", route),
+		slog.String("http.route", route.Path),
+		slog.String("route.name", route.Name),
+		slog.String("controller", route.Controller),
+		slog.String("action", route.Action),
+	)
+	actionErr := callWithActionRegion(actionSpan, func() error {
+		return b.actionPlan.Call(controllerValue, w, actionRequest)
+	})
+	if actionErr != nil {
+		handleControllerError(b.ctx, w, r, controller, actionErr)
 		return
 	}
 
@@ -163,6 +209,20 @@ func routeForRequest(r *http.Request) lazyview.Route {
 	}
 }
 
+func routeOperationName(kind string, route lazyview.Route) string {
+	parts := []string{strings.TrimSpace(route.Controller), strings.TrimSpace(route.Action)}
+	switch {
+	case parts[0] != "" && parts[1] != "":
+		return kind + " " + parts[0] + "." + parts[1]
+	case parts[0] != "":
+		return kind + " " + parts[0]
+	case parts[1] != "":
+		return kind + " " + parts[1]
+	default:
+		return kind
+	}
+}
+
 func actionValue(action any) reflect.Value {
 	actionValue := reflect.ValueOf(action)
 	if !actionValue.IsValid() {
@@ -176,22 +236,61 @@ func actionValue(action any) reflect.Value {
 
 func Handle(action Action) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r, dispatchSpan := requestRegion(r, "dispatch")
+		if dispatchSpan != nil {
+			defer dispatchSpan.End()
+		}
 		defer func() {
 			if recovered := recover(); recovered != nil {
 				err := lazycontroller.PanicError(recovered)
+				if dispatchSpan != nil {
+					dispatchSpan.RecordError(err)
+				}
 				if lazycontroller.ReportError(r, nil, err) {
 					return
 				}
 				lazycontroller.WriteError(w, r, err)
 			}
 		}()
-		if err := action(w, r); err != nil {
-			if lazycontroller.ReportError(r, nil, err) {
+		actionRequest, actionSpan := requestRegion(r, "action")
+		actionErr := callWithActionRegion(actionSpan, func() error {
+			return action(w, actionRequest)
+		})
+		if actionErr != nil {
+			if lazycontroller.ReportError(r, nil, actionErr) {
 				return
 			}
-			lazycontroller.WriteError(w, r, err)
+			lazycontroller.WriteError(w, r, actionErr)
+			return
 		}
 	})
+}
+
+func requestRegion(r *http.Request, name string, attrs ...slog.Attr) (*http.Request, *lazytracing.Span) {
+	ctx, span := lazytelemetry.StartRegion(r.Context(), name, attrs...)
+	if span == nil {
+		return r, nil
+	}
+	return r.WithContext(ctx), span
+}
+
+func callWithActionRegion(span *lazytracing.Span, call func() error) (err error) {
+	if span != nil {
+		defer span.End()
+	}
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			err = lazycontroller.PanicError(recovered)
+			if span != nil {
+				span.RecordError(err)
+			}
+			panic(recovered)
+		}
+		if err != nil && span != nil {
+			span.RecordError(err)
+		}
+	}()
+	return call()
 }
 
 type controllerErrorHandler interface {

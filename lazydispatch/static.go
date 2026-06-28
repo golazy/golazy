@@ -23,6 +23,10 @@ func Static(files fs.FS) Middleware {
 	}
 }
 
+func (s staticFiles) MiddlewareName() string {
+	return "lazydispatch.Static"
+}
+
 func (s staticFiles) Handler(next http.Handler) http.Handler {
 	if next == nil {
 		next = http.NotFoundHandler()

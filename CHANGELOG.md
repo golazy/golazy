@@ -12,6 +12,9 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Lazydev control-plane endpoints can enable or disable detailed request
   monitoring, which records per-request Go runtime traces, span JSON, and
   request-local log JSONL under `.tmp/traces`.
+- Framework telemetry records child regions for dispatched middleware, routing,
+  dispatch, controller setup, action calls, view rendering, layouts, and
+  partials when a request span is active.
 - `golazy.dev/lazydoc` now records source file and line metadata for packages,
   values, functions, types, and methods so rendered package docs can link
   directly to repository source.

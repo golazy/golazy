@@ -6,10 +6,13 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log/slog"
 	"net/http"
 	"path"
 	"path/filepath"
 	"strings"
+
+	"golazy.dev/lazytelemetry"
 )
 
 // Views owns the application view filesystem, registered engines, and global helpers.
@@ -109,11 +112,11 @@ func (v *Views) Render(options Options) error {
 
 	if !options.UseLayout {
 		setContentType(options.Writer, renderContext.Format)
-		return v.renderTemplate(renderContext, options.Writer, file)
+		return v.renderNamedTemplate(renderContext, options.Writer, file, templateRegionName("view.render", file))
 	}
 
 	var content bytes.Buffer
-	if err := v.renderTemplate(renderContext, &content, file); err != nil {
+	if err := v.renderNamedTemplate(renderContext, &content, file, templateRegionName("view.render", file)); err != nil {
 		return err
 	}
 
@@ -132,7 +135,7 @@ func (v *Views) Render(options Options) error {
 	layoutContext.Data = layoutContext.Variables
 
 	setContentType(options.Writer, renderContext.Format)
-	return v.renderTemplate(&layoutContext, options.Writer, layoutFile)
+	return v.renderNamedTemplate(&layoutContext, options.Writer, layoutFile, templateRegionName("view.layout", layoutFile))
 }
 
 // RenderString renders a view to a string.
@@ -196,6 +199,51 @@ func (v *Views) renderTemplate(ctx *Context, writer io.Writer, file string) erro
 		return fmt.Errorf("lazyview: no engine registered for %q", extension)
 	}
 	return engine.Render(ctx, writer, file)
+}
+
+func (v *Views) renderNamedTemplate(ctx *Context, writer io.Writer, file string, regionName string) (err error) {
+	if ctx == nil {
+		return v.renderTemplate(ctx, writer, file)
+	}
+	regionCtx, span := lazytelemetry.StartRegion(ctx.Context, regionName, renderAttributes(ctx, file)...)
+	if span == nil {
+		return v.renderTemplate(ctx, writer, file)
+	}
+	defer span.End()
+	defer func() {
+		if err != nil {
+			span.RecordError(err)
+		}
+	}()
+	renderContext := *ctx
+	renderContext.Context = regionCtx
+	return v.renderTemplate(&renderContext, writer, file)
+}
+
+func renderAttributes(ctx *Context, file string) []slog.Attr {
+	attrs := []slog.Attr{
+		slog.String("view.file", file),
+		slog.String("view.format", ctx.Format),
+		slog.String("view.controller", ctx.Controller),
+		slog.String("view.action", ctx.Action),
+	}
+	if ctx.Partial != "" {
+		attrs = append(attrs, slog.String("view.partial", ctx.Partial))
+	}
+	if ctx.Layout != "" {
+		attrs = append(attrs, slog.String("view.layout", ctx.Layout))
+	}
+	if ctx.Route.Name != "" {
+		attrs = append(attrs, slog.String("route.name", ctx.Route.Name))
+	}
+	return attrs
+}
+
+func templateRegionName(kind string, file string) string {
+	if file == "" {
+		return kind
+	}
+	return kind + " " + file
 }
 
 func (v *Views) findView(ctx *Context) (string, error) {
@@ -303,8 +351,16 @@ func (ctx *Context) partial(args ...any) (Fragment, error) {
 		}
 	}
 
+	partialCtx, span := lazytelemetry.StartRegion(ctx.Context, partialRegionName(name),
+		slog.String("view.partial", name),
+		slog.String("view.controller", ctx.Controller),
+		slog.String("view.format", ctx.Format),
+	)
+	if span != nil {
+		defer span.End()
+	}
 	body, err := ctx.Views.RenderString(Options{
-		Context:    ctx.Context,
+		Context:    partialCtx,
 		Request:    ctx.Request,
 		Variables:  variables,
 		Data:       data,
@@ -318,12 +374,22 @@ func (ctx *Context) partial(args ...any) (Fragment, error) {
 		UseLayout:  false,
 	})
 	if err != nil {
+		if span != nil {
+			span.RecordError(err)
+		}
 		return Fragment{}, err
 	}
 	return Fragment{
 		Body:        body,
 		ContentType: contentTypeForFormat(ctx.Format),
 	}, nil
+}
+
+func partialRegionName(name string) string {
+	if name == "" {
+		return "view.partial"
+	}
+	return "view.partial " + name
 }
 
 func copyVariables(source map[string]any) map[string]any {

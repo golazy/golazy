@@ -1,10 +1,12 @@
 package lazyview_test
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"testing/fstest"
 
+	"golazy.dev/lazytelemetry/lazytracing"
 	"golazy.dev/lazyview"
 	_ "golazy.dev/lazyview/gotmpl"
 )
@@ -62,6 +64,46 @@ func TestRenderUsesHelpersAndPartials(t *testing.T) {
 
 	if got, want := out.String(), `<main><p>Ada</p> hello Ada articles</main>`; got != want {
 		t.Fatalf("rendered body = %q, want %q", got, want)
+	}
+}
+
+func TestRenderCreatesTraceRegionsForViewsLayoutsAndPartials(t *testing.T) {
+	views, err := lazyview.New(fstest.MapFS{
+		"layouts/app.html.tpl": {Data: []byte(`<main>{{.content}}</main>`)},
+		"posts/index.html.tpl": {Data: []byte(`{{ partial "post" . }}`)},
+		"posts/_post.html.tpl": {Data: []byte(`<p>{{.name}}</p>`)},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, root := lazytracing.StartSpan(context.Background(), "http.server.request")
+	defer root.End()
+	var out strings.Builder
+	err = views.Render(lazyview.Options{
+		Context:    ctx,
+		Writer:     &out,
+		Variables:  map[string]any{"name": "Ada"},
+		Controller: "posts",
+		Action:     "index",
+		UseLayout:  true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := out.String(), `<main><p>Ada</p></main>`; got != want {
+		t.Fatalf("rendered body = %q, want %q", got, want)
+	}
+
+	counts := spanPrefixCounts(root, []string{"view.render", "view.partial", "view.layout"})
+	if counts["view.render"] != 2 {
+		t.Fatalf("view.render spans = %d, want 2", counts["view.render"])
+	}
+	if counts["view.partial"] != 1 {
+		t.Fatalf("view.partial spans = %d, want 1", counts["view.partial"])
+	}
+	if counts["view.layout"] != 1 {
+		t.Fatalf("view.layout spans = %d, want 1", counts["view.layout"])
 	}
 }
 
@@ -244,6 +286,26 @@ func TestPartialReportsTriedViews(t *testing.T) {
 			t.Fatalf("error = %q, want tried path %q", message, expected)
 		}
 	}
+}
+
+func spanPrefixCounts(span *lazytracing.Span, prefixes []string) map[string]int {
+	counts := map[string]int{}
+	var walk func(*lazytracing.Span)
+	walk = func(span *lazytracing.Span) {
+		if span == nil {
+			return
+		}
+		for _, prefix := range prefixes {
+			if strings.HasPrefix(span.Name(), prefix) {
+				counts[prefix]++
+			}
+		}
+		for _, child := range span.Children() {
+			walk(child)
+		}
+	}
+	walk(span)
+	return counts
 }
 
 func TestPartialUsesMapArgumentAsContext(t *testing.T) {

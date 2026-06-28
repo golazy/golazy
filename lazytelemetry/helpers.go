@@ -59,6 +59,13 @@ func StartSpan(ctx context.Context, name string, attrs ...slog.Attr) (context.Co
 	return lazytracing.StartSpan(ctx, name, attrs...)
 }
 
+// StartRegion starts a child span and Go runtime trace region when ctx carries
+// an active span. It returns ctx unchanged and a nil span when telemetry is not
+// active for the request.
+func StartRegion(ctx context.Context, name string, attrs ...slog.Attr) (context.Context, *lazytracing.Span) {
+	return lazytracing.StartRegion(ctx, name, attrs...)
+}
+
 // SpanFromContext returns the active span attached to ctx.
 func SpanFromContext(ctx context.Context) *lazytracing.Span {
 	return lazytracing.SpanFromContext(ctx)

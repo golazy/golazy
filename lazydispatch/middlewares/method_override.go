@@ -22,24 +22,37 @@ func MethodOverride() lazydispatch.Middleware {
 }
 
 func MethodOverrideWithLimit(maxScan int64) lazydispatch.Middleware {
-	return lazydispatch.MiddlewareFunc(func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if shouldSkipMethodOverride(r) {
-				next.ServeHTTP(w, r)
-				return
-			}
+	return methodOverride{maxScan: maxScan}
+}
 
-			method, present, valid := readMethodOverride(r, maxScan)
-			if present && !valid {
-				http.Error(w, "invalid _method", http.StatusBadRequest)
-				return
-			}
-			if valid {
-				r = r.WithContext(context.WithValue(r.Context(), originalMethodKey{}, r.Method))
-				r.Method = strings.ToUpper(method)
-			}
+type methodOverride struct {
+	maxScan int64
+}
+
+func (methodOverride) MiddlewareName() string {
+	return "lazydispatch.middlewares.MethodOverride"
+}
+
+func (middleware methodOverride) Handler(next http.Handler) http.Handler {
+	if next == nil {
+		next = http.NotFoundHandler()
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if shouldSkipMethodOverride(r) {
 			next.ServeHTTP(w, r)
-		})
+			return
+		}
+
+		method, present, valid := readMethodOverride(r, middleware.maxScan)
+		if present && !valid {
+			http.Error(w, "invalid _method", http.StatusBadRequest)
+			return
+		}
+		if valid {
+			r = r.WithContext(context.WithValue(r.Context(), originalMethodKey{}, r.Method))
+			r.Method = strings.ToUpper(method)
+		}
+		next.ServeHTTP(w, r)
 	})
 }
 

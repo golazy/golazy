@@ -27,7 +27,7 @@ func RouteOnly(router RouteHandler, middlewares ...Middleware) Middleware {
 		}
 		routed := next
 		for i := len(middlewares) - 1; i >= 0; i-- {
-			routed = middlewares[i].Handler(routed)
+			routed = instrumentMiddleware(middlewares[i], routed, i)
 		}
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if router != nil && router.HandlesPath(r.URL.Path) {

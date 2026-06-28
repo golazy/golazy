@@ -13,6 +13,7 @@ import (
 	"golazy.dev/lazycontroller"
 	"golazy.dev/lazydispatch"
 	"golazy.dev/lazysse"
+	"golazy.dev/lazytelemetry/lazytracing"
 	"golazy.dev/lazyturbo"
 	_ "golazy.dev/lazyview/gotmpl"
 )
@@ -99,6 +100,38 @@ func TestControllerActionAutoRendersDefaultView(t *testing.T) {
 	}
 	if got, want := response.Body.String(), "<main>index hello</main>"; got != want {
 		t.Fatalf("body = %q, want %q", got, want)
+	}
+}
+
+func TestControllerActionCreatesTraceRegions(t *testing.T) {
+	scope := newAutoRenderScope(t)
+	scope.Get("/posts", newAutoRenderController, (*autoRenderController).Index)
+
+	ctx, root := lazytracing.StartSpan(context.Background(), "http.server.request")
+	defer root.End()
+	request := httptest.NewRequest(http.MethodGet, "/posts", nil).WithContext(ctx)
+	response := httptest.NewRecorder()
+	scope.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+	counts := traceRegionPrefixCounts(root, []string{
+		"router",
+		"dispatch",
+		"controller ",
+		"controller.action ",
+		"view.render",
+		"view.layout",
+	})
+	for _, name := range []string{"router", "dispatch", "controller", "controller.action", "view.render", "view.layout"} {
+		prefix := name
+		if name == "controller" || name == "controller.action" {
+			prefix += " "
+		}
+		if counts[prefix] == 0 {
+			t.Fatalf("trace regions = %#v, missing %q", counts, name)
+		}
 	}
 }
 
@@ -490,4 +523,24 @@ func newAutoRenderScope(t *testing.T) *Scope {
 	}
 	ctx := lazycontroller.WithRenderer(context.Background(), renderer)
 	return New(ctx)
+}
+
+func traceRegionPrefixCounts(span *lazytracing.Span, prefixes []string) map[string]int {
+	counts := map[string]int{}
+	var walk func(*lazytracing.Span)
+	walk = func(span *lazytracing.Span) {
+		if span == nil {
+			return
+		}
+		for _, prefix := range prefixes {
+			if strings.HasPrefix(span.Name(), prefix) {
+				counts[prefix]++
+			}
+		}
+		for _, child := range span.Children() {
+			walk(child)
+		}
+	}
+	walk(span)
+	return counts
 }

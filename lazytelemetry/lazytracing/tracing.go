@@ -20,6 +20,7 @@ import (
 
 type contextKey struct{}
 type traceContextKey struct{}
+type requestIDKey struct{}
 
 // TraceContext stores W3C trace context identifiers without depending on an
 // OpenTelemetry SDK.
@@ -79,6 +80,22 @@ func TraceContextFromContext(ctx context.Context) (TraceContext, bool) {
 	return traceContext, ok
 }
 
+// WithRequestID attaches requestID to ctx for span and runtime trace
+// correlation.
+func WithRequestID(ctx context.Context, requestID string) context.Context {
+	requestID = strings.TrimSpace(requestID)
+	if requestID == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, requestIDKey{}, requestID)
+}
+
+// RequestID returns the request id attached to ctx.
+func RequestID(ctx context.Context) string {
+	requestID, _ := ctx.Value(requestIDKey{}).(string)
+	return requestID
+}
+
 // ParseTraceparent parses the W3C traceparent header.
 func ParseTraceparent(traceparent, tracestate string) (TraceContext, bool) {
 	parts := strings.Split(strings.TrimSpace(traceparent), "-")
@@ -109,6 +126,7 @@ func StartSpan(ctx context.Context, name string, attributes ...slog.Attr) (conte
 	if name == "" {
 		name = "span"
 	}
+	attributes = spanAttributesFromContext(ctx, attributes)
 	parentSpan := SpanFromContext(ctx)
 	traceContext, ok := TraceContextFromContext(ctx)
 	if !ok || traceContext.TraceID == "" {
@@ -135,10 +153,13 @@ func StartSpan(ctx context.Context, name string, attributes ...slog.Attr) (conte
 	ctx = context.WithValue(ctx, traceContextKey{}, traceContext)
 
 	var task *runtimetrace.Task
-	if parentID == "" {
+	if parentSpan == nil {
 		ctx, task = runtimetrace.NewTask(ctx, name)
 	}
 	region := runtimetrace.StartRegion(ctx, name)
+	if requestID := RequestID(ctx); requestID != "" {
+		runtimetrace.Log(ctx, "request_id", requestID)
+	}
 
 	span := &Span{
 		name:       name,
@@ -156,6 +177,15 @@ func StartSpan(ctx context.Context, name string, attributes ...slog.Attr) (conte
 		parentSpan.addChild(span)
 	}
 	return context.WithValue(ctx, contextKey{}, span), span
+}
+
+func spanAttributesFromContext(ctx context.Context, attributes []slog.Attr) []slog.Attr {
+	requestID := RequestID(ctx)
+	if requestID == "" || hasAttr(attributes, "request_id") {
+		return attributes
+	}
+	attributes = append(append([]slog.Attr(nil), attributes...), slog.String("request_id", requestID))
+	return attributes
 }
 
 // StartRegion starts a child span and Go runtime trace region when ctx already
@@ -188,6 +218,19 @@ func SpanID(ctx context.Context) string {
 		return traceContext.SpanID
 	}
 	return ""
+}
+
+// Log records a message in the Go runtime trace when ctx carries an active
+// span. Span event recording is owned by the logging package.
+func Log(ctx context.Context, category string, message string) {
+	if SpanFromContext(ctx) == nil {
+		return
+	}
+	category = strings.TrimSpace(category)
+	if category == "" {
+		category = "event"
+	}
+	runtimetrace.Log(ctx, category, message)
 }
 
 // Name returns the span name.
@@ -309,6 +352,15 @@ func (s *Span) addChild(child *Span) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.children = append(s.children, child)
+}
+
+func hasAttr(attrs []slog.Attr, name string) bool {
+	for _, attr := range attrs {
+		if attr.Key == name {
+			return true
+		}
+	}
+	return false
 }
 
 // RecordError records err on the span.

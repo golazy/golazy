@@ -100,6 +100,25 @@ func TestStartRegionCreatesChildSpan(t *testing.T) {
 	}
 }
 
+func TestStartSpanAddsRequestIDAttribute(t *testing.T) {
+	ctx := WithRequestID(context.Background(), "req-123")
+	ctx, root := StartSpan(ctx, "http.server.request")
+	defer root.End()
+
+	if got := spanAttrString(root, "request_id"); got != "req-123" {
+		t.Fatalf("root request_id attr = %q, want req-123", got)
+	}
+
+	_, region := StartRegion(ctx, "router")
+	if region == nil {
+		t.Fatal("region span is nil")
+	}
+	defer region.End()
+	if got := spanAttrString(region, "request_id"); got != "req-123" {
+		t.Fatalf("region request_id attr = %q, want req-123", got)
+	}
+}
+
 func TestStartRegionRequiresActiveSpan(t *testing.T) {
 	ctx, region := StartRegion(context.Background(), "router")
 	if region != nil {
@@ -114,4 +133,13 @@ type assertErr string
 
 func (e assertErr) Error() string {
 	return string(e)
+}
+
+func spanAttrString(span *Span, name string) string {
+	for _, attr := range span.Attributes() {
+		if attr.Key == name {
+			return attr.Value.String()
+		}
+	}
+	return ""
 }

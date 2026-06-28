@@ -12,21 +12,14 @@ import (
 	"golazy.dev/lazytelemetry/lazytracing"
 )
 
-type requestIDKey struct{}
-
 // WithRequestID attaches requestID to ctx.
 func WithRequestID(ctx context.Context, requestID string) context.Context {
-	requestID = strings.TrimSpace(requestID)
-	if requestID == "" {
-		return ctx
-	}
-	return context.WithValue(ctx, requestIDKey{}, requestID)
+	return lazytracing.WithRequestID(ctx, requestID)
 }
 
 // RequestID returns the request id attached to ctx.
 func RequestID(ctx context.Context) string {
-	requestID, _ := ctx.Value(requestIDKey{}).(string)
-	return requestID
+	return lazytracing.RequestID(ctx)
 }
 
 // Logger returns the slog logger attached to ctx.

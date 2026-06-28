@@ -35,6 +35,7 @@ func TestContextLoggerAddsAttrsGroupsAndTags(t *testing.T) {
 func TestLogAttrsRecordsSpanEvent(t *testing.T) {
 	var out bytes.Buffer
 	ctx := WithLogger(context.Background(), NewJSONLogger(&out))
+	ctx = lazytracing.WithRequestID(ctx, "req-1")
 	ctx, span := lazytracing.StartSpan(ctx, "request")
 	defer span.End()
 
@@ -49,6 +50,9 @@ func TestLogAttrsRecordsSpanEvent(t *testing.T) {
 	}
 	if got := attrString(events[0].Attributes, "message"); got != "slow render" {
 		t.Fatalf("message attr = %q", got)
+	}
+	if got := attrString(events[0].Attributes, "request_id"); got != "req-1" {
+		t.Fatalf("request_id attr = %q", got)
 	}
 	if got := attrString(events[0].Attributes, "view"); got != "home/index" {
 		t.Fatalf("view attr = %q", got)

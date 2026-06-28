@@ -70,11 +70,12 @@ func TestMiddlewareWritesRequestCaptureFilesWhenMonitoringEnabled(t *testing.T) 
 			MallocsDelta uint64 `json:"mallocs_delta"`
 		} `json:"memory"`
 		Spans []struct {
-			Name     string `json:"name"`
-			TraceID  string `json:"trace_id"`
-			SpanID   string `json:"span_id"`
-			ParentID string `json:"parent_id"`
-			Events   []struct {
+			Name       string                 `json:"name"`
+			TraceID    string                 `json:"trace_id"`
+			SpanID     string                 `json:"span_id"`
+			ParentID   string                 `json:"parent_id"`
+			Attributes map[string]interface{} `json:"attributes"`
+			Events     []struct {
 				Name       string                 `json:"name"`
 				Attributes map[string]interface{} `json:"attributes"`
 			} `json:"events"`
@@ -113,8 +114,14 @@ func TestMiddlewareWritesRequestCaptureFilesWhenMonitoringEnabled(t *testing.T) 
 	if spans.Spans[1].ParentID != spans.Spans[0].SpanID {
 		t.Fatalf("child parent_id = %q, want %q", spans.Spans[1].ParentID, spans.Spans[0].SpanID)
 	}
+	if got := spans.Spans[1].Attributes["request_id"]; got != "req-123" {
+		t.Fatalf("child request_id attr = %#v, want req-123", got)
+	}
 	if !spanEventsContainMessage(spans.Spans[1].Events, "inside handler") {
 		t.Fatalf("child span events = %#v, want inside handler log", spans.Spans[1].Events)
+	}
+	if !spanEventsContainAttr(spans.Spans[1].Events, "request_id", "req-123") {
+		t.Fatalf("child span events = %#v, want request_id attr", spans.Spans[1].Events)
 	}
 
 	logData, err := os.ReadFile(logPath)
@@ -162,6 +169,18 @@ func spanEventsContainMessage(events []struct {
 }, message string) bool {
 	for _, event := range events {
 		if event.Name == "log" && event.Attributes["message"] == message {
+			return true
+		}
+	}
+	return false
+}
+
+func spanEventsContainAttr(events []struct {
+	Name       string                 `json:"name"`
+	Attributes map[string]interface{} `json:"attributes"`
+}, name string, value interface{}) bool {
+	for _, event := range events {
+		if event.Name == "log" && event.Attributes[name] == value {
 			return true
 		}
 	}

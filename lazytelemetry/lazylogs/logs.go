@@ -86,13 +86,17 @@ func WithGroup(ctx context.Context, group string) context.Context {
 func LogAttrs(ctx context.Context, level slog.Level, message string, attrs ...slog.Attr) {
 	Logger(ctx).LogAttrs(ctx, level, message, attrs...)
 	if span := lazytracing.SpanFromContext(ctx); span != nil {
-		eventAttrs := make([]slog.Attr, 0, len(attrs)+2)
+		eventAttrs := make([]slog.Attr, 0, len(attrs)+3)
 		eventAttrs = append(eventAttrs,
 			slog.String("level", strings.ToLower(level.String())),
 			slog.String("message", message),
 		)
+		if requestID := lazytracing.RequestID(ctx); requestID != "" && !hasAttr(attrs, "request_id") {
+			eventAttrs = append(eventAttrs, slog.String("request_id", requestID))
+		}
 		eventAttrs = append(eventAttrs, attrs...)
 		span.AddEvent("log", eventAttrs...)
+		lazytracing.Log(ctx, "log", strings.ToLower(level.String())+" "+message)
 	}
 }
 
@@ -114,4 +118,13 @@ func Warn(ctx context.Context, message string, attrs ...slog.Attr) {
 // Error logs an error message.
 func Error(ctx context.Context, message string, attrs ...slog.Attr) {
 	LogAttrs(ctx, slog.LevelError, message, attrs...)
+}
+
+func hasAttr(attrs []slog.Attr, name string) bool {
+	for _, attr := range attrs {
+		if attr.Key == name {
+			return true
+		}
+	}
+	return false
 }

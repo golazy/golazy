@@ -14,7 +14,8 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   request-local log JSONL under `.tmp/traces`.
 - Framework telemetry records child regions for dispatched middleware, routing,
   dispatch, controller setup, action calls, view rendering, layouts, and
-  partials when a request span is active.
+  partials when a request span is active. Request ids are attached to request
+  spans, child regions, and log span-events.
 - `golazy.dev/lazydoc` now records source file and line metadata for packages,
   values, functions, types, and methods so rendered package docs can link
   directly to repository source.

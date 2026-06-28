@@ -17,6 +17,9 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and read-only job state on the control plane.
 - `golazy.dev/lazymigrate`, a backend-agnostic migration loader and planner
   with source/backend diffing, schema dump/load hooks, and a fake test backend.
+- `golazy.dev/lazysupport/inflection.Irregular` for registering
+  application-specific singular/plural pairs before conventional resource names
+  are derived.
 
 ### Changed
 

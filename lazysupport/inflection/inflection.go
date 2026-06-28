@@ -39,6 +39,13 @@ func Singularize(plural string) string {
 	return Default.Singularize(plural)
 }
 
+// Irregular registers a singular/plural pair on the default inflector.
+//
+// Call it from package initialization before code derives conventional names.
+func Irregular(singular string, plural string) {
+	Default.Irregular(singular, plural)
+}
+
 func Camelize(term string) string {
 	return Default.Camelize(term)
 }
@@ -86,6 +93,11 @@ func (i *Inflector) Pluralize(singular string) string {
 
 func (i *Inflector) Singularize(plural string) string {
 	return i.convert(plural, i.singulars)
+}
+
+// Irregular registers a singular/plural pair on this inflector.
+func (i *Inflector) Irregular(singular string, plural string) {
+	i.irregular(singular, plural)
 }
 
 func (i *Inflector) Camelize(term string) string {

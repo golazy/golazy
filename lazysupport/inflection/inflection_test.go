@@ -91,6 +91,18 @@ func TestSingularize(t *testing.T) {
 	}
 }
 
+func TestIrregularAddsCustomRules(t *testing.T) {
+	inflector := newDefaultInflector()
+	inflector.Irregular("console", "console")
+
+	if got, want := inflector.Pluralize("console"), "console"; got != want {
+		t.Fatalf("Pluralize(console) = %q, want %q", got, want)
+	}
+	if got, want := inflector.Singularize("console"), "console"; got != want {
+		t.Fatalf("Singularize(console) = %q, want %q", got, want)
+	}
+}
+
 func TestPluralizePreservesCamelCasePrefix(t *testing.T) {
 	if got, want := Pluralize("CamelOctopus"), "CamelOctopi"; got != want {
 		t.Fatalf("Pluralize(CamelOctopus) = %q, want %q", got, want)

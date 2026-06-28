@@ -7,6 +7,11 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- `lazydeps` now logs dependency shutdown reasons, context cancellation, and
+  cleanup duration for every registered service.
+
 ## [0.1.16] - 2026-06-27
 
 ### Added

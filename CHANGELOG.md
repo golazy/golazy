@@ -22,6 +22,9 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `golazy.dev/lazyjobs`, a background job runner with typed JSON job payloads,
   an in-memory backend, retries, `lazyapp.Config.Jobs` wiring, context access,
   and read-only job state on the control plane.
+- Separate control-plane listeners now serve a compact endpoint index at
+  `GET /`, while same-listener control planes leave the application root route
+  untouched.
 - `golazy.dev/lazymigrate`, a backend-agnostic migration loader and planner
   with source/backend diffing, schema dump/load hooks, and a fake test backend.
 - `golazy.dev/lazysupport/inflection.Irregular` for registering

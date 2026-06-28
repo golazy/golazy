@@ -1194,6 +1194,15 @@ func TestHandlersForListenSeparateControlPlaneWhenAddressesDiffer(t *testing.T) 
 	if got := response.Body.String(); got != "live\n" {
 		t.Fatalf("control handler /livez body = %q, want control plane", got)
 	}
+
+	response = httptest.NewRecorder()
+	controlHandler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("control handler / status = %d, want %d", response.Code, http.StatusOK)
+	}
+	if got := response.Body.String(); !strings.Contains(got, "GoLazy Control Plane") || !strings.Contains(got, "/livez") {
+		t.Fatalf("control handler / body = %q, want control-plane index", got)
+	}
 }
 
 func TestHandlersForListenMountsPprofOnSeparateControlPlaneAddress(t *testing.T) {
@@ -1241,6 +1250,30 @@ func TestHandlersForListenDoesNotMountPprofWhenControlPlaneAddressMatches(t *tes
 	appHandler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/debug/pprof/", nil))
 	if response.Code == http.StatusOK {
 		t.Fatal("same-listener handler served pprof automatically")
+	}
+}
+
+func TestHandlersForListenSameAddressLeavesAppRoot(t *testing.T) {
+	app := New(Config{
+		Name:         "test",
+		ControlPlane: lazycontrolplane.Config{},
+		Drawer: func(router *lazyroutes.Scope) {
+			router.HandleFunc(http.MethodGet, "/", func(w http.ResponseWriter, _ *http.Request) error {
+				_, _ = fmt.Fprint(w, "app root")
+				return nil
+			})
+		},
+	})
+
+	appHandler, controlHandler := app.handlersForListen(defaultListenAddr, "3000", true)
+	if controlHandler != nil {
+		t.Fatal("control handler is not nil for matching app and control-plane addresses")
+	}
+
+	response := httptest.NewRecorder()
+	appHandler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/", nil))
+	if got := response.Body.String(); got != "app root" {
+		t.Fatalf("app handler / body = %q, want app root", got)
 	}
 }
 

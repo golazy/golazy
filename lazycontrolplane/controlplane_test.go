@@ -119,6 +119,12 @@ func TestHandlerMountsControlPlaneBeforeNext(t *testing.T) {
 	if got := response.Body.String(); got != "app" {
 		t.Fatalf("/app body = %q, want next handler", got)
 	}
+
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/", nil))
+	if got := response.Body.String(); got != "app" {
+		t.Fatalf("/ body = %q, want next handler", got)
+	}
 }
 
 func TestPprofIsExplicit(t *testing.T) {
@@ -146,5 +152,42 @@ func TestEnablePprofIsIdempotent(t *testing.T) {
 	plane.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/debug/pprof/", nil))
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+}
+
+func TestStandaloneHandlerServesIndexWithRegisteredEndpoints(t *testing.T) {
+	plane := New(Config{
+		Metrics: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = fmt.Fprint(w, "metrics")
+		}),
+		Pprof: true,
+	})
+	plane.Handle("POST /jobs/run", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = fmt.Fprint(w, "queued")
+	}))
+
+	response := httptest.NewRecorder()
+	plane.StandaloneHandler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+	if got := response.Header().Get("Content-Type"); !strings.HasPrefix(got, "text/html") {
+		t.Fatalf("Content-Type = %q, want text/html", got)
+	}
+	body := response.Body.String()
+	for _, want := range []string{
+		"GoLazy Control Plane",
+		"Registered endpoints",
+		"GET",
+		"/livez",
+		"/readyz",
+		"/metrics",
+		"POST",
+		"/jobs/run",
+		"/debug/pprof/",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("body missing %q:\n%s", want, body)
+		}
 	}
 }

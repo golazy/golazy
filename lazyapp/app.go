@@ -350,6 +350,7 @@ func (app *App) handlersForListen(appAddr string, controlAddr string, controlAdd
 	}
 	if controlAddrSet {
 		controlPlane.EnablePprof()
+		return appHandler, controlPlane.StandaloneHandler()
 	}
 	return appHandler, controlPlane
 }

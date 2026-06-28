@@ -135,3 +135,16 @@ func TestPprofIsExplicit(t *testing.T) {
 		t.Fatal("pprof profile path is not handled when enabled")
 	}
 }
+
+func TestEnablePprofIsIdempotent(t *testing.T) {
+	plane := New(Config{Pprof: true})
+
+	plane.EnablePprof()
+	plane.EnablePprof()
+
+	response := httptest.NewRecorder()
+	plane.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/debug/pprof/", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+}

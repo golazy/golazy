@@ -30,6 +30,9 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- `lazyapp.ListenAndServe` now automatically mounts standard pprof handlers on
+  the control plane when `CONTROL_PLANE_ADDR` runs on a different listener from
+  the application.
 - Lazydev request trace capture is off by default and no longer depends on OTEL
   exporter environment variables. `OTEL_SDK_DISABLED=true` remains the hard
   disable for lazydev request telemetry.

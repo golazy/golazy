@@ -37,6 +37,7 @@ type ControlPlane struct {
 	paths    map[string]struct{}
 	prefixes []string
 	checks   []ReadinessCheck
+	pprof    bool
 }
 
 // New builds a control plane from config.
@@ -58,7 +59,7 @@ func New(config Config) *ControlPlane {
 		plane.handle("GET /metrics", "/metrics", config.Metrics)
 	}
 	if config.Pprof {
-		plane.mountPprof()
+		plane.EnablePprof()
 	}
 	return plane
 }
@@ -101,7 +102,16 @@ func controlPlanePatternPath(pattern string) string {
 	return path
 }
 
-func (plane *ControlPlane) mountPprof() {
+// EnablePprof registers the standard net/http/pprof handlers.
+//
+// It is safe to call EnablePprof more than once.
+func (plane *ControlPlane) EnablePprof() {
+	if plane == nil {
+		panic("lazycontrolplane: control plane is nil")
+	}
+	if plane.pprof {
+		return
+	}
 	plane.mux.HandleFunc("/debug/pprof/", pprof.Index)
 	plane.mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
 	plane.mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
@@ -109,6 +119,7 @@ func (plane *ControlPlane) mountPprof() {
 	plane.mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 	plane.paths["/debug/pprof"] = struct{}{}
 	plane.prefixes = append(plane.prefixes, "/debug/pprof/")
+	plane.pprof = true
 }
 
 // HandlesPath reports whether path belongs to the control plane.

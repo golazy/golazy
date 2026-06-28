@@ -345,8 +345,11 @@ func (app *App) handlersForListen(appAddr string, controlAddr string, controlAdd
 	if controlPlane == nil {
 		return appHandler, nil
 	}
-	if sameListenAddr(appAddr, controlAddr) {
+	if controlAddrSet && sameListenAddr(appAddr, controlAddr) {
 		return controlPlane.Handler(appHandler), nil
+	}
+	if controlAddrSet {
+		controlPlane.EnablePprof()
 	}
 	return appHandler, controlPlane
 }

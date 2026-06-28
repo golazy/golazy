@@ -1196,6 +1196,54 @@ func TestHandlersForListenSeparateControlPlaneWhenAddressesDiffer(t *testing.T) 
 	}
 }
 
+func TestHandlersForListenMountsPprofOnSeparateControlPlaneAddress(t *testing.T) {
+	app := New(Config{
+		Name:         "test",
+		ControlPlane: lazycontrolplane.Config{},
+	})
+
+	appHandler, controlHandler := app.handlersForListen(defaultListenAddr, ":9090", true)
+	if controlHandler == nil {
+		t.Fatal("control handler is nil for separate control-plane address")
+	}
+	if !app.ControlPlane.HandlesPath("/debug/pprof/profile") {
+		t.Fatal("configured control plane does not handle pprof after separate listen setup")
+	}
+
+	response := httptest.NewRecorder()
+	controlHandler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/debug/pprof/", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("control handler pprof status = %d, want %d", response.Code, http.StatusOK)
+	}
+
+	response = httptest.NewRecorder()
+	appHandler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/debug/pprof/", nil))
+	if response.Code == http.StatusOK {
+		t.Fatal("app handler served pprof on the public listener")
+	}
+}
+
+func TestHandlersForListenDoesNotMountPprofWhenControlPlaneAddressMatches(t *testing.T) {
+	app := New(Config{
+		Name:         "test",
+		ControlPlane: lazycontrolplane.Config{},
+	})
+
+	appHandler, controlHandler := app.handlersForListen(defaultListenAddr, "3000", true)
+	if controlHandler != nil {
+		t.Fatal("control handler is not nil for matching app and control-plane addresses")
+	}
+	if app.ControlPlane.HandlesPath("/debug/pprof/") {
+		t.Fatal("control plane handles pprof when mounted on the app listener")
+	}
+
+	response := httptest.NewRecorder()
+	appHandler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/debug/pprof/", nil))
+	if response.Code == http.StatusOK {
+		t.Fatal("same-listener handler served pprof automatically")
+	}
+}
+
 func TestSameListenAddr(t *testing.T) {
 	tests := []struct {
 		name  string

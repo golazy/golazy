@@ -47,9 +47,10 @@ The returned `App` implements `http.Handler`. `App.ListenAndServe` is the
 default server shortcut; it uses `ADDR`, then `PORT`, then
 `127.0.0.1:3000`. When `CONTROL_PLANE_ADDR` is set, it activates the default
 control plane and either mounts it into the app server when the addresses match
-or starts a second server when the address differs. It also sets the server base
-context to `app.Context`, so request contexts include the dependencies
-initialized by `lazyapp.New`.
+or starts a second server when the address differs. Separate control-plane
+servers automatically include `/debug/pprof/` and the standard pprof subpaths.
+It also sets the server base context to `app.Context`, so request contexts
+include the dependencies initialized by `lazyapp.New`.
 
 When using your own `http.Server`, set `BaseContext` manually:
 

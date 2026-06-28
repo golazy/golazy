@@ -118,7 +118,7 @@ func beginRequestCapture(enabled bool, requestID string) *requestCapture {
 	capture := &requestCapture{
 		requestID: strings.TrimSpace(requestID),
 		fileID:    traceFileID(requestID),
-		dir:       filepath.Join(".tmp", "traces"),
+		dir:       requestCaptureDirectory,
 		startedAt: time.Now(),
 		locked:    true,
 	}

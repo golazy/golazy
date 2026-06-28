@@ -9,6 +9,9 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Lazydev control-plane endpoints can enable or disable detailed request
+  monitoring, which records per-request Go runtime traces, span JSON, and
+  request-local log JSONL under `.tmp/traces`.
 - `golazy.dev/lazydoc` now records source file and line metadata for packages,
   values, functions, types, and methods so rendered package docs can link
   directly to repository source.
@@ -23,6 +26,9 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Lazydev request trace capture is off by default and no longer depends on OTEL
+  exporter environment variables. `OTEL_SDK_DISABLED=true` remains the hard
+  disable for lazydev request telemetry.
 - `lazyfiles` and `lazymedia` now keep their append-only JSONL repository
   implementations in `golazy.dev/lazyfiles/jsonl` and
   `golazy.dev/lazymedia/jsonl`, with `JSONLRepository` types that satisfy the

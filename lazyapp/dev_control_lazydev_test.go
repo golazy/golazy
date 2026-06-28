@@ -17,6 +17,7 @@ import (
 	"golazy.dev/lazycache"
 	"golazy.dev/lazycontroller"
 	"golazy.dev/lazyroutes"
+	"golazy.dev/lazytelemetry"
 )
 
 type lazyDevReloadController struct {
@@ -98,10 +99,43 @@ func TestLazyDevControlPlaneAggregatesPackageHandlers(t *testing.T) {
 		lazycache.LazyDevCachePath,
 		lazycache.LazyDevCacheOnPath,
 		lazycache.LazyDevCacheOffPath,
+		lazytelemetry.LazyDevRequestMonitoringPath,
+		lazytelemetry.LazyDevRequestMonitoringOnPath,
+		lazytelemetry.LazyDevRequestMonitoringOffPath,
 	} {
 		if !app.ControlPlane.HandlesPath(path) {
 			t.Fatalf("control plane does not handle %s", path)
 		}
+	}
+}
+
+func TestLazyDevControlPlaneServesRequestMonitoringToggle(t *testing.T) {
+	lazytelemetry.SetRequestMonitoringEnabled(false)
+	t.Cleanup(func() {
+		lazytelemetry.SetRequestMonitoringEnabled(false)
+	})
+
+	app := New(Config{Name: "test"})
+	if app.ControlPlane == nil {
+		t.Fatal("lazydev app did not install a control plane")
+	}
+
+	got := requestLazyAppDevRequestMonitoring(t, app, http.MethodGet, lazytelemetry.LazyDevRequestMonitoringPath)
+	if got.Enabled {
+		t.Fatal("request monitoring enabled = true, want default false")
+	}
+	if got.Directory != ".tmp/traces" {
+		t.Fatalf("request monitoring directory = %q, want .tmp/traces", got.Directory)
+	}
+
+	got = requestLazyAppDevRequestMonitoring(t, app, http.MethodPost, lazytelemetry.LazyDevRequestMonitoringOnPath)
+	if !got.Enabled {
+		t.Fatal("request monitoring enabled = false after on")
+	}
+
+	got = requestLazyAppDevRequestMonitoring(t, app, http.MethodPost, lazytelemetry.LazyDevRequestMonitoringOffPath)
+	if got.Enabled {
+		t.Fatal("request monitoring enabled = true after off")
 	}
 }
 
@@ -172,6 +206,11 @@ type lazyDevCacheTestResponse struct {
 	Keys    []string        `json:"keys"`
 }
 
+type lazyDevRequestMonitoringTestResponse struct {
+	Enabled   bool   `json:"enabled"`
+	Directory string `json:"directory"`
+}
+
 func requestLazyAppDevCache(t *testing.T, app *App, method string, path string) lazyDevCacheTestResponse {
 	t.Helper()
 	response := httptest.NewRecorder()
@@ -185,6 +224,23 @@ func requestLazyAppDevCache(t *testing.T, app *App, method string, path string) 
 	var out lazyDevCacheTestResponse
 	if err := json.Unmarshal(response.Body.Bytes(), &out); err != nil {
 		t.Fatalf("decode cache response: %v\n%s", err, response.Body.String())
+	}
+	return out
+}
+
+func requestLazyAppDevRequestMonitoring(t *testing.T, app *App, method string, path string) lazyDevRequestMonitoringTestResponse {
+	t.Helper()
+	response := httptest.NewRecorder()
+	app.ServeHTTP(response, httptest.NewRequest(method, path, nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("%s %s status = %d, want %d: %s", method, path, response.Code, http.StatusOK, response.Body.String())
+	}
+	if got := response.Header().Get("Content-Type"); got != "application/json; charset=utf-8" {
+		t.Fatalf("request monitoring Content-Type = %q, want JSON", got)
+	}
+	var out lazyDevRequestMonitoringTestResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &out); err != nil {
+		t.Fatalf("decode request monitoring response: %v\n%s", err, response.Body.String())
 	}
 	return out
 }

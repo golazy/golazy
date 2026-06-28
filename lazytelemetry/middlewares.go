@@ -32,7 +32,7 @@ type middleware struct {
 	requestDuration     *lazymetrics.HistogramVec
 	otelRequestsTotal   otelmetric.Int64Counter
 	otelRequestDuration otelmetric.Float64Histogram
-	captureRequestFiles bool
+	captureRequestFiles func() bool
 }
 
 // Middleware returns the default telemetry middleware.
@@ -53,9 +53,9 @@ func EnvironmentMiddleware(options ...MiddlewareOption) (lazydispatch.Middleware
 // MiddlewareFromConfig returns a middleware configured from config.
 func MiddlewareFromConfig(config Config, options ...MiddlewareOption) lazydispatch.Middleware {
 	middleware := &middleware{
-		logger:              NewLogger(config, nil),
+		logger:              defaultMiddlewareLogger(config),
 		registry:            lazymetrics.NewRegistry(),
-		captureRequestFiles: config.captureRequestFiles(),
+		captureRequestFiles: func() bool { return captureRequestFilesEnabled(config) },
 	}
 	for _, option := range options {
 		if option != nil {
@@ -63,7 +63,7 @@ func MiddlewareFromConfig(config Config, options ...MiddlewareOption) lazydispat
 		}
 	}
 	if middleware.logger == nil {
-		middleware.logger = NewLogger(config, nil)
+		middleware.logger = defaultMiddlewareLogger(config)
 	}
 	if middleware.registry == nil {
 		middleware.registry = lazymetrics.NewRegistry()
@@ -105,7 +105,7 @@ func (middleware *middleware) Handler(next http.Handler) http.Handler {
 		if requestID == "" {
 			requestID = generateRequestID()
 		}
-		capture := beginRequestCapture(middleware.captureRequestFiles, requestID)
+		capture := beginRequestCapture(middleware.captureEnabled(), requestID)
 
 		ctx := WithRequestID(r.Context(), requestID)
 		ctx = lazylogs.WithLogger(ctx, middleware.logger)
@@ -193,6 +193,13 @@ func (middleware *middleware) Handler(next http.Handler) http.Handler {
 
 		next.ServeHTTP(recorder, request)
 	})
+}
+
+func (middleware *middleware) captureEnabled() bool {
+	if middleware == nil || middleware.captureRequestFiles == nil {
+		return false
+	}
+	return middleware.captureRequestFiles()
 }
 
 func requestMetricAttributes(labels lazymetrics.Labels, status int) []attribute.KeyValue {

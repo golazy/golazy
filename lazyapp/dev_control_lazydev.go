@@ -13,6 +13,7 @@ import (
 	"golazy.dev/lazycontrolplane"
 	"golazy.dev/lazyjobs"
 	"golazy.dev/lazyroutes"
+	"golazy.dev/lazytelemetry"
 )
 
 const lazyDevReloadViewsPath = "/_golazy/views/reload"
@@ -31,6 +32,7 @@ func lazyDevControlPlane(controlPlane *lazycontrolplane.ControlPlane, renderer *
 	lazycontroller.RegisterLazyDevHandlers(controlPlane)
 	lazycache.RegisterLazyDevHandlers(controlPlane, cache)
 	lazyjobs.RegisterLazyDevHandlers(controlPlane, jobs)
+	lazytelemetry.RegisterLazyDevHandlers(controlPlane)
 	return controlPlane
 }
 

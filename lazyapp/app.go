@@ -212,7 +212,7 @@ func New(config Config) *App {
 	}
 
 	dispatcher := lazydispatch.NewDispatcher()
-	if telemetryConfig.Enabled() {
+	if telemetryMiddlewareEnabled(telemetryConfig) {
 		dispatcher.Use(lazytelemetry.MiddlewareFromConfig(telemetryConfig, lazytelemetry.WithMetricsRegistry(telemetryRegistry)))
 	}
 	dispatcher.Use(lazydispatch.RouteOnly(

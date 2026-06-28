@@ -17,12 +17,16 @@ import (
 	"golazy.dev/lazytelemetry/lazymetrics"
 )
 
-func TestMiddlewareWritesRequestCaptureFilesWhenExporterConfigured(t *testing.T) {
+func TestMiddlewareWritesRequestCaptureFilesWhenMonitoringEnabled(t *testing.T) {
 	t.Chdir(t.TempDir())
+	SetRequestMonitoringEnabled(true)
+	t.Cleanup(func() {
+		SetRequestMonitoringEnabled(false)
+	})
 
 	var logs bytes.Buffer
 	middleware := MiddlewareFromConfig(
-		Config{TracesExporter: []string{"otlp"}, LogsExporter: []string{"otlp"}},
+		Config{},
 		WithMiddlewareLogger(slog.New(slog.NewJSONHandler(&logs, nil))),
 		WithMetricsRegistry(lazymetrics.NewRegistry()),
 	)
@@ -119,11 +123,12 @@ func TestMiddlewareWritesRequestCaptureFilesWhenExporterConfigured(t *testing.T)
 	}
 }
 
-func TestMiddlewareSkipsRequestCaptureFilesWithoutExporter(t *testing.T) {
+func TestMiddlewareSkipsRequestCaptureFilesWhenMonitoringDisabled(t *testing.T) {
 	t.Chdir(t.TempDir())
+	SetRequestMonitoringEnabled(false)
 
 	middleware := MiddlewareFromConfig(
-		Config{ServiceName: "sample"},
+		Config{TracesExporter: []string{"otlp"}, LogsExporter: []string{"otlp"}},
 		WithMiddlewareLogger(slog.New(slog.NewJSONHandler(&bytes.Buffer{}, nil))),
 		WithMetricsRegistry(lazymetrics.NewRegistry()),
 	)
@@ -136,7 +141,7 @@ func TestMiddlewareSkipsRequestCaptureFilesWithoutExporter(t *testing.T) {
 	handler.ServeHTTP(httptest.NewRecorder(), request)
 
 	if _, err := os.Stat(filepath.Join(".tmp", "traces", "req-123.spans")); !os.IsNotExist(err) {
-		t.Fatalf("spans file exists with service name only: %v", err)
+		t.Fatalf("spans file exists while monitoring is disabled: %v", err)
 	}
 }
 

@@ -20,6 +20,8 @@ import (
 	"golazy.dev/lazycontrolplane"
 	"golazy.dev/lazydeps"
 	"golazy.dev/lazyerrors"
+	"golazy.dev/lazyjobs"
+	"golazy.dev/lazyjobs/inmemoryjobs"
 	"golazy.dev/lazyroutes"
 	"golazy.dev/lazyseo"
 	"golazy.dev/lazysession"
@@ -31,6 +33,42 @@ func testViewFS(t *testing.T, files map[string]string) func() (fs.FS, error) {
 	configureLazyDevViewsForTest(t, files)
 	return func() (fs.FS, error) {
 		return testMapFS(files), nil
+	}
+}
+
+type appTestJob struct {
+	lazyjobs.BaseJob
+	Value string `json:"value"`
+}
+
+func (*appTestJob) Kind() string { return "app.test" }
+
+func (*appTestJob) Work(context.Context) error { return nil }
+
+func TestAppRegistersJobsControlPlane(t *testing.T) {
+	app := New(Config{
+		Jobs: lazyjobs.Config{
+			Backend: inmemoryjobs.New(),
+			Define: func(runner *lazyjobs.JobRunner) {
+				runner.MustRegister(&appTestJob{})
+			},
+			PollInterval: time.Hour,
+		},
+	})
+	defer app.Jobs.Stop(context.Background())
+
+	if _, err := app.Jobs.Enqueue(context.Background(), &appTestJob{Value: "hello"}); err != nil {
+		t.Fatal(err)
+	}
+
+	response := httptest.NewRecorder()
+	app.ControlPlane.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/jobs", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("jobs status = %d, want %d: %s", response.Code, http.StatusOK, response.Body.String())
+	}
+	body := response.Body.String()
+	if !strings.Contains(body, `"kind":"app.test"`) {
+		t.Fatalf("jobs body = %s, want registered job kind", body)
 	}
 }
 

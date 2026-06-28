@@ -18,6 +18,8 @@ import (
 	"golazy.dev/lazydispatch"
 	"golazy.dev/lazydispatch/middlewares"
 	"golazy.dev/lazyforms"
+	"golazy.dev/lazyjobs"
+	"golazy.dev/lazyjobs/inmemoryjobs"
 	"golazy.dev/lazyroutes"
 	"golazy.dev/lazyseo"
 	"golazy.dev/lazysession"
@@ -43,6 +45,7 @@ type Config struct {
 	Robots            RobotsConfig
 	Sitemap           SitemapConfig
 	Sessions          lazysession.Config
+	Jobs              lazyjobs.Config
 	ControlPlane      lazycontrolplane.Builder
 	Middlewares       []lazydispatch.Middleware
 	ForceDetailErrors bool
@@ -56,6 +59,7 @@ type App struct {
 	Assets       *lazyassets.Registry
 	Cache        *lazycache.Cache
 	Sessions     *lazysession.Manager
+	Jobs         *lazyjobs.JobRunner
 	ControlPlane *lazycontrolplane.ControlPlane
 	Dependencies *lazydeps.Scope
 }
@@ -163,6 +167,22 @@ func New(config Config) *App {
 		ctx = dependencies.Context()
 	}
 
+	var jobs *lazyjobs.JobRunner
+	if jobsConfigured(config.Jobs) {
+		jobsConfig := config.Jobs
+		if jobsConfig.Backend == nil {
+			jobsConfig.Backend = inmemoryjobs.New()
+		}
+		var err error
+		jobs, err = lazyjobs.New(jobsConfig)
+		if err != nil {
+			panic(fmt.Errorf("initialize jobs: %w", err))
+		}
+		ctx = lazyjobs.WithRunner(ctx, jobs)
+		dependencies.SetContext(ctx)
+		jobs.Start(ctx)
+	}
+
 	var seo []lazyseo.Option
 	if config.SEO != nil {
 		seo = config.SEO(ctx)
@@ -184,7 +204,8 @@ func New(config Config) *App {
 	for _, helpers := range config.Helpers {
 		renderer.AddHelpers(helpers)
 	}
-	controlPlane = lazyDevControlPlane(controlPlane, renderer, router, cache)
+	controlPlane = jobsControlPlane(controlPlane, jobs)
+	controlPlane = lazyDevControlPlane(controlPlane, renderer, router, cache, jobs)
 	controlPlane = telemetryControlPlane(controlPlane, telemetryConfig, telemetryRegistry, cache)
 	if err := renderer.Cache(); err != nil {
 		panic(fmt.Errorf("cache views: %w", err))
@@ -227,9 +248,18 @@ func New(config Config) *App {
 		Assets:       assets,
 		Cache:        cache,
 		Sessions:     sessions,
+		Jobs:         jobs,
 		ControlPlane: controlPlane,
 		Dependencies: dependencies,
 	}
+}
+
+func jobsConfigured(config lazyjobs.Config) bool {
+	return config.Backend != nil ||
+		config.Define != nil ||
+		config.Workers != 0 ||
+		config.PollInterval != 0 ||
+		len(config.Queues) > 0
 }
 
 func (app *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {

@@ -7,10 +7,18 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `golazy.dev/lazyjobs`, a background job runner with typed JSON job payloads,
+  an in-memory backend, retries, `lazyapp.Config.Jobs` wiring, context access,
+  and read-only job state on the control plane.
+
 ### Changed
 
 - `lazydeps` now logs dependency shutdown reasons, context cancellation, and
   cleanup duration for every registered service.
+- `lazyapp.New` now initializes optional background jobs after dependencies and
+  exposes `App.Jobs` when `lazyapp.Config.Jobs` is configured.
 
 ## [0.1.16] - 2026-06-27
 

@@ -56,6 +56,7 @@ golazy.dev/lazyfiles               Logical file catalog and fallback file URLs
 golazy.dev/lazyforms               Form helpers aligned with schema decoding
 golazy.dev/lazymailer              Mailer rendering and delivery interfaces
 golazy.dev/lazymedia               Generated file/media variants
+golazy.dev/lazymigrate             Backend-agnostic migration loading and planning
 golazy.dev/lazypath                Route path and URL parameter helpers
 golazy.dev/lazyroutes              Route DSL, resources, scopes, and route table
 golazy.dev/lazyschema              Form decoding and field naming

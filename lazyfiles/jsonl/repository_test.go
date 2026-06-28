@@ -1,28 +1,30 @@
-package lazyfiles
+package jsonl
 
 import (
 	"context"
 	"path/filepath"
 	"testing"
+
+	"golazy.dev/lazyfiles"
 )
 
-func TestLogRepositoryReplaysEvents(t *testing.T) {
+func TestJSONLRepositoryReplaysEvents(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "files.log.jsonl")
-	repo, err := NewLogRepository(path)
+	repo, err := New(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	file := File{ID: "file-1", Filename: "card.txt"}
-	location := Location{FileID: "file-1", Storage: "local", Key: "card.txt", Role: RolePrimary, Status: StatusActive}
+	file := lazyfiles.File{ID: "file-1", Filename: "card.txt"}
+	location := lazyfiles.Location{FileID: "file-1", Storage: "local", Key: "card.txt", Role: lazyfiles.RolePrimary, Status: lazyfiles.StatusActive}
 	if _, _, err := repo.Put(context.Background(), file, location); err != nil {
 		t.Fatal(err)
 	}
 
-	reopened, err := NewLogRepository(path)
+	reopened, err := New(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, locations, _, err := reopened.Find(context.Background(), Query{ID: "file-1"})
+	got, locations, _, err := reopened.Find(context.Background(), lazyfiles.Query{ID: "file-1"})
 	if err != nil {
 		t.Fatal(err)
 	}

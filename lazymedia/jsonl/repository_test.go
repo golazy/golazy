@@ -1,30 +1,32 @@
-package lazymedia
+package jsonl
 
 import (
 	"context"
 	"encoding/json"
 	"path/filepath"
 	"testing"
+
+	"golazy.dev/lazymedia"
 )
 
-func TestLogRepositoryReplaysVariants(t *testing.T) {
+func TestJSONLRepositoryReplaysVariants(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "variants.log.jsonl")
-	repo, err := NewLogRepository(path)
+	repo, err := New(path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	spec := json.RawMessage(`{"width":1200,"height":630}`)
-	if _, _, err := repo.SaveVariant(context.Background(), Variant{
+	if _, _, err := repo.SaveVariant(context.Background(), lazymedia.Variant{
 		SourceFileID: "source-1",
 		VariantKey:   "og",
 		Spec:         spec,
 		OutputFileID: "output-1",
-		Status:       StatusReady,
+		Status:       lazymedia.StatusReady,
 	}); err != nil {
 		t.Fatal(err)
 	}
 
-	reopened, err := NewLogRepository(path)
+	reopened, err := New(path)
 	if err != nil {
 		t.Fatal(err)
 	}

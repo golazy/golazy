@@ -1,4 +1,4 @@
-package lazyfiles
+package lazyfiles_test
 
 import (
 	"context"
@@ -9,16 +9,18 @@ import (
 	"testing"
 	"time"
 
+	"golazy.dev/lazyfiles"
+	"golazy.dev/lazyfiles/jsonl"
 	"golazy.dev/lazystorage"
 )
 
 func TestFilesPutReturnsFallbackURLAndServesFile(t *testing.T) {
 	dir := t.TempDir()
-	repo, err := NewLogRepository(filepath.Join(dir, "files.log.jsonl"))
+	repo, err := jsonl.New(filepath.Join(dir, "files.log.jsonl"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	files := &Files{
+	files := &lazyfiles.Files{
 		Repository:     repo,
 		Storages:       map[string]lazystorage.Storage{"local": lazystorage.NewFilesystem(filepath.Join(dir, "objects"))},
 		DefaultStorage: "local",
@@ -29,7 +31,7 @@ func TestFilesPutReturnsFallbackURLAndServesFile(t *testing.T) {
 	file, remaining, err := files.Put(
 		context.Background(),
 		strings.NewReader("hello files"),
-		Filename{Name: "hello.txt"},
+		lazyfiles.Filename{Name: "hello.txt"},
 		lazystorage.ContentType{Value: "text/plain"},
 	)
 	if err != nil {
@@ -69,16 +71,16 @@ func TestFilesPutReturnsFallbackURLAndServesFile(t *testing.T) {
 
 func TestFilesUsesStorageURLWhenAvailable(t *testing.T) {
 	dir := t.TempDir()
-	repo, err := NewLogRepository(filepath.Join(dir, "files.log.jsonl"))
+	repo, err := jsonl.New(filepath.Join(dir, "files.log.jsonl"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	files := &Files{
+	files := &lazyfiles.Files{
 		Repository:     repo,
 		Storages:       map[string]lazystorage.Storage{"local": lazystorage.NewFilesystem(filepath.Join(dir, "objects"), lazystorage.WithBaseURL("https://cdn.example.test"))},
 		DefaultStorage: "local",
 	}
-	file, _, err := files.Put(context.Background(), strings.NewReader("cdn"), ObjectKey{Key: "cdn/card.txt"})
+	file, _, err := files.Put(context.Background(), strings.NewReader("cdn"), lazyfiles.ObjectKey{Key: "cdn/card.txt"})
 	if err != nil {
 		t.Fatal(err)
 	}

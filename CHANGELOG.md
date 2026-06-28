@@ -20,6 +20,10 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- `lazyfiles` and `lazymedia` now keep their append-only JSONL repository
+  implementations in `golazy.dev/lazyfiles/jsonl` and
+  `golazy.dev/lazymedia/jsonl`, with `JSONLRepository` types that satisfy the
+  parent package `Repository` interfaces.
 - `lazydeps` now logs dependency shutdown reasons, context cancellation, and
   cleanup duration for every registered service.
 - `lazyapp.New` now initializes optional background jobs after dependencies and

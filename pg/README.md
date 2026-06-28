@@ -12,13 +12,6 @@ Current packages:
 - `pgjobs`: PostgreSQL `lazyjobs.Backend` plus embedded lazy job migrations.
 - `withpg`: embedded PostgreSQL helper for local integration tests.
 
-Reserved packages:
-
-- `pgfiles`
-- `pgstorage`
-- `pgassets`
-- `pgmigrations`
-
 Integration tests read `GOLAZY_PG_DATABASE_URL`. The `golazy.dev/pg/withpg`
 helper can run those tests against one or more PostgreSQL versions:
 

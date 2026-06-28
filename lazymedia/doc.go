@@ -7,4 +7,7 @@
 // converted media files. Keep original file metadata and storage backends in
 // lazyfiles and lazystorage, then let lazymedia coordinate representation
 // lookup and generation.
+//
+// The append-only JSONL repository implementation lives in the
+// golazy.dev/lazymedia/jsonl subpackage.
 package lazymedia

@@ -1,4 +1,4 @@
-package lazyfiles
+package jsonl
 
 import (
 	"bufio"
@@ -10,30 +10,34 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"golazy.dev/lazyfiles"
 )
 
-// LogRepository stores file metadata in an append-only JSONL log.
-type LogRepository struct {
+var _ lazyfiles.Repository = (*JSONLRepository)(nil)
+
+// JSONLRepository stores file metadata in an append-only JSONL log.
+type JSONLRepository struct {
 	mu        sync.RWMutex
 	path      string
-	files     map[string]File
-	locations map[string][]Location
+	files     map[string]lazyfiles.File
+	locations map[string][]lazyfiles.Location
 }
 
 type logEvent struct {
-	Op       string    `json:"op"`
-	File     File      `json:"file,omitempty"`
-	Location Location  `json:"location,omitempty"`
-	FileID   string    `json:"file_id,omitempty"`
-	Time     time.Time `json:"time,omitempty"`
+	Op       string             `json:"op"`
+	File     lazyfiles.File     `json:"file,omitempty"`
+	Location lazyfiles.Location `json:"location,omitempty"`
+	FileID   string             `json:"file_id,omitempty"`
+	Time     time.Time          `json:"time,omitempty"`
 }
 
-// NewLogRepository opens or creates an append-only JSONL repository at path.
-func NewLogRepository(path string) (*LogRepository, error) {
-	repo := &LogRepository{
+// New opens or creates an append-only JSONL repository at path.
+func New(path string) (*JSONLRepository, error) {
+	repo := &JSONLRepository{
 		path:      path,
-		files:     map[string]File{},
-		locations: map[string][]Location{},
+		files:     map[string]lazyfiles.File{},
+		locations: map[string][]lazyfiles.Location{},
 	}
 	if err := repo.replay(); err != nil {
 		return nil, err
@@ -41,18 +45,18 @@ func NewLogRepository(path string) (*LogRepository, error) {
 	return repo, nil
 }
 
-func (r *LogRepository) Put(ctx context.Context, file File, location Location, options ...any) (File, []any, error) {
+func (r *JSONLRepository) Put(ctx context.Context, file lazyfiles.File, location lazyfiles.Location, options ...any) (lazyfiles.File, []any, error) {
 	if err := ctx.Err(); err != nil {
-		return File{}, options, err
+		return lazyfiles.File{}, options, err
 	}
 	if location.FileID == "" {
 		location.FileID = file.ID
 	}
 	if location.Role == "" {
-		location.Role = RolePrimary
+		location.Role = lazyfiles.RolePrimary
 	}
 	if location.Status == "" {
-		location.Status = StatusActive
+		location.Status = lazyfiles.StatusActive
 	}
 	now := time.Now().UTC()
 	if file.CreatedAt.IsZero() {
@@ -64,36 +68,36 @@ func (r *LogRepository) Put(ctx context.Context, file File, location Location, o
 	}
 	file.UpdatedAt = now
 	if err := validateFileLocation(file, location); err != nil {
-		return File{}, options, err
+		return lazyfiles.File{}, options, err
 	}
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if err := r.append(logEvent{Op: "put", File: file, Location: location, Time: now}); err != nil {
-		return File{}, options, err
+		return lazyfiles.File{}, options, err
 	}
 	r.applyPut(file, location)
 	return file, options, nil
 }
 
-func (r *LogRepository) Find(ctx context.Context, query Query, options ...any) (File, []Location, []any, error) {
+func (r *JSONLRepository) Find(ctx context.Context, query lazyfiles.Query, options ...any) (lazyfiles.File, []lazyfiles.Location, []any, error) {
 	if err := ctx.Err(); err != nil {
-		return File{}, nil, options, err
+		return lazyfiles.File{}, nil, options, err
 	}
 	if query.ID == "" {
-		return File{}, nil, options, fmt.Errorf("lazyfiles: file id is required")
+		return lazyfiles.File{}, nil, options, fmt.Errorf("lazyfiles: file id is required")
 	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	file, ok := r.files[query.ID]
 	if !ok || !file.DeletedAt.IsZero() {
-		return File{}, nil, options, fsErrNotExist(query.ID)
+		return lazyfiles.File{}, nil, options, errNotExist(query.ID)
 	}
-	locations := append([]Location(nil), r.locations[query.ID]...)
+	locations := append([]lazyfiles.Location(nil), r.locations[query.ID]...)
 	return file, locations, options, nil
 }
 
-func (r *LogRepository) Delete(ctx context.Context, fileID string, options ...any) ([]any, error) {
+func (r *JSONLRepository) Delete(ctx context.Context, fileID string, options ...any) ([]any, error) {
 	if err := ctx.Err(); err != nil {
 		return options, err
 	}
@@ -114,7 +118,7 @@ func (r *LogRepository) Delete(ctx context.Context, fileID string, options ...an
 	return options, nil
 }
 
-func (r *LogRepository) replay() error {
+func (r *JSONLRepository) replay() error {
 	file, err := os.Open(r.path)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
@@ -144,7 +148,7 @@ func (r *LogRepository) replay() error {
 	return scanner.Err()
 }
 
-func (r *LogRepository) append(event logEvent) error {
+func (r *JSONLRepository) append(event logEvent) error {
 	if err := os.MkdirAll(filepath.Dir(r.path), 0o755); err != nil {
 		return err
 	}
@@ -163,7 +167,7 @@ func (r *LogRepository) append(event logEvent) error {
 	return file.Sync()
 }
 
-func (r *LogRepository) applyPut(file File, location Location) {
+func (r *JSONLRepository) applyPut(file lazyfiles.File, location lazyfiles.Location) {
 	r.files[file.ID] = file
 	locations := r.locations[file.ID]
 	for index, existing := range locations {
@@ -176,6 +180,25 @@ func (r *LogRepository) applyPut(file File, location Location) {
 	r.locations[file.ID] = append(locations, location)
 }
 
-func fsErrNotExist(id string) error {
+func validateFileLocation(file lazyfiles.File, location lazyfiles.Location) error {
+	if file.ID == "" {
+		return fmt.Errorf("lazyfiles: file id is required")
+	}
+	if location.FileID == "" {
+		location.FileID = file.ID
+	}
+	if location.FileID != file.ID {
+		return fmt.Errorf("lazyfiles: location file id %q does not match file id %q", location.FileID, file.ID)
+	}
+	if location.Storage == "" {
+		return fmt.Errorf("lazyfiles: storage name is required")
+	}
+	if location.Key == "" {
+		return fmt.Errorf("lazyfiles: storage key is required")
+	}
+	return nil
+}
+
+func errNotExist(id string) error {
 	return fmt.Errorf("lazyfiles: file %q not found: %w", id, os.ErrNotExist)
 }

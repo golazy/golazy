@@ -15,10 +15,7 @@ import (
 func TestMediaGeneratesMissingVariantAndReturnsURL(t *testing.T) {
 	store := newMemoryFileStore()
 	source := store.add("source", "hello", "text/plain")
-	repo, err := NewLogRepository(t.TempDir() + "/variants.log.jsonl")
-	if err != nil {
-		t.Fatal(err)
-	}
+	repo := newMemoryVariantRepository()
 	var calls int
 	media := &Media{
 		Files:      store,
@@ -71,10 +68,7 @@ func TestMediaGeneratesMissingVariantAndReturnsURL(t *testing.T) {
 func TestMediaReusesReadyVariantUnlessRegenerateRequested(t *testing.T) {
 	store := newMemoryFileStore()
 	source := store.add("source", "hello", "text/plain")
-	repo, err := NewLogRepository(t.TempDir() + "/variants.log.jsonl")
-	if err != nil {
-		t.Fatal(err)
-	}
+	repo := newMemoryVariantRepository()
 	var calls int
 	media := &Media{
 		Files:      store,
@@ -172,4 +166,36 @@ func (s *memoryFileStore) URL(_ context.Context, id string, options ...any) (str
 		return "", options, fmt.Errorf("missing file %s", id)
 	}
 	return "/files/" + id, options, nil
+}
+
+type memoryVariantRepository struct {
+	variants map[string]Variant
+}
+
+func newMemoryVariantRepository() *memoryVariantRepository {
+	return &memoryVariantRepository{variants: map[string]Variant{}}
+}
+
+func (r *memoryVariantRepository) FindVariant(_ context.Context, sourceFileID, variantKey string, options ...any) (Variant, []any, error) {
+	variant, ok := r.variants[sourceFileID+"\x00"+variantKey]
+	if !ok {
+		return Variant{}, options, fmt.Errorf("missing variant %s/%s", sourceFileID, variantKey)
+	}
+	return variant, options, nil
+}
+
+func (r *memoryVariantRepository) SaveVariant(_ context.Context, variant Variant, options ...any) (Variant, []any, error) {
+	if err := validateVariant(variant); err != nil {
+		return Variant{}, options, err
+	}
+	if variant.Status == "" {
+		variant.Status = StatusReady
+	}
+	r.variants[variant.SourceFileID+"\x00"+variant.VariantKey] = variant
+	return variant, options, nil
+}
+
+func (r *memoryVariantRepository) DeleteVariant(_ context.Context, sourceFileID, variantKey string, options ...any) ([]any, error) {
+	delete(r.variants, sourceFileID+"\x00"+variantKey)
+	return options, nil
 }

@@ -7,6 +7,8 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.17] - 2026-06-29
+
 ### Added
 
 - Lazydev control-plane endpoints can enable or disable detailed request
@@ -26,6 +28,11 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `golazy.dev/lazyjobs`, a background job runner with typed JSON job payloads,
   an in-memory backend, retries, `lazyapp.Config.Jobs` wiring, context access,
   and read-only job state on the control plane.
+- `golazy.dev/lazytui` terminal runtime packages for ANSI token
+  encoding/decoding, TTY state messages, pseudo-terminal commands, and window
+  rectangles used by richer GoLazy tooling.
+- `golazy.dev/pg`, a PostgreSQL implementation module with shared `pgxpool`
+  helpers, `pgmigrate`, `pgjobs`, and `withpg` integration-test support.
 - Separate control-plane listeners now serve a compact endpoint index at
   `GET /`, while same-listener control planes leave the application root route
   untouched.
@@ -84,6 +91,9 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   cleanup duration for every registered service.
 - `lazyapp.New` now initializes optional background jobs after dependencies and
   exposes `App.Jobs` when `lazyapp.Config.Jobs` is configured.
+- The core framework module and the PostgreSQL module now target Go 1.26.
+- Retracted pre-`v0.1.0` framework module versions, which were unstable
+  snapshots before the current GoLazy release line.
 
 ## [0.1.16] - 2026-06-27
 
@@ -490,7 +500,8 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Route construction with embedded public-file fallback.
 - Method-not-allowed handling for application routes.
 
-[Unreleased]: https://github.com/golazy/golazy/compare/v0.1.16...HEAD
+[Unreleased]: https://github.com/golazy/golazy/compare/v0.1.17...HEAD
+[0.1.17]: https://github.com/golazy/golazy/compare/v0.1.16...v0.1.17
 [0.1.16]: https://github.com/golazy/golazy/compare/v0.1.15...v0.1.16
 [0.1.15]: https://github.com/golazy/golazy/compare/v0.1.14...v0.1.15
 [0.1.14]: https://github.com/golazy/golazy/compare/v0.1.13...v0.1.14

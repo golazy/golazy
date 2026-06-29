@@ -1,6 +1,6 @@
 # Changelog
 
-## Next
+## [0.1.17] - 2026-06-29
 
 - Added the first `golazy.dev/pg` module with PostgreSQL migration and job
   backend packages.

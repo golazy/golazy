@@ -7,12 +7,15 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"golazy.dev/lazycontrolplane"
+	"golazy.dev/lazysse"
 )
 
 const LazyDevCachePath = "/cache"
 const LazyDevCacheEntryPath = "/cache/entry"
+const LazyDevCacheEventsPath = "/cache/events"
 const LazyDevCacheOnPath = "/cache/on"
 const LazyDevCacheOffPath = "/cache/off"
 
@@ -33,6 +36,9 @@ func RegisterLazyDevHandlers(controlPlane *lazycontrolplane.ControlPlane, cache 
 	}))
 	controlPlane.Handle("GET "+LazyDevCacheEntryPath, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		writeLazyDevCacheEntryResponse(w, cache, r)
+	}))
+	controlPlane.Handle("GET "+LazyDevCacheEventsPath, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		streamLazyDevCacheEvents(w, r, cache)
 	}))
 	controlPlane.Handle("POST "+LazyDevCacheOnPath, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		if cache == nil {
@@ -75,6 +81,36 @@ func writeLazyDevCacheResponse(w http.ResponseWriter, cache *Cache) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		http.Error(w, fmt.Sprintf("cache: %v", err), http.StatusInternalServerError)
+	}
+}
+
+func streamLazyDevCacheEvents(w http.ResponseWriter, r *http.Request, cache *Cache) {
+	if cache == nil {
+		writeLazyDevCacheError(w)
+		return
+	}
+	stream, err := lazysse.Start(w, r)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("cache: %v\n", err), http.StatusInternalServerError)
+		return
+	}
+	defer stream.Close()
+	stream.Heartbeat(15 * time.Second)
+
+	events, unsubscribe := cache.Subscribe()
+	defer unsubscribe()
+	for {
+		select {
+		case <-stream.Done():
+			return
+		case event, ok := <-events:
+			if !ok {
+				return
+			}
+			if err := stream.JSON("cache", event); err != nil {
+				return
+			}
+		}
 	}
 }
 

@@ -99,6 +99,7 @@ func TestLazyDevControlPlaneAggregatesPackageHandlers(t *testing.T) {
 		lazycontroller.LazyDevOpenEditorPath,
 		lazyassets.LazyDevAssetsPath,
 		lazycache.LazyDevCachePath,
+		lazycache.LazyDevCacheEventsPath,
 		lazycache.LazyDevCacheOnPath,
 		lazycache.LazyDevCacheOffPath,
 		lazytelemetry.LazyDevRequestMonitoringPath,

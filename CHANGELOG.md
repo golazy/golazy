@@ -37,6 +37,8 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Lazydev control-plane endpoints now expose the lazy asset manifest at
   `GET /assets` and can clear request trace sidecars with
   `POST /requests/traces/clear`.
+- Lazydev control-plane endpoints now expose cache hit, miss, set, and toggle
+  events through `GET /cache/events`.
 
 ### Changed
 
@@ -60,6 +62,10 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Controller and template render cache keys now include the app build version,
   and include the active render variant when present, so deploys and
   variant-specific renders do not share stale cached bodies.
+- `lazycache.Cache.Subscribe` now provides a non-blocking development event
+  hook for cache hits, misses, sets, and on/off toggles. Inspectable cache
+  entries can include per-key counters, and the default in-memory backend
+  records per-key hits and sets.
 - `lazyfiles` and `lazymedia` now keep their append-only JSONL repository
   implementations in `golazy.dev/lazyfiles/jsonl` and
   `golazy.dev/lazymedia/jsonl`, with `JSONLRepository` types that satisfy the

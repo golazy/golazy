@@ -161,6 +161,45 @@ func TestCacheOffBypassesBackend(t *testing.T) {
 	}
 }
 
+func TestCachePublishesDevelopmentEvents(t *testing.T) {
+	cache, err := New(Options{Backend: &memoryBackend{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	events, unsubscribe := cache.Subscribe()
+	defer unsubscribe()
+
+	if err := cache.Set("Ada", "user", 1); err != nil {
+		t.Fatal(err)
+	}
+	assertCacheEvent(t, events, EventSet, "user-1")
+
+	if _, err := cache.Get("user", 1); err != nil {
+		t.Fatal(err)
+	}
+	assertCacheEvent(t, events, EventHit, "user-1")
+
+	if _, err := cache.Get("missing"); !errors.Is(err, ErrMiss) {
+		t.Fatalf("Get missing = %v, want ErrMiss", err)
+	}
+	miss := assertCacheEvent(t, events, EventMiss, "missing")
+	if miss.Stats.Misses != 1 {
+		t.Fatalf("miss stats = %#v, want misses=1", miss.Stats)
+	}
+
+	cache.Off()
+	off := assertCacheEvent(t, events, EventOff, "")
+	if off.Enabled {
+		t.Fatalf("off event Enabled = true, want false")
+	}
+
+	cache.On()
+	on := assertCacheEvent(t, events, EventOn, "")
+	if !on.Enabled {
+		t.Fatalf("on event Enabled = false, want true")
+	}
+}
+
 func TestCacheContext(t *testing.T) {
 	cache, err := New(Options{Backend: &memoryBackend{}})
 	if err != nil {
@@ -177,6 +216,23 @@ func TestCacheContext(t *testing.T) {
 	}
 	if got, want := BuildVersionFromContext(context.Background()), "devel"; got != want {
 		t.Fatalf("default BuildVersionFromContext = %q, want %q", got, want)
+	}
+}
+
+func assertCacheEvent(t *testing.T, events <-chan Event, kind EventKind, key string) Event {
+	t.Helper()
+	select {
+	case event := <-events:
+		if event.Kind != kind || event.Key != key {
+			t.Fatalf("cache event = %#v, want kind=%s key=%q", event, kind, key)
+		}
+		if event.At.IsZero() {
+			t.Fatalf("cache event At is zero: %#v", event)
+		}
+		return event
+	case <-time.After(time.Second):
+		t.Fatalf("timed out waiting for cache event kind=%s key=%q", kind, key)
+		return Event{}
 	}
 }
 

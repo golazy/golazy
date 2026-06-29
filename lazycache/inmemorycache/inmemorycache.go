@@ -34,6 +34,8 @@ type entry struct {
 	createdAt      time.Time
 	updatedAt      time.Time
 	lastAccessedAt time.Time
+	hits           uint64
+	sets           uint64
 }
 
 type Cache struct {
@@ -78,6 +80,7 @@ func (c *Cache) Get(key string) (any, error) {
 	c.order.MoveToFront(element)
 	item := element.Value.(entry)
 	item.lastAccessedAt = time.Now()
+	item.hits++
 	element.Value = item
 	c.stats.Hits++
 	return item.value, nil
@@ -97,6 +100,7 @@ func (c *Cache) Set(key string, value any) error {
 		item.content = content
 		item.contentType = contentType
 		item.updatedAt = now
+		item.sets++
 		element.Value = item
 		c.order.MoveToFront(element)
 		c.stats.Sets++
@@ -112,6 +116,7 @@ func (c *Cache) Set(key string, value any) error {
 		createdAt:      now,
 		updatedAt:      now,
 		lastAccessedAt: now,
+		sets:           1,
 	})
 	c.items[key] = element
 	c.stats.Sets++
@@ -210,6 +215,8 @@ func (e entry) info() lazycache.EntryInfo {
 		CreatedAt:      e.createdAt,
 		UpdatedAt:      e.updatedAt,
 		LastAccessedAt: e.lastAccessedAt,
+		Hits:           e.hits,
+		Sets:           e.sets,
 	}
 }
 

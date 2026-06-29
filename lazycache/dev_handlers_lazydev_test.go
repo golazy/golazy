@@ -20,6 +20,9 @@ func TestLazyDevCacheHandlersExposeStatsKeysAndToggles(t *testing.T) {
 	if err := cache.Set("Ada", "user", 1); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := cache.Get("user", 1); err != nil {
+		t.Fatal(err)
+	}
 	plane := lazycontrolplane.New(lazycontrolplane.Config{})
 	RegisterLazyDevHandlers(plane, cache)
 
@@ -27,8 +30,8 @@ func TestLazyDevCacheHandlersExposeStatsKeysAndToggles(t *testing.T) {
 	if !got.Enabled {
 		t.Fatal("Enabled = false, want true")
 	}
-	if got.Stats.Entries != 1 || got.Stats.Sets != 1 {
-		t.Fatalf("Stats = %#v, want entries=1 sets=1", got.Stats)
+	if got.Stats.Entries != 1 || got.Stats.Sets != 1 || got.Stats.Hits != 1 {
+		t.Fatalf("Stats = %#v, want entries=1 sets=1 hits=1", got.Stats)
 	}
 	if len(got.Keys) != 1 || got.Keys[0] != "user-1" {
 		t.Fatalf("Keys = %#v, want [user-1]", got.Keys)

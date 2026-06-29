@@ -114,12 +114,18 @@ func TestEntriesAndEntryExposeInspectableMetadata(t *testing.T) {
 	if entries[0].CreatedAt.IsZero() || entries[0].UpdatedAt.IsZero() || entries[0].LastAccessedAt.IsZero() {
 		t.Fatalf("entry timestamps are not populated: %#v", entries[0])
 	}
+	if entries[0].Hits != 1 || entries[0].Sets != 1 {
+		t.Fatalf("entry counters = hits %d sets %d, want 1/1", entries[0].Hits, entries[0].Sets)
+	}
 	detail, err := inspector.Entry("posts-1")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if detail.Content != "<p>Ada</p>" || detail.ContentType != "text/plain; charset=utf-8" {
 		t.Fatalf("Entry = %#v, want text content", detail)
+	}
+	if detail.Hits != 1 || detail.Sets != 1 {
+		t.Fatalf("Entry counters = hits %d sets %d, want 1/1", detail.Hits, detail.Sets)
 	}
 	if stats := backend.Stats(); stats.SizeBytes != int64(len("<p>Ada</p>")) {
 		t.Fatalf("Stats.SizeBytes = %d, want %d", stats.SizeBytes, len("<p>Ada</p>"))

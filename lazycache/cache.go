@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -43,6 +44,8 @@ type EntryInfo struct {
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
 	LastAccessedAt time.Time `json:"last_accessed_at"`
+	Hits           uint64    `json:"hits"`
+	Sets           uint64    `json:"sets"`
 }
 
 // EntryDetail describes one cached value with a development-friendly body.
@@ -63,10 +66,33 @@ type Options struct {
 	Backend Backend
 }
 
+// EventKind names a cache event that development tooling can observe.
+type EventKind string
+
+const (
+	EventHit  EventKind = "hit"
+	EventMiss EventKind = "miss"
+	EventSet  EventKind = "set"
+	EventOn   EventKind = "on"
+	EventOff  EventKind = "off"
+)
+
+// Event describes a cache operation observed by development tooling.
+type Event struct {
+	Kind    EventKind  `json:"kind"`
+	Key     string     `json:"key,omitempty"`
+	Enabled bool       `json:"enabled"`
+	Stats   Stats      `json:"stats"`
+	Entry   *EntryInfo `json:"entry,omitempty"`
+	At      time.Time  `json:"at"`
+}
+
 // Cache wraps a backend with GoLazy key building and on/off switching.
 type Cache struct {
-	backend Backend
-	enabled atomic.Bool
+	backend     Backend
+	enabled     atomic.Bool
+	mu          sync.Mutex
+	subscribers map[chan Event]struct{}
 }
 
 // New creates a cache around a backend.
@@ -85,6 +111,7 @@ func (c *Cache) On() {
 		return
 	}
 	c.enabled.Store(true)
+	c.publish(Event{Kind: EventOn})
 }
 
 // Off disables reads and turns writes into no-ops.
@@ -93,6 +120,7 @@ func (c *Cache) Off() {
 		return
 	}
 	c.enabled.Store(false)
+	c.publish(Event{Kind: EventOff})
 }
 
 // Enabled reports whether reads and writes are active.
@@ -115,10 +143,12 @@ func (c *Cache) Get(parts ...any) (any, error) {
 	value, err := c.backend.Get(key)
 	if err != nil {
 		if errors.Is(err, ErrMiss) {
+			c.publish(Event{Kind: EventMiss, Key: key})
 			return nil, ErrMiss
 		}
 		return nil, err
 	}
+	c.publish(Event{Kind: EventHit, Key: key, Entry: c.entryInfo(key)})
 	return value, nil
 }
 
@@ -134,7 +164,11 @@ func (c *Cache) Set(value any, parts ...any) error {
 	if err != nil {
 		return err
 	}
-	return c.backend.Set(key, value)
+	if err := c.backend.Set(key, value); err != nil {
+		return err
+	}
+	c.publish(Event{Kind: EventSet, Key: key, Entry: c.entryInfo(key)})
+	return nil
 }
 
 // Stats returns the backend statistics.
@@ -191,6 +225,67 @@ func (c *Cache) Entry(key string) (EntryDetail, error) {
 		return EntryDetail{}, fmt.Errorf("lazycache: backend does not expose cache entries")
 	}
 	return inspector.Entry(key)
+}
+
+// Subscribe returns a channel of cache events and an unsubscribe function.
+// Slow subscribers may miss events; the cache never blocks request handling for
+// development observers.
+func (c *Cache) Subscribe() (<-chan Event, func()) {
+	if c == nil {
+		ch := make(chan Event)
+		close(ch)
+		return ch, func() {}
+	}
+	ch := make(chan Event, 32)
+	c.mu.Lock()
+	if c.subscribers == nil {
+		c.subscribers = map[chan Event]struct{}{}
+	}
+	c.subscribers[ch] = struct{}{}
+	c.mu.Unlock()
+
+	return ch, func() {
+		c.mu.Lock()
+		if _, ok := c.subscribers[ch]; ok {
+			delete(c.subscribers, ch)
+			close(ch)
+		}
+		c.mu.Unlock()
+	}
+}
+
+func (c *Cache) publish(event Event) {
+	if c == nil {
+		return
+	}
+	event.Enabled = c.Enabled()
+	event.Stats = c.Stats()
+	event.At = time.Now()
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for ch := range c.subscribers {
+		select {
+		case ch <- event:
+		default:
+		}
+	}
+}
+
+func (c *Cache) entryInfo(key string) *EntryInfo {
+	if c == nil || c.backend == nil || key == "" {
+		return nil
+	}
+	inspector, ok := c.backend.(EntryInspector)
+	if !ok {
+		return nil
+	}
+	detail, err := inspector.Entry(key)
+	if err != nil {
+		return nil
+	}
+	info := detail.EntryInfo
+	return &info
 }
 
 // Get returns a cached value with a concrete type.

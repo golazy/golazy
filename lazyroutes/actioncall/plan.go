@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"unicode"
 	"unicode/utf8"
 )
@@ -21,6 +22,7 @@ type Plan struct {
 	generators map[reflect.Type]*generatorPlan
 	paramNames []string
 	standard   bool
+	statePool  *sync.Pool
 }
 
 type generatorPlan struct {
@@ -41,6 +43,7 @@ type requestState struct {
 	r          *http.Request
 	cache      map[reflect.Type]reflect.Value
 	resolving  map[reflect.Type]bool
+	inputs     [][]reflect.Value
 }
 
 var (
@@ -71,6 +74,7 @@ func Compile(controllerType reflect.Type, action reflect.Value, opts Options) (*
 		plan.standard = true
 		return plan, nil
 	}
+	plan.statePool = &sync.Pool{}
 
 	var err error
 	plan.generators, err = collectGenerators(controllerType)
@@ -96,15 +100,11 @@ func (p *Plan) Call(controller reflect.Value, w http.ResponseWriter, r *http.Req
 		}))
 	}
 
-	state := &requestState{
-		plan:       p,
-		controller: controller,
-		w:          w,
-		r:          r,
-		cache:      map[reflect.Type]reflect.Value{},
-		resolving:  map[reflect.Type]bool{},
-	}
-	inputs := make([]reflect.Value, 1, len(p.args)+1)
+	state := p.requestState(controller, w, r)
+	defer p.releaseRequestState(state)
+
+	inputs := state.takeInputs(len(p.args) + 1)
+	defer state.releaseInputs(inputs)
 	inputs[0] = controller
 	for _, resolver := range p.args {
 		value, err := resolver.resolve(state)
@@ -114,6 +114,67 @@ func (p *Plan) Call(controller reflect.Value, w http.ResponseWriter, r *http.Req
 		inputs = append(inputs, value)
 	}
 	return callErrorOutput(p.action.Call(inputs))
+}
+
+func (p *Plan) requestState(controller reflect.Value, w http.ResponseWriter, r *http.Request) *requestState {
+	var state *requestState
+	if p.statePool != nil {
+		state, _ = p.statePool.Get().(*requestState)
+	}
+	if state == nil {
+		state = &requestState{
+			cache:     map[reflect.Type]reflect.Value{},
+			resolving: map[reflect.Type]bool{},
+		}
+	}
+	state.plan = p
+	state.controller = controller
+	state.w = w
+	state.r = r
+	return state
+}
+
+func (p *Plan) releaseRequestState(state *requestState) {
+	if state == nil {
+		return
+	}
+	state.reset()
+	if p.statePool != nil {
+		p.statePool.Put(state)
+	}
+}
+
+func (s *requestState) reset() {
+	s.plan = nil
+	s.controller = reflect.Value{}
+	s.w = nil
+	s.r = nil
+	for t := range s.cache {
+		delete(s.cache, t)
+	}
+	for t := range s.resolving {
+		delete(s.resolving, t)
+	}
+}
+
+func (s *requestState) takeInputs(size int) []reflect.Value {
+	for len(s.inputs) > 0 {
+		last := len(s.inputs) - 1
+		inputs := s.inputs[last]
+		s.inputs[last] = nil
+		s.inputs = s.inputs[:last]
+		if cap(inputs) >= size {
+			return inputs[:1]
+		}
+	}
+	return make([]reflect.Value, 1, size)
+}
+
+func (s *requestState) releaseInputs(inputs []reflect.Value) {
+	for i := range inputs {
+		inputs[i] = reflect.Value{}
+	}
+	s.inputs = append(s.inputs, inputs[:0])
 }
 
 func validateActionType(controllerType reflect.Type, actionType reflect.Type) error {
@@ -273,18 +334,18 @@ func (r generatorResolver) resolve(state *requestState) (reflect.Value, error) {
 	}
 
 	state.resolving[r.t] = true
-	inputs := make([]reflect.Value, 1, len(generator.args)+1)
+	defer delete(state.resolving, r.t)
+	inputs := state.takeInputs(len(generator.args) + 1)
+	defer state.releaseInputs(inputs)
 	inputs[0] = state.controller
 	for _, resolver := range generator.args {
 		value, err := resolver.resolve(state)
 		if err != nil {
-			delete(state.resolving, r.t)
 			return reflect.Value{}, err
 		}
 		inputs = append(inputs, value)
 	}
 	outputs := generator.method.Call(inputs)
-	delete(state.resolving, r.t)
 
 	if len(outputs) == 2 {
 		if err := valueAsError(outputs[1]); err != nil {

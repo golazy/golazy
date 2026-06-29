@@ -158,3 +158,46 @@ func TestCustomGeneratedTypesCanUseDefaultArguments(t *testing.T) {
 		t.Fatalf("generated argument = %#v, want %#v", controller.arg, want)
 	}
 }
+
+func TestGeneratorCacheIsRequestLocal(t *testing.T) {
+	plan, err := Compile(
+		reflect.TypeOf((*generatorArgumentController)(nil)),
+		reflect.ValueOf((*generatorArgumentController).Show),
+		Options{RoutePath: "/posts/{post_id}"},
+	)
+	if err != nil {
+		t.Fatalf("Compile() error = %v", err)
+	}
+
+	tests := []struct {
+		pathID     string
+		contextTag string
+		want       generatedArgument
+	}{
+		{
+			pathID:     "42",
+			contextTag: "first-request",
+			want:       generatedArgument{ID: 42, ContextTag: "first-request"},
+		},
+		{
+			pathID:     "101",
+			contextTag: "second-request",
+			want:       generatedArgument{ID: 101, ContextTag: "second-request"},
+		},
+	}
+
+	for _, tt := range tests {
+		request := httptest.NewRequest(http.MethodGet, "/", nil)
+		request = request.WithContext(context.WithValue(request.Context(), contextValueKey{}, tt.contextTag))
+		request.SetPathValue("post_id", tt.pathID)
+
+		controller := &generatorArgumentController{}
+		err = plan.Call(reflect.ValueOf(controller), httptest.NewRecorder(), request)
+		if err != nil {
+			t.Fatalf("Call() error = %v", err)
+		}
+		if controller.arg != tt.want {
+			t.Fatalf("generated argument = %#v, want %#v", controller.arg, tt.want)
+		}
+	}
+}

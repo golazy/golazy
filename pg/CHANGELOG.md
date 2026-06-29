@@ -4,6 +4,9 @@
 
 - Added `WithPool` and `FromContext` helpers for sharing an app-owned
   `pgxpool.Pool` through the GoLazy application context.
+- Added PostgreSQL implementations for `lazyfiles`, `lazymedia`, and
+  `lazystorage` with embedded migrations under `pgfiles`, `pgmedia`, and
+  `pgstorage`.
 
 ## [0.1.17] - 2026-06-29
 

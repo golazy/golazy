@@ -7,9 +7,15 @@ packages. The module keeps PostgreSQL driver dependencies out of the core
 Current packages:
 
 - `pg`: shared `pgxpool` connection and app-context helpers.
+- `pgfiles`: PostgreSQL `lazyfiles.Repository` plus embedded lazy file
+  catalog migrations.
+- `pgmedia`: PostgreSQL `lazymedia.Repository` plus embedded lazy media
+  variant migrations.
 - `pgmigrate`: `lazymigrate.Backend` for PostgreSQL. Migrations use
   `-- +lazy Up` and `-- +lazy Down` sections.
 - `pgjobs`: PostgreSQL `lazyjobs.Backend` plus embedded lazy job migrations.
+- `pgstorage`: PostgreSQL `lazystorage` backend for object reads, writes,
+  deletes, and listing, including storage targets for `lazyassets.Upload`.
 - `withpg`: embedded PostgreSQL helper for local integration tests.
 
 Integration tests read `GOLAZY_PG_DATABASE_URL`. The `golazy.dev/pg/withpg`

@@ -7,6 +7,9 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+- `golazy.dev/pg` now includes PostgreSQL implementations for file catalogs,
+  media variants, and object storage: `pgfiles`, `pgmedia`, and `pgstorage`.
+
 ### Added
 
 - `golazy.dev/pg` now provides `WithPool` and `FromContext` helpers so

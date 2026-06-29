@@ -9,7 +9,7 @@ import (
 	"golazy.dev/lazyroutes"
 )
 
-func ExampleScope_HandleFunc() {
+func Example() {
 	router := lazyroutes.New(context.Background())
 	router.HandleFunc(http.MethodGet, "/health", func(w http.ResponseWriter, r *http.Request) error {
 		fmt.Fprint(w, "ok")

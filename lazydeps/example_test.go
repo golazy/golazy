@@ -9,6 +9,34 @@ import (
 	"golazy.dev/lazydeps"
 )
 
+func ExampleService() {
+	deps := lazydeps.New(context.Background())
+
+	type database struct {
+		Name string
+	}
+
+	db, _ := lazydeps.Service(deps, "database", func(ctx context.Context) (context.Context, *database, error, context.CancelFunc) {
+		return ctx, &database{Name: "primary"}, nil, nil
+	})
+
+	_, _ = lazydeps.Service(deps, "posts", func(ctx context.Context) (context.Context, string, error, context.CancelFunc) {
+		database := db.Use()
+		fmt.Println("posts uses", database.Name)
+		return ctx, "ready", nil, nil
+	})
+
+	for _, edge := range deps.Graph().Edges {
+		fmt.Println(edge.From, "->", edge.To)
+	}
+
+	// Output:
+	// posts uses primary
+	// app -> database
+	// app -> posts
+	// posts -> database
+}
+
 func ExampleScope_Shutdown() {
 	deps := lazydeps.New(
 		context.Background(),

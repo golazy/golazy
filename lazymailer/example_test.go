@@ -10,7 +10,7 @@ import (
 	_ "golazy.dev/lazyview/gotmpl"
 )
 
-func ExampleBase_Build() {
+func ExampleBase_Mail() {
 	renderer, err := lazycontroller.NewRenderer(fstest.MapFS{
 		"layouts/app.html.tpl":    {Data: []byte("{{.content}}")},
 		"layouts/mailer.html.tpl": {Data: []byte("{{.content}}")},
@@ -25,8 +25,9 @@ func ExampleBase_Build() {
 	}
 
 	ctx := lazycontroller.WithRenderer(context.Background(), renderer)
+	delivery := &lazymailer.MemoryDelivery{}
 	deliveries := lazymailer.NewRegistry("memory", map[string]lazymailer.Delivery{
-		"memory": &lazymailer.MemoryDelivery{},
+		"memory": delivery,
 	})
 	mailer, err := lazymailer.New(ctx, deliveries)
 	if err != nil {
@@ -43,7 +44,7 @@ func ExampleBase_Build() {
 	}
 	base.Set("Name", "Ada")
 
-	message, err := base.Build(lazymailer.Options{
+	err = base.Mail(lazymailer.Options{
 		Action:  "welcome",
 		To:      []lazymailer.Address{lazymailer.MustParseAddress("Ada <ada@example.com>")},
 		Subject: "Welcome",
@@ -52,6 +53,7 @@ func ExampleBase_Build() {
 		panic(err)
 	}
 
+	message := delivery.Messages()[0]
 	fmt.Println(message.Text)
 	fmt.Println(message.HTML)
 	// Output:

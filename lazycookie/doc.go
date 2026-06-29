@@ -3,59 +3,80 @@
 // license that can be found in LICENSE.gorilla.
 
 /*
-Package lazycookie encodes and decodes authenticated and optionally
-encrypted cookie values.
+Package lazycookie encodes and decodes authenticated, and optionally
+encrypted, cookie values.
 
-Secure cookies can't be forged, because their values are validated using HMAC.
-When encrypted, the content is also inaccessible to malicious eyes.
+Use this package directly when an application needs to put a small trusted
+value in an HTTP cookie without using the GoLazy session layer. GoLazy sessions
+normally reach this package through lazysession.CookieStore, which builds
+lazycookie codecs and calls EncodeMulti and DecodeMulti. lazyapp configures
+that path when lazyapp.Config.Sessions is enabled, so most GoLazy apps should
+configure lazysession instead of constructing SecureCookie values themselves.
 
-To use it, first create a new SecureCookie instance:
+A secure cookie is authenticated with HMAC. Authentication means the browser
+can still send the value back, but it cannot change the value, timestamp, or
+cookie name without making Decode fail. HMAC does not hide the content. Pass a
+block key to New when the cookie content must also be encrypted. The default
+block cipher is AES, used in CTR mode with a fresh initialization vector for
+each encoded value.
 
-	var hashKey = []byte("very-secret")
-	var blockKey = []byte("a-lot-secret")
+To use lazycookie directly, first create a SecureCookie:
+
+	var hashKey = []byte("32-byte-authentication-secret!!")
+	var blockKey = []byte("16-byte-aes-key!!")
 	var s = lazycookie.New(hashKey, blockKey)
 
-The hashKey is required, used to authenticate the cookie value using HMAC.
-It is recommended to use a key with 32 or 64 bytes.
+The hashKey is required and should be 32 or 64 bytes. The blockKey is optional;
+set it to nil to sign without encrypting. When blockKey is set for the default
+AES cipher, it must be 16, 24, or 32 bytes to select AES-128, AES-192, or
+AES-256.
 
-The blockKey is optional, used to encrypt the cookie value -- set it to nil
-to not use encryption. If set, the length must correspond to the block size
-of the encryption algorithm. For AES, used by default, valid lengths are
-16, 24, or 32 bytes to select AES-128, AES-192, or AES-256.
+GenerateRandomKey can create strong keys, but it does not persist them. Store
+generated keys in configuration or a secret manager. If an application creates
+new keys every time it starts, cookies issued before the restart cannot be
+decoded.
 
-Strong keys can be created using the convenience function GenerateRandomKey().
-
-Once a SecureCookie instance is set, use it to encode a cookie value:
+Encode serializes the value, optionally encrypts it, adds a timestamp, signs
+the cookie name, timestamp, and value, and returns a base64url cookie value:
 
 	func SetCookieHandler(w http.ResponseWriter, r *http.Request) {
-		value := map[string]string{
-			"foo": "bar",
+		value := map[string]string{"foo": "bar"}
+		encoded, err := s.Encode("cookie-name", value)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
 		}
-		if encoded, err := s.Encode("cookie-name", value); err == nil {
-			cookie := &http.Cookie{
-				Name:  "cookie-name",
-				Value: encoded,
-				Path:  "/",
-			}
-			http.SetCookie(w, cookie)
-		}
+		http.SetCookie(w, &http.Cookie{
+			Name:  "cookie-name",
+			Value: encoded,
+			Path:  "/",
+		})
 	}
 
-Later, use the same SecureCookie instance to decode and validate a cookie
-value:
+Decode verifies the signature and age before decrypting and deserializing. The
+name passed to Decode must match the cookie name passed to Encode:
 
 	func ReadCookieHandler(w http.ResponseWriter, r *http.Request) {
-		if cookie, err := r.Cookie("cookie-name"); err == nil {
-			value := make(map[string]string)
-			if err = s2.Decode("cookie-name", cookie.Value, &value); err == nil {
-				fmt.Fprintf(w, "The value of foo is %q", value["foo"])
-			}
+		cookie, err := r.Cookie("cookie-name")
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
 		}
+		value := make(map[string]string)
+		if err := s.Decode("cookie-name", cookie.Value, &value); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		fmt.Fprintf(w, "The value of foo is %q", value["foo"])
 	}
 
-We stored a map[string]string, but secure cookies can hold any value that
-can be encoded using encoding/gob. To store custom types, they must be
-registered first using gob.Register(). For basic types this is not needed;
-it works out of the box.
+The default serializer is encoding/gob. Basic values work without setup; custom
+types stored behind interface values may need gob.Register. SetSerializer
+switches to another Serializer, such as JSONEncoder or NopEncoder.
+
+For key rotation, create multiple codecs with CodecsFromPairs. EncodeMulti
+writes new cookies with the first working codec. DecodeMulti tries each codec
+in order, which lets old cookies remain readable while new cookies use the new
+keys.
 */
 package lazycookie

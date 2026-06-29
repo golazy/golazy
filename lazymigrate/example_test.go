@@ -13,7 +13,7 @@ func Example() {
 	ctx := context.Background()
 	files := fstest.MapFS{
 		"migrations/postgres/202606280001_create_documents.sql": {
-			Data: []byte("-- +goose Up\nCREATE TABLE documents (id bigserial);\n-- +goose Down\nDROP TABLE documents;\n"),
+			Data: []byte("-- +lazy Up\nCREATE TABLE documents (id bigserial);\n-- +lazy Down\nDROP TABLE documents;\n"),
 		},
 	}
 

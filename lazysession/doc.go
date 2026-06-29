@@ -3,205 +3,122 @@
 // license that can be found in LICENSE.gorilla.
 
 /*
-Package lazysession provides cookie and filesystem sessions and
-infrastructure for custom session backends.
+Package lazysession stores per-browser request state in signed cookies or in a
+custom session store.
 
-The key features are:
+A session is a named map of values associated with an HTTP request. Stores load
+that map from the incoming request and save it to the outgoing response.
+CookieStore keeps the whole session value inside one authenticated cookie.
+FilesystemStore keeps only a signed session ID in the cookie and stores the
+values in files. Application-specific backends can implement Store when the
+values should live somewhere else, such as a database.
 
-  - Simple API: use it as an easy way to set signed (and optionally
-    encrypted) cookies.
-  - Built-in backends to store sessions in cookies or the filesystem.
-  - Flash messages: session values that last until read.
-  - Convenient way to switch session persistency (aka "remember me") and set
-    other attributes.
-  - Mechanism to rotate authentication and encryption keys.
-  - Multiple sessions per request, even using different backends.
-  - Interfaces and infrastructure for custom session backends: sessions from
-    different stores can be retrieved and batch-saved using a common API.
+CookieStore and FilesystemStore use lazycookie for signing, decoding, optional
+encryption, age checks, and key rotation. Authentication means a browser can
+send a cookie back but cannot alter its value or cookie name without making
+decode fail. Authentication does not hide the content; pass authentication and
+block keys as pairs when cookie contents must also be encrypted. The first key
+pair writes new cookies. Later pairs are read-only fallbacks for old cookies.
 
-Let's start with an example that shows the sessions API in a nutshell:
+The smallest standalone use creates a store, gets a named session, changes
+Values, and saves before writing the response:
 
-	import (
-		"net/http"
-		"golazy.dev/lazysession"
-	)
+	var store = lazysession.NewCookieStore([]byte("32-byte-authentication-secret!!"))
 
-	// Note: Don't store your key in your source code. Pass it via an
-	// environmental variable, or flag (or both), and don't accidentally commit it
-	// alongside your code. Ensure your key is sufficiently random - i.e. use Go's
-	// crypto/rand or lazycookie.GenerateRandomKey(32) and persist the result.
-	// Ensure SESSION_KEY exists in the environment, or sessions will fail.
-	var store = lazysession.NewCookieStore([]byte(os.Getenv("SESSION_KEY")))
-
-	func MyHandler(w http.ResponseWriter, r *http.Request) {
-		// Get a session. Get() always returns a session, even if empty.
-		session, err := store.Get(r, "session-name")
+	func handler(w http.ResponseWriter, r *http.Request) {
+		session, err := store.Get(r, "app_session")
 		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		session.Values["user_id"] = "42"
+		if err := session.Save(r, w); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-
-		// Set some session values.
-		session.Values["foo"] = "bar"
-		session.Values[42] = 43
-		// Save it before we write to the response/return from the handler.
-		err = session.Save(r, w)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
+		fmt.Fprint(w, "saved")
 	}
 
-First we initialize a session store calling NewCookieStore() and passing a
-secret key used to authenticate the session. Inside the handler, we call
-store.Get() to retrieve an existing session or a new one. Then we set some
-session values in session.Values, which is a map[interface{}]interface{}.
-And finally we call session.Save() to save the session in the response.
+NewCookieStore expects stable secrets. Generate strong keys with
+lazycookie.GenerateRandomKey or a secret manager, then persist them in
+configuration. If a process creates new keys on every startup, existing session
+cookies cannot be decoded after a restart.
 
-Note that in production code, we should check for errors when calling
-session.Save(r, w), and either display an error message or otherwise handle it.
+Manager is the GoLazy application layer over Store. A Manager owns the default
+session name and store for one app. Its Handler installs the manager in the
+request context, creates the per-request registry, runs the next handler, and
+saves all sessions registered during the request before the first response
+write. This is the layer used by lazyapp.
 
-Save must be called before writing to the response, otherwise the session
-cookie will not be sent to the client.
+Enable sessions in a GoLazy app through lazyapp.Config.Sessions:
 
-That's all you need to know for the basic usage. Let's take a look at other
-options, starting with flash messages.
+	app := lazyapp.New(lazyapp.Config{
+		Name: "shop",
+		Sessions: lazysession.Config{
+			Key: os.Getenv("SESSION_KEY"),
+			Options: &lazysession.Options{
+				Path:     "/",
+				MaxAge:   86400 * 30,
+				HttpOnly: true,
+				SameSite: http.SameSiteLaxMode,
+			},
+		},
+	})
 
-Flash messages are session values that last until read. The term appeared with
-Ruby On Rails a few years back. When we request a flash message, it is removed
-from the session. To add a flash, call session.AddFlash(), and to get all
-flashes, call session.Flashes(). Here is an example:
+lazyapp calls NewManager, stores the manager in the app context with
+WithManager, and installs Manager.Handler in the app middleware stack. When the
+session name is empty, lazyapp derives it from Config.Name and appends
+"_session"; without lazyapp the package default is "lazy_session". Config.Key is
+expanded with SHA-256 before the cookie store is created. Use Config.KeyPairs
+for explicit lazycookie key pairs or Config.Store to provide a custom Store.
 
-	func MyHandler(w http.ResponseWriter, r *http.Request) {
-		// Get a session.
-		session, err := store.Get(r, "session-name")
+Handlers that run under Manager.Handler can use Get to retrieve the configured
+application session:
+
+	func handler(w http.ResponseWriter, r *http.Request) {
+		session, err := lazysession.Get(r)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-
-		// Get the previous flashes, if any.
-		if flashes := session.Flashes(); len(flashes) > 0 {
-			// Use the flash values.
-		} else {
-			// Set a new flash.
-			session.AddFlash("Hello, flash messages world!")
-		}
-		err = session.Save(r, w)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
+		session.Values["flash"] = "welcome"
 	}
 
-Flash messages are useful to set information to be read after a redirection,
-like after form submissions.
+Get reads the Manager from r.Context. ManagerFromContext and WithManager are
+available for code that builds its own server stack or wants to pass the
+manager through a base context. Store.Get remains useful when one request needs
+multiple named sessions or a package intentionally stays independent of the
+GoLazy app manager.
 
-There may also be cases where you want to store a complex datatype within a
-session, such as a struct. Sessions are serialised using the encoding/gob package,
-so it is easy to register new datatypes for storage in sessions:
+The request Registry is the reason Save(r, w) can persist every session touched
+during a request. Store.Get registers the decoded session by name; Save walks
+that registry and calls the matching Store.Save for each session. Manager.Handler
+does this automatically. If a handler uses stores directly without the manager,
+call Session.Save for one session or Save(r, w) for all registered sessions
+before writing the response.
 
-	import(
-		"encoding/gob"
-		"golazy.dev/lazysession"
-	)
+Flash messages are values that last until read. AddFlash stores a value under
+the default "_flash" key, or under a custom key when one is passed. Flashes
+returns the stored values and removes them from the session, which makes them
+useful for messages shown after a redirect.
 
-	type Person struct {
-		FirstName	string
-		LastName 	string
-		Email		string
-		Age			int
+Session values are encoded with encoding/gob by default. Basic values work
+without setup. Custom values stored through interface slots, including flash
+values, may need gob.Register during program initialization:
+
+	type Notice struct {
+		Kind string
+		Text string
 	}
-
-	type M map[string]interface{}
 
 	func init() {
-
-		gob.Register(&Person{})
-		gob.Register(&M{})
+		gob.Register(Notice{})
 	}
 
-As it's not possible to pass a raw type as a parameter to a function, gob.Register()
-relies on us passing it a value of the desired type. In the example above we've passed
-it a pointer to a struct and a pointer to a custom type representing a
-map[string]interface. (We could have passed non-pointer values if we wished.) This will
-then allow us to serialise/deserialise values of those types to and from our sessions.
-
-Note that because session values are stored in a map[string]interface{}, there's
-a need to type-assert data when retrieving it. We'll use the Person struct we registered above:
-
-	func MyHandler(w http.ResponseWriter, r *http.Request) {
-		session, err := store.Get(r, "session-name")
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		// Retrieve our struct and type-assert it
-		val := session.Values["person"]
-		var person = &Person{}
-		if person, ok := val.(*Person); !ok {
-			// Handle the case that it's not an expected type
-		}
-
-		// Now we can use our person object
-	}
-
-By default, session cookies last for a month. This is probably too long for
-some cases, but it is easy to change this and other attributes during
-runtime. Sessions can be configured individually or the store can be
-configured and then all sessions saved using it will use that configuration.
-We access session.Options or store.Options to set a new configuration. The
-fields are basically a subset of http.Cookie fields. Let's change the
-maximum age of a session to one week:
-
-	session.Options = &lazysession.Options{
-		Path:     "/",
-		MaxAge:   86400 * 7,
-		HttpOnly: true,
-	}
-
-Sometimes we may want to change authentication and/or encryption keys without
-breaking existing sessions. The CookieStore supports key rotation, and to use
-it you just need to set multiple authentication and encryption keys, in pairs,
-to be tested in order:
-
-	var store = lazysession.NewCookieStore(
-		[]byte("new-authentication-key"),
-		[]byte("new-encryption-key"),
-		[]byte("old-authentication-key"),
-		[]byte("old-encryption-key"),
-	)
-
-New sessions will be saved using the first pair. Old sessions can still be
-read because the first pair will fail, and the second will be tested. This
-makes it easy to "rotate" secret keys and still be able to validate existing
-sessions. Note: for all pairs the encryption key is optional; set it to nil
-or omit it and and encryption won't be used.
-
-Multiple sessions can be used in the same request, even with different
-session backends. When this happens, calling Save() on each session
-individually would be cumbersome, so we have a way to save all sessions
-at once: it's lazysession.Save(). Here's an example:
-
-	var store = lazysession.NewCookieStore([]byte("something-very-secret"))
-
-	func MyHandler(w http.ResponseWriter, r *http.Request) {
-		// Get a session and set a value.
-		session1, _ := store.Get(r, "session-one")
-		session1.Values["foo"] = "bar"
-		// Get another session and set another value.
-		session2, _ := store.Get(r, "session-two")
-		session2.Values[42] = 43
-		// Save all sessions.
-		err = lazysession.Save(r, w)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-	}
-
-This is possible because when we call Get() from a session store, it adds the
-session to a common registry. Save() uses it to save all registered sessions.
+Options are copied from the store to each new session. Changing store.Options
+affects future sessions; changing session.Options affects only that response.
+MaxAge follows http.Cookie semantics: zero omits Max-Age and expires at browser
+shutdown, a negative value deletes the cookie immediately, and a positive value
+sets a lifetime in seconds.
 */
 package lazysession

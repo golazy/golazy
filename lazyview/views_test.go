@@ -67,6 +67,36 @@ func TestRenderUsesHelpersAndPartials(t *testing.T) {
 	}
 }
 
+func TestRenderDoesNotMutateVariablesWhenInjectingLayoutContent(t *testing.T) {
+	views, err := lazyview.New(fstest.MapFS{
+		"layouts/app.html.tpl": {Data: []byte(`<main>{{.content}}</main>`)},
+		"posts/index.html.tpl": {Data: []byte(`OK`)},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	variables := map[string]any{"content": "original"}
+	var out strings.Builder
+	err = views.Render(lazyview.Options{
+		Writer:     &out,
+		Variables:  variables,
+		Controller: "posts",
+		Action:     "index",
+		UseLayout:  true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got, want := out.String(), `<main>OK</main>`; got != want {
+		t.Fatalf("rendered body = %q, want %q", got, want)
+	}
+	if got := variables["content"]; got != "original" {
+		t.Fatalf("variables[content] = %q, want original", got)
+	}
+}
+
 func TestRenderCreatesTraceRegionsForViewsLayoutsAndPartials(t *testing.T) {
 	views, err := lazyview.New(fstest.MapFS{
 		"layouts/app.html.tpl": {Data: []byte(`<main>{{.content}}</main>`)},

@@ -131,6 +131,11 @@ func (v *Views) Render(options Options) error {
 		return err
 	}
 
+	renderContext.Variables["content"] = Fragment{
+		Body:        content.String(),
+		ContentType: contentTypeForFormat(renderContext.Format),
+	}
+
 	layoutFile, err := v.findLayout(renderContext)
 	if err != nil {
 		return err
@@ -138,11 +143,6 @@ func (v *Views) Render(options Options) error {
 	layoutContext := *renderContext
 	layoutContext.Action = ""
 	layoutContext.Partial = ""
-	layoutContext.Variables = copyVariables(renderContext.Variables)
-	layoutContext.Variables["content"] = Fragment{
-		Body:        content.String(),
-		ContentType: contentTypeForFormat(renderContext.Format),
-	}
 	layoutContext.Data = layoutContext.Variables
 
 	setContentType(options.Writer, renderContext.Format)
@@ -368,18 +368,15 @@ func (ctx *Context) partial(args ...any) (Fragment, error) {
 		return Fragment{}, fmt.Errorf("lazyview: partial name must be a string")
 	}
 
-	variables := copyVariables(ctx.Variables)
+	variables := ctx.Variables
 	data := ctx.Data
-	if data == nil {
-		data = variables
-	}
 	if len(args) > 1 {
 		if len(args) > 2 {
 			return Fragment{}, fmt.Errorf("lazyview: partial expects at most 2 arguments")
 		}
 		data = args[1]
 		if locals, ok := data.(map[string]any); ok {
-			variables = copyVariables(locals)
+			variables = locals
 		}
 	}
 

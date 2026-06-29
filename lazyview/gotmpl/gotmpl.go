@@ -283,11 +283,23 @@ func templateResults(results []reflect.Value) (any, error) {
 }
 
 func templateVariables(variables map[string]any) map[string]any {
+	if !hasTemplateFragments(variables) {
+		return variables
+	}
 	out := make(map[string]any, len(variables))
 	for name, value := range variables {
 		out[name] = templateValue(value)
 	}
 	return out
+}
+
+func hasTemplateFragments(variables map[string]any) bool {
+	for _, value := range variables {
+		if _, ok := value.(lazyview.Fragment); ok {
+			return true
+		}
+	}
+	return false
 }
 
 func templateData(ctx *lazyview.Context) any {

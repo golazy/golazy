@@ -101,9 +101,17 @@ func (b *Base) BindRequest(w http.ResponseWriter, r *http.Request, route lazyvie
 		return fmt.Errorf("controller route metadata is missing from controller request")
 	}
 
-	requestContext := withAppContext(r.Context(), b.appCtx)
+	requestContext := r.Context()
+	hasAppContext := b.hasAppContext(requestContext)
+	if !hasAppContext {
+		requestContext = withAppContext(requestContext, b.appCtx)
+	}
 	b.ctx = requestContext
-	b.request = r.WithContext(requestContext)
+	if hasAppContext {
+		b.request = r
+	} else {
+		b.request = r.WithContext(requestContext)
+	}
 	b.writer = w
 	b.route = route
 	b.controller = controller
@@ -118,6 +126,11 @@ func (b *Base) BindRequest(w http.ResponseWriter, r *http.Request, route lazyvie
 	b.variants = nil
 	b.cacheKey = cacheKeySpec{}
 	return nil
+}
+
+func (b *Base) hasAppContext(ctx context.Context) bool {
+	renderer, ok := RendererFromContext(ctx)
+	return ok && renderer == b.renderer
 }
 
 func (b *Base) ResetRequest() {

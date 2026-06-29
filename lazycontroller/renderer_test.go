@@ -22,6 +22,9 @@ type rendererCacheBackend struct {
 	keys   []string
 }
 
+type rendererAppContextKey struct{}
+type rendererRequestContextKey struct{}
+
 func (b *rendererCacheBackend) Get(key string) (any, error) {
 	if value, ok := b.values[key]; ok {
 		return value, nil
@@ -40,6 +43,66 @@ func (b *rendererCacheBackend) Set(key string, value any) error {
 
 func (b *rendererCacheBackend) Stats() lazycache.Stats {
 	return lazycache.Stats{Entries: len(b.values)}
+}
+
+func TestBindRequestUsesInheritedAppContextWithoutCloningRequest(t *testing.T) {
+	renderer, err := NewRenderer(fstest.MapFS{
+		"layouts/app.html.tpl": {Data: []byte(`{{.content}}`)},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	appCtx := context.WithValue(WithRenderer(context.Background(), renderer), rendererAppContextKey{}, "app")
+	requestCtx := context.WithValue(appCtx, rendererRequestContextKey{}, "request")
+	request := httptest.NewRequest(http.MethodGet, "/posts", nil).WithContext(requestCtx)
+	base, err := NewBase(appCtx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := base.BindRequest(httptest.NewRecorder(), request, lazyview.Route{Controller: "posts"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if base.Request() != request {
+		t.Fatal("BindRequest cloned a request that already inherited the app context")
+	}
+	if got := base.Request().Context().Value(rendererAppContextKey{}); got != "app" {
+		t.Fatalf("app context value = %v, want app", got)
+	}
+	if got := base.Request().Context().Value(rendererRequestContextKey{}); got != "request" {
+		t.Fatalf("request context value = %v, want request", got)
+	}
+}
+
+func TestBindRequestMergesAppContextWhenRequestDidNotInheritIt(t *testing.T) {
+	renderer, err := NewRenderer(fstest.MapFS{
+		"layouts/app.html.tpl": {Data: []byte(`{{.content}}`)},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	appCtx := context.WithValue(WithRenderer(context.Background(), renderer), rendererAppContextKey{}, "app")
+	requestCtx := context.WithValue(context.Background(), rendererRequestContextKey{}, "request")
+	request := httptest.NewRequest(http.MethodGet, "/posts", nil).WithContext(requestCtx)
+	base, err := NewBase(appCtx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := base.BindRequest(httptest.NewRecorder(), request, lazyview.Route{Controller: "posts"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if base.Request() == request {
+		t.Fatal("BindRequest reused a request that did not inherit the app context")
+	}
+	if got := base.Request().Context().Value(rendererAppContextKey{}); got != "app" {
+		t.Fatalf("app context value = %v, want app", got)
+	}
+	if got := base.Request().Context().Value(rendererRequestContextKey{}); got != "request" {
+		t.Fatalf("request context value = %v, want request", got)
+	}
 }
 
 func TestRenderEscapesDataAndComposesLayout(t *testing.T) {

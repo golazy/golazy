@@ -87,7 +87,7 @@ func (c *benchmarkRequestController) WithPartials(page benchmarkPage, nav benchm
 func BenchmarkControllerActionWrite(b *testing.B) {
 	scope := newBenchmarkScope(b)
 	scope.Get("/posts", newBenchmarkController, (*benchmarkController).Index)
-	request := httptest.NewRequest(http.MethodGet, "/posts", nil)
+	request := newBenchmarkRequest(scope, http.MethodGet, "/posts")
 	response := newBenchmarkResponseWriter()
 
 	b.ReportAllocs()
@@ -101,7 +101,7 @@ func BenchmarkControllerActionWrite(b *testing.B) {
 func BenchmarkControllerActionAutoRender(b *testing.B) {
 	scope := newBenchmarkScope(b)
 	scope.Get("/posts", newBenchmarkController, (*benchmarkController).Rendered)
-	request := httptest.NewRequest(http.MethodGet, "/posts", nil)
+	request := newBenchmarkRequest(scope, http.MethodGet, "/posts")
 	response := newBenchmarkResponseWriter()
 
 	b.ReportAllocs()
@@ -115,7 +115,7 @@ func BenchmarkControllerActionAutoRender(b *testing.B) {
 func BenchmarkControllerBeforeGeneratorsWrite(b *testing.B) {
 	scope := newBenchmarkScope(b)
 	scope.Get("/benchmarks/static", newBenchmarkRequestController, (*benchmarkRequestController).Static)
-	request := httptest.NewRequest(http.MethodGet, "/benchmarks/static", nil)
+	request := newBenchmarkRequest(scope, http.MethodGet, "/benchmarks/static")
 	response := newBenchmarkResponseWriter()
 	scope.ServeHTTP(response, request)
 	if response.status != 0 || response.bytes != len(benchmarkStaticOK) {
@@ -133,7 +133,7 @@ func BenchmarkControllerBeforeGeneratorsWrite(b *testing.B) {
 func BenchmarkControllerBeforeGeneratorsAutoRenderPartials(b *testing.B) {
 	scope := newBenchmarkScope(b)
 	scope.Get("/benchmarks/partials", newBenchmarkRequestController, (*benchmarkRequestController).WithPartials)
-	request := httptest.NewRequest(http.MethodGet, "/benchmarks/partials", nil)
+	request := newBenchmarkRequest(scope, http.MethodGet, "/benchmarks/partials")
 	response := newBenchmarkResponseWriter()
 	scope.ServeHTTP(response, request)
 	if response.status != http.StatusOK || response.bytes == 0 {
@@ -165,6 +165,10 @@ func newBenchmarkScope(b *testing.B) *Scope {
 		b.Fatal(err)
 	}
 	return New(lazycontroller.WithRenderer(context.Background(), renderer))
+}
+
+func newBenchmarkRequest(scope *Scope, method string, path string) *http.Request {
+	return httptest.NewRequest(method, path, nil).WithContext(scope.Context)
 }
 
 type benchmarkResponseWriter struct {

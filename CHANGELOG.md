@@ -61,9 +61,9 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Lazydev middleware tracing records whether each middleware called the next
   handler, allowing the panel to identify the middleware that handled a
   request.
-- View rendering now avoids redundant variable-map copies for partials,
-  layout content injection, and Go template data that does not contain
-  fragments.
+- View rendering now avoids redundant variable-map and helper-map copies for
+  partials, layout content injection, and Go template data that does not
+  contain fragments.
 - `lazycontroller.Base.Layout` is now the layout-selection API. The older
   `SetLayout` alias was removed.
 - `lazycontroller.Base.CacheKey` and `CacheKeyF` now return `true` when an

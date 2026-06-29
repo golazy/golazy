@@ -113,48 +113,56 @@ func (v *Views) Render(options Options) error {
 	if options.Writer == nil {
 		return fmt.Errorf("lazyview: writer is required")
 	}
-	renderContext := v.renderContext(options)
+	return v.render(v.renderContext(options), options.Writer, options.UseLayout)
+}
 
-	file, err := v.findView(renderContext)
+func (v *Views) render(ctx *Context, writer io.Writer, useLayout bool) error {
+	file, err := v.findView(ctx)
 	if err != nil {
 		return err
 	}
 
-	if !options.UseLayout {
-		setContentType(options.Writer, renderContext.Format)
-		return v.renderNamedTemplate(renderContext, options.Writer, file, "view.render")
+	if !useLayout {
+		setContentType(writer, ctx.Format)
+		return v.renderNamedTemplate(ctx, writer, file, "view.render")
 	}
 
 	content := acquireRenderBuffer()
 	defer releaseRenderBuffer(content)
-	if err := v.renderNamedTemplate(renderContext, content, file, "view.render"); err != nil {
+	if err := v.renderNamedTemplate(ctx, content, file, "view.render"); err != nil {
 		return err
 	}
 
-	renderContext.Variables["content"] = Fragment{
+	ctx.Variables["content"] = Fragment{
 		Body:        content.String(),
-		ContentType: contentTypeForFormat(renderContext.Format),
+		ContentType: contentTypeForFormat(ctx.Format),
 	}
 
-	layoutFile, err := v.findLayout(renderContext)
+	layoutFile, err := v.findLayout(ctx)
 	if err != nil {
 		return err
 	}
-	layoutContext := *renderContext
+	layoutContext := *ctx
 	layoutContext.Action = ""
 	layoutContext.Partial = ""
 	layoutContext.Data = layoutContext.Variables
 
-	setContentType(options.Writer, renderContext.Format)
-	return v.renderNamedTemplate(&layoutContext, options.Writer, layoutFile, "view.layout")
+	setContentType(writer, ctx.Format)
+	return v.renderNamedTemplate(&layoutContext, writer, layoutFile, "view.layout")
 }
 
 // RenderString renders a view to a string.
 func (v *Views) RenderString(options Options) (string, error) {
+	if v == nil {
+		return "", fmt.Errorf("lazyview: views is nil")
+	}
+	return v.renderString(v.renderContext(options), options.UseLayout)
+}
+
+func (v *Views) renderString(ctx *Context, useLayout bool) (string, error) {
 	out := acquireRenderBuffer()
 	defer releaseRenderBuffer(out)
-	options.Writer = out
-	if err := v.Render(options); err != nil {
+	if err := v.render(ctx, out, useLayout); err != nil {
 		return "", err
 	}
 	return out.String(), nil
@@ -392,20 +400,7 @@ func (ctx *Context) partial(args ...any) (Fragment, error) {
 	if span != nil {
 		defer span.End()
 	}
-	body, err := ctx.Views.RenderString(Options{
-		Context:    partialCtx,
-		Request:    ctx.Request,
-		Variables:  variables,
-		Data:       data,
-		Helpers:    ctx.helpers,
-		Route:      ctx.Route,
-		Namespace:  ctx.Namespace,
-		Controller: ctx.Controller,
-		Partial:    name,
-		Format:     ctx.Format,
-		Variants:   ctx.Variants,
-		UseLayout:  false,
-	})
+	body, err := ctx.Views.renderString(ctx.partialContext(partialCtx, name, variables, data), false)
 	if err != nil {
 		if span != nil {
 			span.RecordError(err)
@@ -416,6 +411,28 @@ func (ctx *Context) partial(args ...any) (Fragment, error) {
 		Body:        body,
 		ContentType: contentTypeForFormat(ctx.Format),
 	}, nil
+}
+
+func (ctx *Context) partialContext(partialCtx context.Context, name string, variables map[string]any, data any) *Context {
+	copiedVariables := copyVariables(variables)
+	if data == nil {
+		data = copiedVariables
+	}
+	return &Context{
+		Context:    partialCtx,
+		Request:    ctx.Request,
+		Views:      ctx.Views,
+		Route:      ctx.Route,
+		Variables:  copiedVariables,
+		Data:       data,
+		helpers:    ctx.helpers,
+		Namespace:  ctx.Namespace,
+		Controller: ctx.Controller,
+		Partial:    name,
+		Format:     ctx.Format,
+		Variants:   ctx.Variants,
+		Layout:     ctx.Layout,
+	}
 }
 
 func partialRegionName(name string) string {

@@ -15,7 +15,7 @@ func TestRenderUsesHelpersAndPartials(t *testing.T) {
 	views, err := lazyview.New(fstest.MapFS{
 		"layouts/app.html.tpl": {Data: []byte(`<main>{{.content}}</main>`)},
 		"posts/index.html.tpl": {Data: []byte(`{{ partial "post" . }} {{hello .name}} {{route_name}}`)},
-		"posts/_post.html.tpl": {Data: []byte(`<p>{{.name}}</p>`)},
+		"posts/_post.html.tpl": {Data: []byte(`<p>{{hello .name}}</p>`)},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -45,7 +45,7 @@ func TestRenderUsesHelpersAndPartials(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if got, want := out.String(), `<main><p>Ada</p> hello Ada posts</main>`; got != want {
+	if got, want := out.String(), `<main><p>hello Ada</p> hello Ada posts</main>`; got != want {
 		t.Fatalf("rendered body = %q, want %q", got, want)
 	}
 
@@ -62,7 +62,7 @@ func TestRenderUsesHelpersAndPartials(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if got, want := out.String(), `<main><p>Ada</p> hello Ada articles</main>`; got != want {
+	if got, want := out.String(), `<main><p>hello Ada</p> hello Ada articles</main>`; got != want {
 		t.Fatalf("rendered body = %q, want %q", got, want)
 	}
 }

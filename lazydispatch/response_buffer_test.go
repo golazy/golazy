@@ -89,3 +89,23 @@ func TestResponseBufferCanStartStreaming(t *testing.T) {
 		t.Fatalf("body = %q, want %q", got, want)
 	}
 }
+
+func TestPooledResponseBufferClearsState(t *testing.T) {
+	first := acquireBufferedResponseWriter(httptest.NewRecorder())
+	first.Header().Set("X-Test", "stale")
+	first.WriteHeader(http.StatusCreated)
+	_, _ = fmt.Fprint(first, "stale")
+	releaseBufferedResponseWriter(first)
+
+	second := acquireBufferedResponseWriter(httptest.NewRecorder())
+	defer releaseBufferedResponseWriter(second)
+	if got := second.Header().Get("X-Test"); got != "" {
+		t.Fatalf("pooled header = %q, want empty", got)
+	}
+	if second.WasResponseSent() {
+		t.Fatal("pooled response was marked sent")
+	}
+	if got := second.body.Len(); got != 0 {
+		t.Fatalf("pooled body length = %d, want 0", got)
+	}
+}

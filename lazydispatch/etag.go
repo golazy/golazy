@@ -30,7 +30,8 @@ func (etagMiddleware) Handler(next http.Handler) http.Handler {
 			return
 		}
 
-		buffer = NewBufferedResponseWriter(w)
+		buffer = acquireBufferedResponseWriter(w)
+		defer releaseBufferedResponseWriter(buffer)
 		next.ServeHTTP(buffer, r)
 		applyETag(buffer, r)
 		_ = buffer.Flush()

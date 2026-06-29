@@ -3,7 +3,16 @@ package lazydispatch
 import (
 	"bytes"
 	"net/http"
+	"sync"
 )
+
+const maxPooledResponseBufferBody = 64 << 10
+
+var bufferedResponseWriterPool = sync.Pool{
+	New: func() any {
+		return &BufferedResponseWriter{}
+	},
+}
 
 // ResponseBuffer delays sending a response until the downstream handler returns.
 func ResponseBuffer() Middleware {
@@ -25,7 +34,8 @@ func (responseBuffer) Handler(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		buffer := NewBufferedResponseWriter(w)
+		buffer := acquireBufferedResponseWriter(w)
+		defer releaseBufferedResponseWriter(buffer)
 		next.ServeHTTP(buffer, r)
 		_ = buffer.Flush()
 	})
@@ -42,10 +52,49 @@ type BufferedResponseWriter struct {
 }
 
 func NewBufferedResponseWriter(w http.ResponseWriter) *BufferedResponseWriter {
-	return &BufferedResponseWriter{
-		writer: w,
-		header: make(http.Header),
+	buffer := &BufferedResponseWriter{}
+	buffer.init(w)
+	return buffer
+}
+
+func acquireBufferedResponseWriter(w http.ResponseWriter) *BufferedResponseWriter {
+	buffer := bufferedResponseWriterPool.Get().(*BufferedResponseWriter)
+	buffer.init(w)
+	return buffer
+}
+
+func releaseBufferedResponseWriter(w *BufferedResponseWriter) {
+	if w == nil {
+		return
 	}
+	w.writer = nil
+	if w.header != nil {
+		clear(w.header)
+	}
+	w.status = 0
+	w.sent = false
+	if w.stream {
+		w.stream = false
+		return
+	}
+	if w.body.Cap() > maxPooledResponseBufferBody {
+		return
+	}
+	w.body.Reset()
+	bufferedResponseWriterPool.Put(w)
+}
+
+func (w *BufferedResponseWriter) init(writer http.ResponseWriter) {
+	w.writer = writer
+	if w.header == nil {
+		w.header = make(http.Header)
+	} else {
+		clear(w.header)
+	}
+	w.body.Reset()
+	w.status = 0
+	w.sent = false
+	w.stream = false
 }
 
 func (w *BufferedResponseWriter) Header() http.Header {
@@ -78,7 +127,7 @@ func (w *BufferedResponseWriter) Reset() {
 	if w.stream {
 		return
 	}
-	w.header = make(http.Header)
+	clear(w.header)
 	w.body.Reset()
 	w.status = 0
 	w.sent = false

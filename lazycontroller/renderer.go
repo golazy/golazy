@@ -9,11 +9,20 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 
 	"golazy.dev/lazycache"
 	"golazy.dev/lazyturbo"
 	"golazy.dev/lazyview"
 )
+
+const maxPooledControllerBufferBody = 64 << 10
+
+var controllerResponseBufferPool = sync.Pool{
+	New: func() any {
+		return &bufferedResponse{}
+	},
+}
 
 // Renderer is the application view renderer.
 type Renderer = lazyview.Views
@@ -449,6 +458,7 @@ func (b *Base) renderView(options lazyview.Options, format Format) error {
 	copyHeaders(buffer.Header(), b.writer.Header())
 	options.Writer = buffer
 	if err := b.renderer.Render(options); err != nil {
+		releaseBufferedResponse(buffer)
 		return err
 	}
 	return b.writeBufferedResponse(buffer)
@@ -475,9 +485,11 @@ func (b *Base) renderCachedView(options lazyview.Options, format Format, key str
 	copyHeaders(buffer.Header(), b.writer.Header())
 	options.Writer = buffer
 	if err := b.renderer.Render(options); err != nil {
+		releaseBufferedResponse(buffer)
 		return err
 	}
 	if err := cache.Set(buffer.body.String(), key); err != nil {
+		releaseBufferedResponse(buffer)
 		return err
 	}
 	return b.writeBufferedResponse(buffer)
@@ -573,6 +585,7 @@ func (b *Base) HandleError(w http.ResponseWriter, r *http.Request, err error) er
 	}
 
 	buffer := newBufferedResponse()
+	defer releaseBufferedResponse(buffer)
 	buffer.WriteHeader(status)
 	renderErr := b.renderer.Render(lazyview.Options{
 		Context:    b.ctx,
@@ -626,9 +639,36 @@ type bufferedResponse struct {
 }
 
 func newBufferedResponse() *bufferedResponse {
-	return &bufferedResponse{
-		header: make(http.Header),
+	buffer := controllerResponseBufferPool.Get().(*bufferedResponse)
+	buffer.init()
+	return buffer
+}
+
+func releaseBufferedResponse(w *bufferedResponse) {
+	if w == nil {
+		return
 	}
+	if w.header != nil {
+		clear(w.header)
+	}
+	w.status = 0
+	w.sent = false
+	if w.body.Cap() > maxPooledControllerBufferBody {
+		return
+	}
+	w.body.Reset()
+	controllerResponseBufferPool.Put(w)
+}
+
+func (w *bufferedResponse) init() {
+	if w.header == nil {
+		w.header = make(http.Header)
+	} else {
+		clear(w.header)
+	}
+	w.body.Reset()
+	w.status = 0
+	w.sent = false
 }
 
 func (w *bufferedResponse) Header() http.Header {
@@ -654,6 +694,7 @@ func (b *Base) writeBufferedResponse(buffer *bufferedResponse) error {
 	if buffer == nil {
 		return fmt.Errorf("controller response buffer is missing")
 	}
+	defer releaseBufferedResponse(buffer)
 	status := buffer.status
 	if b.status != 0 {
 		status = b.status

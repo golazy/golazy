@@ -105,6 +105,26 @@ func TestBindRequestMergesAppContextWhenRequestDidNotInheritIt(t *testing.T) {
 	}
 }
 
+func TestPooledBufferedResponseClearsState(t *testing.T) {
+	first := newBufferedResponse()
+	first.Header().Set("X-Test", "stale")
+	first.WriteHeader(http.StatusCreated)
+	_, _ = first.Write([]byte("stale"))
+	releaseBufferedResponse(first)
+
+	second := newBufferedResponse()
+	defer releaseBufferedResponse(second)
+	if got := second.Header().Get("X-Test"); got != "" {
+		t.Fatalf("pooled header = %q, want empty", got)
+	}
+	if second.sent {
+		t.Fatal("pooled response was marked sent")
+	}
+	if got := second.body.Len(); got != 0 {
+		t.Fatalf("pooled body length = %d, want 0", got)
+	}
+}
+
 func TestRenderEscapesDataAndComposesLayout(t *testing.T) {
 	views := fstest.MapFS{
 		"layouts/app.html.tpl": {Data: []byte(`{{$content := .content}}<main>{{$content}}</main>`)},

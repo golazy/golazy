@@ -9,6 +9,7 @@ import (
 	"testing/fstest"
 
 	"golazy.dev/lazycontroller"
+	"golazy.dev/lazydispatch"
 	_ "golazy.dev/lazyview/gotmpl"
 )
 
@@ -130,6 +131,25 @@ func BenchmarkControllerBeforeGeneratorsWrite(b *testing.B) {
 	}
 }
 
+func BenchmarkControllerBufferedBeforeGeneratorsWrite(b *testing.B) {
+	scope := newBenchmarkScope(b)
+	scope.Get("/benchmarks/static", newBenchmarkRequestController, (*benchmarkRequestController).Static)
+	handler := lazydispatch.ResponseBuffer().Handler(scope)
+	request := newBenchmarkRequest(scope, http.MethodGet, "/benchmarks/static")
+	response := newBenchmarkResponseWriter()
+	handler.ServeHTTP(response, request)
+	if response.status != http.StatusOK || response.bytes != len(benchmarkStaticOK) {
+		b.Fatalf("buffered static benchmark response status=%d bytes=%d, want 200 with %d bytes", response.status, response.bytes, len(benchmarkStaticOK))
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		response.Reset()
+		handler.ServeHTTP(response, request)
+	}
+}
+
 func BenchmarkControllerBeforeGeneratorsAutoRenderPartials(b *testing.B) {
 	scope := newBenchmarkScope(b)
 	scope.Get("/benchmarks/partials", newBenchmarkRequestController, (*benchmarkRequestController).WithPartials)
@@ -145,6 +165,25 @@ func BenchmarkControllerBeforeGeneratorsAutoRenderPartials(b *testing.B) {
 	for range b.N {
 		response.Reset()
 		scope.ServeHTTP(response, request)
+	}
+}
+
+func BenchmarkControllerBufferedBeforeGeneratorsAutoRenderPartials(b *testing.B) {
+	scope := newBenchmarkScope(b)
+	scope.Get("/benchmarks/partials", newBenchmarkRequestController, (*benchmarkRequestController).WithPartials)
+	handler := lazydispatch.ResponseBuffer().Handler(scope)
+	request := newBenchmarkRequest(scope, http.MethodGet, "/benchmarks/partials")
+	response := newBenchmarkResponseWriter()
+	handler.ServeHTTP(response, request)
+	if response.status != http.StatusOK || response.bytes == 0 {
+		b.Fatalf("buffered partials benchmark response status=%d bytes=%d, want 200 with body", response.status, response.bytes)
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		response.Reset()
+		handler.ServeHTTP(response, request)
 	}
 }
 

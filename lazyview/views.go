@@ -11,9 +11,18 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"golazy.dev/lazytelemetry"
 )
+
+const maxPooledRenderBufferBody = 64 << 10
+
+var renderBufferPool = sync.Pool{
+	New: func() any {
+		return &bytes.Buffer{}
+	},
+}
 
 // Views owns the application view filesystem, registered engines, and global helpers.
 type Views struct {
@@ -115,8 +124,9 @@ func (v *Views) Render(options Options) error {
 		return v.renderNamedTemplate(renderContext, options.Writer, file, templateRegionName("view.render", file))
 	}
 
-	var content bytes.Buffer
-	if err := v.renderNamedTemplate(renderContext, &content, file, templateRegionName("view.render", file)); err != nil {
+	content := acquireRenderBuffer()
+	defer releaseRenderBuffer(content)
+	if err := v.renderNamedTemplate(renderContext, content, file, templateRegionName("view.render", file)); err != nil {
 		return err
 	}
 
@@ -140,12 +150,30 @@ func (v *Views) Render(options Options) error {
 
 // RenderString renders a view to a string.
 func (v *Views) RenderString(options Options) (string, error) {
-	var out bytes.Buffer
-	options.Writer = &out
+	out := acquireRenderBuffer()
+	defer releaseRenderBuffer(out)
+	options.Writer = out
 	if err := v.Render(options); err != nil {
 		return "", err
 	}
 	return out.String(), nil
+}
+
+func acquireRenderBuffer() *bytes.Buffer {
+	buffer := renderBufferPool.Get().(*bytes.Buffer)
+	buffer.Reset()
+	return buffer
+}
+
+func releaseRenderBuffer(buffer *bytes.Buffer) {
+	if buffer == nil {
+		return
+	}
+	if buffer.Cap() > maxPooledRenderBufferBody {
+		return
+	}
+	buffer.Reset()
+	renderBufferPool.Put(buffer)
 }
 
 func (v *Views) renderContext(options Options) *Context {

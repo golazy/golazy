@@ -10,9 +10,23 @@ import (
 	"golazy.dev/lazycontrolplane"
 )
 
+// LazyDevBuildInfoPath is the lazydev control-plane path for Go build
+// metadata.
+//
+// GET requests return a no-store JSON snapshot from
+// runtime/debug.ReadBuildInfo. The response includes whether build information
+// was available, the Go version, the main package path, the main module,
+// dependencies, module replacements, and build settings.
 const LazyDevBuildInfoPath = "/buildinfo"
 
-// RegisterLazyDevHandlers registers build metadata endpoints.
+// RegisterLazyDevHandlers registers lazydev build metadata endpoints on
+// controlPlane.
+//
+// This function exists only in lazydev builds. lazyapp normally calls it while
+// aggregating package-owned development handlers onto the application's
+// lazycontrolplane.ControlPlane, so applications that use lazyapp do not need to
+// call it directly. Custom development servers can call it when they create and
+// serve their own control plane.
 func RegisterLazyDevHandlers(controlPlane *lazycontrolplane.ControlPlane) {
 	if controlPlane == nil {
 		return

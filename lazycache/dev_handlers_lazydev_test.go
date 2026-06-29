@@ -33,6 +33,14 @@ func TestLazyDevCacheHandlersExposeStatsKeysAndToggles(t *testing.T) {
 	if len(got.Keys) != 1 || got.Keys[0] != "user-1" {
 		t.Fatalf("Keys = %#v, want [user-1]", got.Keys)
 	}
+	if len(got.Entries) != 1 || got.Entries[0].Key != "user-1" || got.Entries[0].SizeBytes != 3 {
+		t.Fatalf("Entries = %#v, want inspectable user-1 entry", got.Entries)
+	}
+
+	detail := requestLazyDevCacheEntry(t, plane, LazyDevCacheEntryPath+"?key=user-1")
+	if detail.Key != "user-1" || detail.Content != "Ada" || detail.ContentType == "" {
+		t.Fatalf("Entry = %#v, want user-1 content", detail)
+	}
 
 	got = requestLazyDevCache(t, plane, http.MethodPost, LazyDevCacheOffPath)
 	if got.Enabled {
@@ -67,6 +75,20 @@ func requestLazyDevCache(t *testing.T, handler http.Handler, method string, path
 	var out lazyDevCacheResponse
 	if err := json.Unmarshal(response.Body.Bytes(), &out); err != nil {
 		t.Fatalf("decode cache response: %v\n%s", err, response.Body.String())
+	}
+	return out
+}
+
+func requestLazyDevCacheEntry(t *testing.T, handler http.Handler, path string) EntryDetail {
+	t.Helper()
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("GET %s status = %d, want %d: %s", path, response.Code, http.StatusOK, response.Body.String())
+	}
+	var out EntryDetail
+	if err := json.Unmarshal(response.Body.Bytes(), &out); err != nil {
+		t.Fatalf("decode cache entry response: %v\n%s", err, response.Body.String())
 	}
 	return out
 }

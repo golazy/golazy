@@ -23,7 +23,7 @@ func testCacheContext(t *testing.T) context.Context {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return lazycache.WithCache(context.Background(), cache)
+	return lazycache.WithBuildVersion(lazycache.WithCache(context.Background(), cache), "testbuild")
 }
 
 func TestCacheHelperCachesPartialBody(t *testing.T) {
@@ -127,6 +127,33 @@ func TestCacheFullHelpersShareExplicitKey(t *testing.T) {
 	}
 	if got, want := second.String(), `<main><p>Ada</p></main>`; got != want {
 		t.Fatalf("second render = %q, want shared cached body %q", got, want)
+	}
+}
+
+func TestCacheHelpersIncludeVariantAndBuildVersion(t *testing.T) {
+	ctx := &lazyview.Context{
+		Context:    testCacheContext(t),
+		Namespace:  "admin",
+		Controller: "posts",
+		Action:     "show",
+		Format:     "html",
+		Variants:   []string{"mobile"},
+	}
+
+	key, err := partialCacheKey(ctx, "post", "card")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := key, "build-testbuild-variant-mobile-admin-posts-show-html-card-post"; got != want {
+		t.Fatalf("partial cache key = %q, want %q", got, want)
+	}
+
+	key, err = partialCacheKey(ctx, templateCacheKey("post-1"), "card")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := key, "build-testbuild-variant-mobile-post-1"; got != want {
+		t.Fatalf("explicit cache key = %q, want %q", got, want)
 	}
 }
 

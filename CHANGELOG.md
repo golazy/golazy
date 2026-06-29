@@ -57,6 +57,9 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `lazycontroller.Base.CacheKey` and `CacheKeyF` now return `true` when an
   existing cached response was written and `false` when the action should
   continue and render a body for storage.
+- Controller and template render cache keys now include the app build version,
+  and include the active render variant when present, so deploys and
+  variant-specific renders do not share stale cached bodies.
 - `lazyfiles` and `lazymedia` now keep their append-only JSONL repository
   implementations in `golazy.dev/lazyfiles/jsonl` and
   `golazy.dev/lazymedia/jsonl`, with `JSONLRepository` types that satisfy the

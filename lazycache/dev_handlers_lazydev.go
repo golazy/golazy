@@ -4,6 +4,7 @@ package lazycache
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -11,13 +12,15 @@ import (
 )
 
 const LazyDevCachePath = "/cache"
+const LazyDevCacheEntryPath = "/cache/entry"
 const LazyDevCacheOnPath = "/cache/on"
 const LazyDevCacheOffPath = "/cache/off"
 
 type lazyDevCacheResponse struct {
-	Enabled bool     `json:"enabled"`
-	Stats   Stats    `json:"stats"`
-	Keys    []string `json:"keys"`
+	Enabled bool        `json:"enabled"`
+	Stats   Stats       `json:"stats"`
+	Keys    []string    `json:"keys"`
+	Entries []EntryInfo `json:"entries"`
 }
 
 // RegisterLazyDevHandlers registers cache inspection and toggle endpoints.
@@ -27,6 +30,9 @@ func RegisterLazyDevHandlers(controlPlane *lazycontrolplane.ControlPlane, cache 
 	}
 	controlPlane.Handle("GET "+LazyDevCachePath, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		writeLazyDevCacheResponse(w, cache)
+	}))
+	controlPlane.Handle("GET "+LazyDevCacheEntryPath, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeLazyDevCacheEntryResponse(w, cache, r)
 	}))
 	controlPlane.Handle("POST "+LazyDevCacheOnPath, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		if cache == nil {
@@ -55,14 +61,41 @@ func writeLazyDevCacheResponse(w http.ResponseWriter, cache *Cache) {
 	if keys == nil {
 		keys = []string{}
 	}
+	entries := cache.Entries()
+	if entries == nil {
+		entries = []EntryInfo{}
+	}
 	response := lazyDevCacheResponse{
 		Enabled: cache.Enabled(),
 		Stats:   cache.Stats(),
 		Keys:    keys,
+		Entries: entries,
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	if err := json.NewEncoder(w).Encode(response); err != nil {
+		http.Error(w, fmt.Sprintf("cache: %v", err), http.StatusInternalServerError)
+	}
+}
+
+func writeLazyDevCacheEntryResponse(w http.ResponseWriter, cache *Cache, r *http.Request) {
+	if cache == nil {
+		writeLazyDevCacheError(w)
+		return
+	}
+	key := r.URL.Query().Get("key")
+	entry, err := cache.Entry(key)
+	if err != nil {
+		if errors.Is(err, ErrMiss) {
+			http.Error(w, "cache: entry not found\n", http.StatusNotFound)
+			return
+		}
+		http.Error(w, fmt.Sprintf("cache: %v\n", err), http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	if err := json.NewEncoder(w).Encode(entry); err != nil {
 		http.Error(w, fmt.Sprintf("cache: %v", err), http.StatusInternalServerError)
 	}
 }

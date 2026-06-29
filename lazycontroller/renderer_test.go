@@ -350,7 +350,7 @@ func TestRenderUsesControllerCacheKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx := lazycache.WithCache(WithRenderer(context.Background(), renderer), cache)
+	ctx := lazycache.WithBuildVersion(lazycache.WithCache(WithRenderer(context.Background(), renderer), cache), "devel")
 
 	first := httptest.NewRecorder()
 	base, err := NewBase(ctx)
@@ -365,6 +365,7 @@ func TestRenderUsesControllerCacheKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	base.Set("title", "First")
+	base.Variants("compact")
 	if base.CacheKey(1, "stamp") {
 		t.Fatal("CacheKey returned true before cache was populated")
 	}
@@ -385,6 +386,7 @@ func TestRenderUsesControllerCacheKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	base.Set("title", "Second")
+	base.Variants("compact")
 	if !base.CacheKey(1, "stamp") {
 		t.Fatal("CacheKey returned false for populated cache")
 	}
@@ -401,7 +403,7 @@ func TestRenderUsesControllerCacheKey(t *testing.T) {
 	if len(backend.keys) != 1 {
 		t.Fatalf("cache writes = %v, want one write", backend.keys)
 	}
-	if got, want := backend.keys[0], "admin-posts-show-html-1-stamp"; got != want {
+	if got, want := backend.keys[0], "build-devel-variant-compact-admin-posts-show-html-1-stamp"; got != want {
 		t.Fatalf("cache key = %q, want %q", got, want)
 	}
 }
@@ -420,7 +422,7 @@ func TestRenderUsesControllerFullCacheKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx := lazycache.WithCache(WithRenderer(context.Background(), renderer), cache)
+	ctx := lazycache.WithBuildVersion(lazycache.WithCache(WithRenderer(context.Background(), renderer), cache), "v1.2.3")
 	response := httptest.NewRecorder()
 	base, err := NewBase(ctx)
 	if err != nil {
@@ -433,13 +435,14 @@ func TestRenderUsesControllerFullCacheKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	base.Set("title", "Post")
+	base.Variants("phone")
 	if base.CacheKeyF("post", 1, "stamp") {
 		t.Fatal("CacheKeyF returned true before cache was populated")
 	}
 	if err := base.Render(""); err != nil {
 		t.Fatal(err)
 	}
-	if got, want := backend.keys[0], "post-1-stamp"; got != want {
+	if got, want := backend.keys[0], "build-v1.2.3-variant-phone-post-1-stamp"; got != want {
 		t.Fatalf("cache key = %q, want %q", got, want)
 	}
 }

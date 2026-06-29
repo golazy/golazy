@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"net"
 	"net/http"
+	"runtime/debug"
 	"strings"
 
 	"golazy.dev/lazyassets"
@@ -93,6 +94,7 @@ func MustSub(fsys fs.FS, dir string) func() (fs.FS, error) {
 
 func New(config Config) *App {
 	ctx := context.Background()
+	ctx = lazycache.WithBuildVersion(ctx, appBuildVersion())
 	telemetryConfig := lazytelemetry.MustLoadConfig()
 	telemetryRegistry := lazymetrics.NewRegistry()
 	var controlPlane *lazycontrolplane.ControlPlane
@@ -265,6 +267,18 @@ func New(config Config) *App {
 		ControlPlane: controlPlane,
 		Dependencies: dependencies,
 	}
+}
+
+func appBuildVersion() string {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return "devel"
+	}
+	version := strings.TrimSpace(info.Main.Version)
+	if version == "" || version == "(devel)" {
+		return "devel"
+	}
+	return version
 }
 
 func jobsConfigured(config lazyjobs.Config) bool {

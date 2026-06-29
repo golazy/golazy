@@ -17,6 +17,7 @@ var ErrMiss = errors.New("lazycache: miss")
 type Stats struct {
 	Entries    int    `json:"entries"`
 	MaxEntries int    `json:"max_entries"`
+	SizeBytes  int64  `json:"size_bytes"`
 	Hits       uint64 `json:"hits"`
 	Misses     uint64 `json:"misses"`
 	Sets       uint64 `json:"sets"`
@@ -33,6 +34,28 @@ type Backend interface {
 // KeyLister is an optional backend capability used by development tooling.
 type KeyLister interface {
 	Keys() []string
+}
+
+// EntryInfo describes one cached value without exposing its body.
+type EntryInfo struct {
+	Key            string    `json:"key"`
+	SizeBytes      int64     `json:"size_bytes"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+	LastAccessedAt time.Time `json:"last_accessed_at"`
+}
+
+// EntryDetail describes one cached value with a development-friendly body.
+type EntryDetail struct {
+	EntryInfo
+	Content     string `json:"content"`
+	ContentType string `json:"content_type"`
+}
+
+// EntryInspector is an optional backend capability used by development tooling.
+type EntryInspector interface {
+	Entries() []EntryInfo
+	Entry(key string) (EntryDetail, error)
 }
 
 // Options configures a Cache.
@@ -134,6 +157,42 @@ func (c *Cache) Keys() []string {
 	return lister.Keys()
 }
 
+// Entries returns inspectable backend entries when the backend exposes them.
+func (c *Cache) Entries() []EntryInfo {
+	if c == nil || c.backend == nil {
+		return nil
+	}
+	inspector, ok := c.backend.(EntryInspector)
+	if ok {
+		return inspector.Entries()
+	}
+	keys := c.Keys()
+	if len(keys) == 0 {
+		return nil
+	}
+	entries := make([]EntryInfo, 0, len(keys))
+	for _, key := range keys {
+		entries = append(entries, EntryInfo{Key: key})
+	}
+	return entries
+}
+
+// Entry returns an inspectable backend entry when the backend exposes it.
+func (c *Cache) Entry(key string) (EntryDetail, error) {
+	if c == nil || c.backend == nil {
+		return EntryDetail{}, fmt.Errorf("lazycache: cache is not initialized")
+	}
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return EntryDetail{}, fmt.Errorf("lazycache: key part is empty")
+	}
+	inspector, ok := c.backend.(EntryInspector)
+	if !ok {
+		return EntryDetail{}, fmt.Errorf("lazycache: backend does not expose cache entries")
+	}
+	return inspector.Entry(key)
+}
+
 // Get returns a cached value with a concrete type.
 func Get[T any](cache *Cache, parts ...any) (T, error) {
 	var zero T
@@ -227,6 +286,7 @@ func isNil(value any) bool {
 }
 
 type cacheContextKey struct{}
+type buildVersionContextKey struct{}
 
 // WithCache returns a context carrying cache.
 func WithCache(ctx context.Context, cache *Cache) context.Context {
@@ -240,4 +300,26 @@ func FromContext(ctx context.Context) (*Cache, bool) {
 	}
 	cache, ok := ctx.Value(cacheContextKey{}).(*Cache)
 	return cache, ok && cache != nil
+}
+
+// WithBuildVersion returns a context carrying the application build version used by cache keys.
+func WithBuildVersion(ctx context.Context, version string) context.Context {
+	version = strings.TrimSpace(version)
+	if version == "" || version == "(devel)" {
+		version = "devel"
+	}
+	return context.WithValue(ctx, buildVersionContextKey{}, version)
+}
+
+// BuildVersionFromContext returns the cache-key build version for ctx.
+func BuildVersionFromContext(ctx context.Context) string {
+	if ctx == nil {
+		return "devel"
+	}
+	version, _ := ctx.Value(buildVersionContextKey{}).(string)
+	version = strings.TrimSpace(version)
+	if version == "" || version == "(devel)" {
+		return "devel"
+	}
+	return version
 }

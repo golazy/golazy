@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -43,6 +44,40 @@ func (b *memoryBackend) Keys() []string {
 		keys = append(keys, key)
 	}
 	return keys
+}
+
+func (b *memoryBackend) Entries() []EntryInfo {
+	entries := make([]EntryInfo, 0, len(b.values))
+	for key, value := range b.values {
+		content := fmt.Sprint(value)
+		entries = append(entries, EntryInfo{
+			Key:            key,
+			SizeBytes:      int64(len(content)),
+			CreatedAt:      time.Unix(1, 0),
+			UpdatedAt:      time.Unix(1, 0),
+			LastAccessedAt: time.Unix(1, 0),
+		})
+	}
+	return entries
+}
+
+func (b *memoryBackend) Entry(key string) (EntryDetail, error) {
+	value, ok := b.values[key]
+	if !ok {
+		return EntryDetail{}, ErrMiss
+	}
+	content := fmt.Sprint(value)
+	return EntryDetail{
+		EntryInfo: EntryInfo{
+			Key:            key,
+			SizeBytes:      int64(len(content)),
+			CreatedAt:      time.Unix(1, 0),
+			UpdatedAt:      time.Unix(1, 0),
+			LastAccessedAt: time.Unix(1, 0),
+		},
+		Content:     content,
+		ContentType: "text/plain; charset=utf-8",
+	}, nil
 }
 
 func TestNewRequiresBackend(t *testing.T) {
@@ -135,6 +170,13 @@ func TestCacheContext(t *testing.T) {
 	got, ok := FromContext(ctx)
 	if !ok || got != cache {
 		t.Fatalf("FromContext = %#v, %v; want cache, true", got, ok)
+	}
+	ctx = WithBuildVersion(ctx, "v1.2.3")
+	if got, want := BuildVersionFromContext(ctx), "v1.2.3"; got != want {
+		t.Fatalf("BuildVersionFromContext = %q, want %q", got, want)
+	}
+	if got, want := BuildVersionFromContext(context.Background()), "devel"; got != want {
+		t.Fatalf("default BuildVersionFromContext = %q, want %q", got, want)
 	}
 }
 

@@ -488,11 +488,13 @@ func (b *Base) renderCacheKey(action string, format Format) (string, bool, error
 	if b.cacheKey.key != "" {
 		return b.cacheKey.key, true, nil
 	}
+	scope := b.cacheKeyScopeParts()
 	if b.cacheKey.full {
-		key, err := lazycache.Key(b.cacheKey.parts...)
+		parts := append(scope, b.cacheKey.parts...)
+		key, err := lazycache.Key(parts...)
 		return key, true, err
 	}
-	parts := []any{}
+	parts := scope
 	if strings.TrimSpace(b.route.Namespace) != "" {
 		parts = append(parts, b.route.Namespace)
 	}
@@ -504,6 +506,20 @@ func (b *Base) renderCacheKey(action string, format Format) (string, bool, error
 	parts = append(parts, b.cacheKey.parts...)
 	key, err := lazycache.Key(parts...)
 	return key, true, err
+}
+
+func (b *Base) cacheKeyScopeParts() []any {
+	parts := []any{"build", lazycache.BuildVersionFromContext(b.ctx)}
+	var variants []string
+	for _, variant := range b.variants {
+		if variant = strings.TrimSpace(variant); variant != "" {
+			variants = append(variants, variant)
+		}
+	}
+	if len(variants) > 0 {
+		parts = append(parts, "variant", strings.Join(variants, "+"))
+	}
+	return parts
 }
 
 func (b *Base) HandleError(w http.ResponseWriter, r *http.Request, err error) error {

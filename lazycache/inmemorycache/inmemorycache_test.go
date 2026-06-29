@@ -88,6 +88,44 @@ func TestKeysReturnsSortedSnapshot(t *testing.T) {
 	}
 }
 
+func TestEntriesAndEntryExposeInspectableMetadata(t *testing.T) {
+	backend, err := New(Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := backend.Set("posts-1", "<p>Ada</p>"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := backend.Get("posts-1"); err != nil {
+		t.Fatal(err)
+	}
+
+	inspector, ok := backend.(lazycache.EntryInspector)
+	if !ok {
+		t.Fatal("backend does not implement EntryInspector")
+	}
+	entries := inspector.Entries()
+	if len(entries) != 1 {
+		t.Fatalf("Entries = %#v, want one entry", entries)
+	}
+	if entries[0].Key != "posts-1" || entries[0].SizeBytes != int64(len("<p>Ada</p>")) {
+		t.Fatalf("entry info = %#v, want key and size", entries[0])
+	}
+	if entries[0].CreatedAt.IsZero() || entries[0].UpdatedAt.IsZero() || entries[0].LastAccessedAt.IsZero() {
+		t.Fatalf("entry timestamps are not populated: %#v", entries[0])
+	}
+	detail, err := inspector.Entry("posts-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if detail.Content != "<p>Ada</p>" || detail.ContentType != "text/plain; charset=utf-8" {
+		t.Fatalf("Entry = %#v, want text content", detail)
+	}
+	if stats := backend.Stats(); stats.SizeBytes != int64(len("<p>Ada</p>")) {
+		t.Fatalf("Stats.SizeBytes = %d, want %d", stats.SizeBytes, len("<p>Ada</p>"))
+	}
+}
+
 func TestConcurrentAccess(t *testing.T) {
 	backend, err := New(Options{MaxEntries: 50})
 	if err != nil {

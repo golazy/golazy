@@ -62,7 +62,9 @@ func cacheFullPartialHelper(ctx *lazyview.Context, args ...any) (any, error) {
 	if !ok || strings.TrimSpace(partial) == "" {
 		return lazyview.Fragment{}, fmt.Errorf("lazyapp: cachef partial name must be a string")
 	}
-	key, err := lazycache.Key(args[:len(args)-2]...)
+	parts := cacheContextPrefix(ctx)
+	parts = append(parts, args[:len(args)-2]...)
+	key, err := lazycache.Key(parts...)
 	if err != nil {
 		return lazyview.Fragment{}, err
 	}
@@ -75,7 +77,9 @@ func cacheFullPartialHelper(ctx *lazyview.Context, args ...any) (any, error) {
 
 func partialCacheKey(ctx *lazyview.Context, name any, partial string) (string, error) {
 	if key, ok := name.(templateCacheKey); ok {
-		return string(key), nil
+		parts := cacheContextPrefix(ctx)
+		parts = append(parts, string(key))
+		return lazycache.Key(parts...)
 	}
 	parts := scopedCachePrefix(ctx, partial)
 	parts = append(parts, name)
@@ -83,12 +87,26 @@ func partialCacheKey(ctx *lazyview.Context, name any, partial string) (string, e
 }
 
 func scopedCachePrefix(ctx *lazyview.Context, tail ...any) []any {
-	parts := []any{}
+	parts := cacheContextPrefix(ctx)
 	if strings.TrimSpace(ctx.Namespace) != "" {
 		parts = append(parts, ctx.Namespace)
 	}
 	parts = append(parts, ctx.Controller, ctx.Action, ctx.Format)
 	parts = append(parts, tail...)
+	return parts
+}
+
+func cacheContextPrefix(ctx *lazyview.Context) []any {
+	parts := []any{"build", lazycache.BuildVersionFromContext(ctx.Context)}
+	var variants []string
+	for _, variant := range ctx.Variants {
+		if variant = strings.TrimSpace(variant); variant != "" {
+			variants = append(variants, variant)
+		}
+	}
+	if len(variants) > 0 {
+		parts = append(parts, "variant", strings.Join(variants, "+"))
+	}
 	return parts
 }
 
@@ -160,6 +178,13 @@ func cacheTurboFrameHelper(ctx *lazyview.Context, args ...any) (any, error) {
 	}
 	if cacheKey == "" {
 		return lazyturbo.Frame(ctx, id, data, opts...)
+	}
+	parts := cacheContextPrefix(ctx)
+	parts = append(parts, cacheKey)
+	var err error
+	cacheKey, err = lazycache.Key(parts...)
+	if err != nil {
+		return lazyview.Fragment{}, err
 	}
 	if err := lazyturbo.ValidateFrameID(id); err != nil {
 		return lazyview.Fragment{}, err

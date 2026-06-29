@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"golazy.dev/lazyassets"
+	"golazy.dev/lazybuildinfo"
 	"golazy.dev/lazycache"
 	"golazy.dev/lazycontroller"
 	"golazy.dev/lazyroutes"
@@ -97,6 +98,7 @@ func TestLazyDevControlPlaneAggregatesPackageHandlers(t *testing.T) {
 		lazyDevReloadViewsPath,
 		lazyroutes.LazyDevRoutesPath,
 		lazycontroller.LazyDevOpenEditorPath,
+		lazybuildinfo.LazyDevBuildInfoPath,
 		lazyassets.LazyDevAssetsPath,
 		lazycache.LazyDevCachePath,
 		lazycache.LazyDevCacheEventsPath,

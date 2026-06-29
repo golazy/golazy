@@ -39,6 +39,8 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `POST /requests/traces/clear`.
 - Lazydev control-plane endpoints now expose cache hit, miss, set, and toggle
   events through `GET /cache/events`.
+- Lazydev control-plane endpoints now expose Go module build information for
+  the running app at `GET /buildinfo`.
 
 ### Changed
 

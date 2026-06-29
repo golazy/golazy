@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"golazy.dev/lazyassets"
+	"golazy.dev/lazybuildinfo"
 	"golazy.dev/lazycache"
 	"golazy.dev/lazycontroller"
 	"golazy.dev/lazycontrolplane"
@@ -31,6 +32,7 @@ func lazyDevControlPlane(controlPlane *lazycontrolplane.ControlPlane, renderer *
 	registerLazyDevViewHandlers(controlPlane, renderer)
 	lazyroutes.RegisterLazyDevHandlers(controlPlane, router)
 	lazycontroller.RegisterLazyDevHandlers(controlPlane)
+	lazybuildinfo.RegisterLazyDevHandlers(controlPlane)
 	lazyassets.RegisterLazyDevHandlers(controlPlane, assets)
 	lazycache.RegisterLazyDevHandlers(controlPlane, cache)
 	lazyjobs.RegisterLazyDevHandlers(controlPlane, jobs)

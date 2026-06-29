@@ -222,7 +222,7 @@ func New(config Config) *App {
 		renderer.AddHelpers(helpers)
 	}
 	controlPlane = jobsControlPlane(controlPlane, jobs)
-	controlPlane = lazyDevControlPlane(controlPlane, renderer, router, assets, cache, jobs)
+	controlPlane = lazyDevControlPlane(controlPlane, renderer, router, assets, cache, dependencies, jobs)
 	controlPlane = telemetryControlPlane(controlPlane, telemetryConfig, telemetryRegistry, cache)
 	if err := renderer.Cache(); err != nil {
 		panic(fmt.Errorf("cache views: %w", err))

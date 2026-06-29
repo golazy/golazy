@@ -13,6 +13,7 @@ import (
 	"golazy.dev/lazycache"
 	"golazy.dev/lazycontroller"
 	"golazy.dev/lazycontrolplane"
+	"golazy.dev/lazydeps"
 	"golazy.dev/lazyjobs"
 	"golazy.dev/lazyroutes"
 	"golazy.dev/lazytelemetry"
@@ -25,7 +26,7 @@ func lazyDevContext(ctx context.Context) context.Context {
 	return lazycontroller.LazyDevContext(ctx)
 }
 
-func lazyDevControlPlane(controlPlane *lazycontrolplane.ControlPlane, renderer *lazycontroller.Renderer, router *lazyroutes.Scope, assets *lazyassets.Registry, cache *lazycache.Cache, jobs *lazyjobs.JobRunner) *lazycontrolplane.ControlPlane {
+func lazyDevControlPlane(controlPlane *lazycontrolplane.ControlPlane, renderer *lazycontroller.Renderer, router *lazyroutes.Scope, assets *lazyassets.Registry, cache *lazycache.Cache, dependencies *lazydeps.Scope, jobs *lazyjobs.JobRunner) *lazycontrolplane.ControlPlane {
 	if controlPlane == nil {
 		controlPlane = lazycontrolplane.New(lazycontrolplane.Config{})
 	}
@@ -35,6 +36,7 @@ func lazyDevControlPlane(controlPlane *lazycontrolplane.ControlPlane, renderer *
 	lazybuildinfo.RegisterLazyDevHandlers(controlPlane)
 	lazyassets.RegisterLazyDevHandlers(controlPlane, assets)
 	lazycache.RegisterLazyDevHandlers(controlPlane, cache)
+	lazydeps.RegisterLazyDevHandlers(controlPlane, dependencies)
 	lazyjobs.RegisterLazyDevHandlers(controlPlane, jobs)
 	lazytelemetry.RegisterLazyDevHandlers(controlPlane)
 	return controlPlane

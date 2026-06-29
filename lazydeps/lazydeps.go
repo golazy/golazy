@@ -40,13 +40,13 @@ type Ref[T any] struct {
 }
 
 type Graph struct {
-	Nodes []string
-	Edges []Edge
+	Nodes []string `json:"nodes"`
+	Edges []Edge   `json:"edges"`
 }
 
 type Edge struct {
-	From string
-	To   string
+	From string `json:"from"`
+	To   string `json:"to"`
 }
 
 type Option func(*Scope)

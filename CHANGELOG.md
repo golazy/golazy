@@ -41,6 +41,8 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   events through `GET /cache/events`.
 - Lazydev control-plane endpoints now expose Go module build information for
   the running app at `GET /buildinfo`.
+- Lazydev control-plane endpoints now expose the `lazydeps` application
+  service graph at `GET /dependencies`.
 
 ### Changed
 

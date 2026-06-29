@@ -18,6 +18,7 @@ import (
 	"golazy.dev/lazybuildinfo"
 	"golazy.dev/lazycache"
 	"golazy.dev/lazycontroller"
+	"golazy.dev/lazydeps"
 	"golazy.dev/lazyroutes"
 	"golazy.dev/lazytelemetry"
 )
@@ -100,6 +101,7 @@ func TestLazyDevControlPlaneAggregatesPackageHandlers(t *testing.T) {
 		lazycontroller.LazyDevOpenEditorPath,
 		lazybuildinfo.LazyDevBuildInfoPath,
 		lazyassets.LazyDevAssetsPath,
+		lazydeps.LazyDevDependenciesPath,
 		lazycache.LazyDevCachePath,
 		lazycache.LazyDevCacheEventsPath,
 		lazycache.LazyDevCacheOnPath,
@@ -112,6 +114,58 @@ func TestLazyDevControlPlaneAggregatesPackageHandlers(t *testing.T) {
 	} {
 		if !app.ControlPlane.HandlesPath(path) {
 			t.Fatalf("control plane does not handle %s", path)
+		}
+	}
+}
+
+func TestLazyDevControlPlaneServesDependencies(t *testing.T) {
+	app := New(Config{
+		Name: "test",
+		Dependencies: func(scope *lazydeps.Scope) error {
+			db, err := lazydeps.Service(scope, "db", func(ctx context.Context) (context.Context, string, error, context.CancelFunc) {
+				return ctx, "db", nil, nil
+			})
+			if err != nil {
+				return err
+			}
+			_, err = lazydeps.Service(scope, "posts", func(ctx context.Context) (context.Context, string, error, context.CancelFunc) {
+				_ = db.Use()
+				return ctx, "posts", nil, nil
+			})
+			return err
+		},
+	})
+	if app.ControlPlane == nil {
+		t.Fatal("lazydev app did not install a control plane")
+	}
+
+	response := httptest.NewRecorder()
+	app.ServeHTTP(response, httptest.NewRequest(http.MethodGet, lazydeps.LazyDevDependenciesPath, nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("dependencies status = %d, want %d: %s", response.Code, http.StatusOK, response.Body.String())
+	}
+	if got := response.Header().Get("Content-Type"); got != "application/json; charset=utf-8" {
+		t.Fatalf("dependencies Content-Type = %q, want JSON", got)
+	}
+
+	var graph lazydeps.Graph
+	if err := json.Unmarshal(response.Body.Bytes(), &graph); err != nil {
+		t.Fatalf("decode dependencies response: %v\n%s", err, response.Body.String())
+	}
+	wantEdges := []lazydeps.Edge{
+		{From: "app", To: "db"},
+		{From: "app", To: "posts"},
+		{From: "posts", To: "db"},
+	}
+	if strings.Join(graph.Nodes, ",") != "app,db,posts" {
+		t.Fatalf("nodes = %#v, want app,db,posts", graph.Nodes)
+	}
+	if len(graph.Edges) != len(wantEdges) {
+		t.Fatalf("edges = %#v, want %#v", graph.Edges, wantEdges)
+	}
+	for index, want := range wantEdges {
+		if graph.Edges[index] != want {
+			t.Fatalf("edges[%d] = %#v, want %#v", index, graph.Edges[index], want)
 		}
 	}
 }

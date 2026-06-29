@@ -47,13 +47,13 @@ func (*appTestJob) Work(context.Context) error { return nil }
 
 func TestAppRegistersJobsControlPlane(t *testing.T) {
 	app := New(Config{
-		Jobs: lazyjobs.Config{
+		Jobs: Jobs(lazyjobs.Config{
 			Backend: inmemoryjobs.New(),
 			Define: func(runner *lazyjobs.JobRunner) {
 				runner.MustRegister(&appTestJob{})
 			},
 			PollInterval: time.Hour,
-		},
+		}),
 	})
 	defer app.Jobs.Stop(context.Background())
 
@@ -69,6 +69,40 @@ func TestAppRegistersJobsControlPlane(t *testing.T) {
 	body := response.Body.String()
 	if !strings.Contains(body, `"kind":"app.test"`) {
 		t.Fatalf("jobs body = %s, want registered job kind", body)
+	}
+}
+
+func TestAppInitializesJobsWithDependencyContext(t *testing.T) {
+	type dbKey struct{}
+	const dbValue = "postgres"
+
+	app := New(Config{
+		Dependencies: func(deps *lazydeps.Scope) error {
+			_, err := lazydeps.Service(deps, "postgres", func(ctx context.Context) (context.Context, string, error, context.CancelFunc) {
+				return context.WithValue(ctx, dbKey{}, dbValue), dbValue, nil, nil
+			})
+			return err
+		},
+		Jobs: func(ctx context.Context) (lazyjobs.Config, error) {
+			if got := ctx.Value(dbKey{}); got != dbValue {
+				return lazyjobs.Config{}, fmt.Errorf("db value = %#v, want %q", got, dbValue)
+			}
+			return lazyjobs.Config{
+				Backend: inmemoryjobs.New(),
+				Define: func(runner *lazyjobs.JobRunner) {
+					runner.MustRegister(&appTestJob{})
+				},
+				PollInterval: time.Hour,
+			}, nil
+		},
+	})
+	defer app.Jobs.Stop(context.Background())
+
+	if app.Jobs == nil {
+		t.Fatal("app.Jobs is nil")
+	}
+	if _, ok := app.Context.Value(dbKey{}).(string); !ok {
+		t.Fatal("app context is missing dependency value")
 	}
 }
 

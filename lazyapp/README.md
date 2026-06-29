@@ -25,7 +25,8 @@ log.Fatal(app.ListenAndServe())
 
 - Opens views and initializes the renderer.
 - Calls the application dependency initializer.
-- Initializes optional background jobs through `lazyjobs.JobRunner`.
+- Initializes optional background jobs after dependencies, using the
+  dependency-initialized app context.
 - Creates an asset registry.
 - Registers public and generated assets.
 - Creates the root `lazyroutes.Scope`.

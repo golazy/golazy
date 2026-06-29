@@ -9,6 +9,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+type poolContextKey struct{}
+
 // Open creates a pgx pool for databaseURL.
 func Open(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
 	databaseURL = strings.TrimSpace(databaseURL)
@@ -38,4 +40,15 @@ func OpenEnv(ctx context.Context, names ...string) (*pgxpool.Pool, error) {
 		}
 	}
 	return nil, fmt.Errorf("pg: none of the configured database URL variables are set")
+}
+
+// WithPool returns a context carrying pool.
+func WithPool(ctx context.Context, pool *pgxpool.Pool) context.Context {
+	return context.WithValue(ctx, poolContextKey{}, pool)
+}
+
+// FromContext returns the PostgreSQL pool carried by ctx.
+func FromContext(ctx context.Context) (*pgxpool.Pool, bool) {
+	pool, ok := ctx.Value(poolContextKey{}).(*pgxpool.Pool)
+	return pool, ok
 }

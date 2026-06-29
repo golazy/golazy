@@ -6,7 +6,7 @@ packages. The module keeps PostgreSQL driver dependencies out of the core
 
 Current packages:
 
-- `pg`: shared `pgxpool` connection helpers.
+- `pg`: shared `pgxpool` connection and app-context helpers.
 - `pgmigrate`: `lazymigrate.Backend` for PostgreSQL. Migrations use
   `-- +lazy Up` and `-- +lazy Down` sections.
 - `pgjobs`: PostgreSQL `lazyjobs.Backend` plus embedded lazy job migrations.
@@ -21,3 +21,7 @@ go run ./withpg/cmd/withpg --version 16 --version 17 -- go test ./...
 
 Tests can also use `withpg.Test` to create one subtest per configured
 PostgreSQL version.
+
+Applications that open a pool during GoLazy dependency initialization can add
+it to the app context with `pg.WithPool(ctx, pool)` and read it later with
+`pg.FromContext(ctx)`.

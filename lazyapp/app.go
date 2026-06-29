@@ -32,6 +32,16 @@ import (
 
 type Helpers []map[string]any
 
+// JobsConfig initializes lazyjobs with the dependency-initialized app context.
+type JobsConfig func(context.Context) (lazyjobs.Config, error)
+
+// Jobs adapts a static lazyjobs.Config for Config.Jobs.
+func Jobs(config lazyjobs.Config) JobsConfig {
+	return func(context.Context) (lazyjobs.Config, error) {
+		return config, nil
+	}
+}
+
 type Config struct {
 	Name              string
 	Drawer            func(*lazyroutes.Scope)
@@ -46,7 +56,7 @@ type Config struct {
 	Robots            RobotsConfig
 	Sitemap           SitemapConfig
 	Sessions          lazysession.Config
-	Jobs              lazyjobs.Config
+	Jobs              JobsConfig
 	ControlPlane      lazycontrolplane.Builder
 	Middlewares       []lazydispatch.Middleware
 	ForceDetailErrors bool
@@ -187,12 +197,14 @@ func New(config Config) *App {
 	}
 
 	var jobs *lazyjobs.JobRunner
-	if jobsConfigured(config.Jobs) {
-		jobsConfig := config.Jobs
+	if config.Jobs != nil {
+		jobsConfig, err := config.Jobs(ctx)
+		if err != nil {
+			panic(fmt.Errorf("initialize jobs: %w", err))
+		}
 		if jobsConfig.Backend == nil {
 			jobsConfig.Backend = inmemoryjobs.New()
 		}
-		var err error
 		jobs, err = lazyjobs.New(jobsConfig)
 		if err != nil {
 			panic(fmt.Errorf("initialize jobs: %w", err))
@@ -279,14 +291,6 @@ func appBuildVersion() string {
 		return "devel"
 	}
 	return version
-}
-
-func jobsConfigured(config lazyjobs.Config) bool {
-	return config.Backend != nil ||
-		config.Define != nil ||
-		config.Workers != 0 ||
-		config.PollInterval != 0 ||
-		len(config.Queues) > 0
 }
 
 func (app *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {

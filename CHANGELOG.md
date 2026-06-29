@@ -7,6 +7,18 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `golazy.dev/pg` now provides `WithPool` and `FromContext` helpers so
+  application dependencies, jobs, and request handlers can share a `pgxpool`
+  through the app context without each app defining its own key.
+
+### Changed
+
+- `lazyapp.Config.Jobs` is now a context-aware initializer that runs after
+  `Dependencies`. Static job configs can use `lazyapp.Jobs(lazyjobs.Config{...})`,
+  while durable backends can resolve shared dependencies from the app context.
+
 ## [0.1.17] - 2026-06-29
 
 ### Added

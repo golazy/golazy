@@ -176,6 +176,7 @@ func StartSpan(ctx context.Context, name string, attributes ...slog.Attr) (conte
 	if parentSpan != nil {
 		parentSpan.addChild(span)
 	}
+	startSpanAllocationSample(ctx, span)
 	return context.WithValue(ctx, contextKey{}, span), span
 }
 
@@ -400,6 +401,7 @@ func (s *Span) End() {
 	}
 	s.ended = true
 	s.endedAt = time.Now()
+	finishSpanAllocationSample(s)
 	region := s.region
 	task := s.task
 	otelSpan := s.otelSpan

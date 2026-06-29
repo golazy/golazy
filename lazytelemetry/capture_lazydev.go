@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	runtimetrace "runtime/trace"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -92,16 +93,27 @@ type requestMemorySummary struct {
 }
 
 type requestSpanDocument struct {
-	Name       string                 `json:"name"`
-	TraceID    string                 `json:"trace_id"`
-	SpanID     string                 `json:"span_id"`
-	ParentID   string                 `json:"parent_id,omitempty"`
-	StartedAt  time.Time              `json:"started_at"`
-	EndedAt    time.Time              `json:"ended_at"`
-	DurationMS float64                `json:"duration_ms"`
-	Attributes map[string]interface{} `json:"attributes,omitempty"`
-	Events     []requestSpanEvent     `json:"events,omitempty"`
-	Error      string                 `json:"error,omitempty"`
+	Name           string                     `json:"name"`
+	TraceID        string                     `json:"trace_id"`
+	SpanID         string                     `json:"span_id"`
+	ParentID       string                     `json:"parent_id,omitempty"`
+	StartedAt      time.Time                  `json:"started_at"`
+	EndedAt        time.Time                  `json:"ended_at"`
+	DurationMS     float64                    `json:"duration_ms"`
+	SelfDurationMS float64                    `json:"self_duration_ms"`
+	Memory         *requestSpanMemoryDocument `json:"memory,omitempty"`
+	Attributes     map[string]interface{}     `json:"attributes,omitempty"`
+	Events         []requestSpanEvent         `json:"events,omitempty"`
+	Error          string                     `json:"error,omitempty"`
+}
+
+type requestSpanMemoryDocument struct {
+	TotalAllocBytesDelta     uint64 `json:"total_alloc_bytes_delta"`
+	MallocsDelta             uint64 `json:"mallocs_delta"`
+	FreesDelta               uint64 `json:"frees_delta"`
+	SelfTotalAllocBytesDelta uint64 `json:"self_total_alloc_bytes_delta"`
+	SelfMallocsDelta         uint64 `json:"self_mallocs_delta"`
+	SelfFreesDelta           uint64 `json:"self_frees_delta"`
 }
 
 type requestSpanEvent struct {
@@ -172,6 +184,7 @@ func (capture *requestCapture) Finish(result requestCaptureResult, span *lazytra
 	if err := capture.writeLogs(result, span); err != nil {
 		capture.errors = append(capture.errors, fmt.Sprintf("write logs: %v", err))
 	}
+	lazytracing.ClearAllocationSamples(span)
 }
 
 func (capture *requestCapture) document(result requestCaptureResult, span *lazytracing.Span, endMem runtime.MemStats, endGoroutines int) requestCaptureDocument {
@@ -302,12 +315,42 @@ func spanDocuments(span *lazytracing.Span) []requestSpanDocument {
 	if span == nil {
 		return nil
 	}
-	spans := spansInOrder(span)
-	documents := make([]requestSpanDocument, 0, len(spans))
-	for _, current := range spans {
-		documents = append(documents, spanDocument(current))
-	}
+	root := spanDocumentNode(span)
+	documents := make([]requestSpanDocument, 0, len(spansInOrder(span)))
+	appendSpanDocuments(&documents, root)
 	return documents
+}
+
+type requestSpanDocumentNode struct {
+	document requestSpanDocument
+	children []requestSpanDocumentNode
+}
+
+func spanDocumentNode(span *lazytracing.Span) requestSpanDocumentNode {
+	node := requestSpanDocumentNode{document: spanDocument(span)}
+	for _, child := range span.Children() {
+		node.children = append(node.children, spanDocumentNode(child))
+	}
+	node.document.SelfDurationMS = durationMilliseconds(selfSpanDuration(node.document, node.children))
+	if node.document.Memory != nil {
+		node.document.Memory.SelfTotalAllocBytesDelta = selfUint64(node.document.Memory.TotalAllocBytesDelta, node.children, func(memory requestSpanMemoryDocument) uint64 {
+			return memory.TotalAllocBytesDelta
+		})
+		node.document.Memory.SelfMallocsDelta = selfUint64(node.document.Memory.MallocsDelta, node.children, func(memory requestSpanMemoryDocument) uint64 {
+			return memory.MallocsDelta
+		})
+		node.document.Memory.SelfFreesDelta = selfUint64(node.document.Memory.FreesDelta, node.children, func(memory requestSpanMemoryDocument) uint64 {
+			return memory.FreesDelta
+		})
+	}
+	return node
+}
+
+func appendSpanDocuments(documents *[]requestSpanDocument, node requestSpanDocumentNode) {
+	*documents = append(*documents, node.document)
+	for _, child := range node.children {
+		appendSpanDocuments(documents, child)
+	}
 }
 
 func spanDocument(span *lazytracing.Span) requestSpanDocument {
@@ -327,7 +370,7 @@ func spanDocument(span *lazytracing.Span) requestSpanDocument {
 			Attributes: attrsMap(event.Attributes),
 		})
 	}
-	return requestSpanDocument{
+	document := requestSpanDocument{
 		Name:       span.Name(),
 		TraceID:    span.TraceID(),
 		SpanID:     span.SpanID(),
@@ -339,6 +382,81 @@ func spanDocument(span *lazytracing.Span) requestSpanDocument {
 		Events:     eventDocuments,
 		Error:      errorMessage,
 	}
+	if memory, ok := lazytracing.SpanAllocationSummary(span); ok {
+		document.Memory = &requestSpanMemoryDocument{
+			TotalAllocBytesDelta: memory.TotalAllocBytesDelta,
+			MallocsDelta:         memory.MallocsDelta,
+			FreesDelta:           memory.FreesDelta,
+		}
+	}
+	return document
+}
+
+func selfSpanDuration(span requestSpanDocument, children []requestSpanDocumentNode) time.Duration {
+	duration := span.EndedAt.Sub(span.StartedAt)
+	if duration <= 0 {
+		return 0
+	}
+	covered := childCoveredDuration(span, children)
+	if covered >= duration {
+		return 0
+	}
+	return duration - covered
+}
+
+func childCoveredDuration(span requestSpanDocument, children []requestSpanDocumentNode) time.Duration {
+	type interval struct {
+		start time.Time
+		end   time.Time
+	}
+	intervals := make([]interval, 0, len(children))
+	for _, child := range children {
+		start := child.document.StartedAt
+		end := child.document.EndedAt
+		if start.Before(span.StartedAt) {
+			start = span.StartedAt
+		}
+		if end.After(span.EndedAt) {
+			end = span.EndedAt
+		}
+		if end.After(start) {
+			intervals = append(intervals, interval{start: start, end: end})
+		}
+	}
+	if len(intervals) == 0 {
+		return 0
+	}
+	sort.Slice(intervals, func(i, j int) bool {
+		return intervals[i].start.Before(intervals[j].start)
+	})
+	current := intervals[0]
+	var covered time.Duration
+	for _, next := range intervals[1:] {
+		if !next.start.After(current.end) {
+			if next.end.After(current.end) {
+				current.end = next.end
+			}
+			continue
+		}
+		covered += current.end.Sub(current.start)
+		current = next
+	}
+	covered += current.end.Sub(current.start)
+	return covered
+}
+
+func selfUint64(total uint64, children []requestSpanDocumentNode, value func(requestSpanMemoryDocument) uint64) uint64 {
+	var childTotal uint64
+	for _, child := range children {
+		if child.document.Memory == nil {
+			continue
+		}
+		childTotal += value(*child.document.Memory)
+	}
+	if childTotal >= total {
+		return 0
+	}
+	return total - childTotal
 }
 
 func attrsMap(attrs []slog.Attr) map[string]interface{} {

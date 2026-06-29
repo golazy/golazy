@@ -107,7 +107,11 @@ func (middleware *middleware) Handler(next http.Handler) http.Handler {
 		}
 		capture := beginRequestCapture(middleware.captureEnabled(), requestID)
 
-		ctx := WithRequestID(r.Context(), requestID)
+		ctx := r.Context()
+		if capture != nil {
+			ctx = lazytracing.WithAllocationSampling(ctx)
+		}
+		ctx = WithRequestID(ctx, requestID)
 		ctx = lazylogs.WithLogger(ctx, middleware.logger)
 		ctx = lazylogs.WithAttrs(ctx,
 			slog.String("request_id", requestID),

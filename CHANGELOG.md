@@ -12,6 +12,8 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Lazydev control-plane endpoints can enable or disable detailed request
   monitoring, which records per-request Go runtime traces, span JSON, and
   request-local log JSONL under `.tmp/traces`.
+- Lazydev request span JSON now includes per-region total and self duration
+  plus sampled allocation bytes, malloc counts, and free counts.
 - Framework telemetry records child regions for dispatched middleware, routing,
   dispatch, controller setup, action calls, view rendering, layouts, and
   partials when a request span is active. Request ids are attached to request

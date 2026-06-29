@@ -43,6 +43,9 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the running app at `GET /buildinfo`.
 - Lazydev control-plane endpoints now expose the `lazydeps` application
   service graph at `GET /dependencies`.
+- Lazydev dependency control-plane endpoints now expose shutdown simulation
+  state and events, including `/readyz` readiness, active app requests, active
+  app connections, and per-service shutdown state.
 
 ### Changed
 

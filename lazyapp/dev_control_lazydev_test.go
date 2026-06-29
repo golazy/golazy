@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"golazy.dev/lazyassets"
 	"golazy.dev/lazybuildinfo"
@@ -167,6 +168,54 @@ func TestLazyDevControlPlaneServesDependencies(t *testing.T) {
 		if graph.Edges[index] != want {
 			t.Fatalf("edges[%d] = %#v, want %#v", index, graph.Edges[index], want)
 		}
+	}
+}
+
+func TestLazyDevDependencyShutdownMarksAppNotReady(t *testing.T) {
+	app := New(Config{Name: "test"})
+	if app.ControlPlane == nil {
+		t.Fatal("lazydev app did not install a control plane")
+	}
+
+	ready := httptest.NewRecorder()
+	app.ServeHTTP(ready, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+	if ready.Code != http.StatusOK {
+		t.Fatalf("readyz before shutdown = %d, want %d: %s", ready.Code, http.StatusOK, ready.Body.String())
+	}
+
+	response := httptest.NewRecorder()
+	app.ServeHTTP(response, httptest.NewRequest(http.MethodPost, lazydeps.LazyDevDependencyShutdownPath, nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("shutdown status = %d, want %d: %s", response.Code, http.StatusOK, response.Body.String())
+	}
+
+	var state lazydeps.LazyDevShutdownState
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		stateResponse := httptest.NewRecorder()
+		app.ServeHTTP(stateResponse, httptest.NewRequest(http.MethodGet, lazydeps.LazyDevDependencyShutdownPath, nil))
+		if stateResponse.Code != http.StatusOK {
+			t.Fatalf("shutdown state status = %d, want %d: %s", stateResponse.Code, http.StatusOK, stateResponse.Body.String())
+		}
+		if err := json.Unmarshal(stateResponse.Body.Bytes(), &state); err != nil {
+			t.Fatalf("decode shutdown state: %v\n%s", err, stateResponse.Body.String())
+		}
+		if !state.Ready && state.ReadyStatus == http.StatusServiceUnavailable {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("shutdown state never became not ready: %#v", state)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	ready = httptest.NewRecorder()
+	app.ServeHTTP(ready, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+	if ready.Code != http.StatusServiceUnavailable {
+		t.Fatalf("readyz after shutdown = %d, want %d: %s", ready.Code, http.StatusServiceUnavailable, ready.Body.String())
+	}
+	if state.ActiveRequests != 0 {
+		t.Fatalf("active requests = %d, want 0", state.ActiveRequests)
 	}
 }
 

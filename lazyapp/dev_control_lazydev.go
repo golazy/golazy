@@ -26,9 +26,15 @@ func lazyDevContext(ctx context.Context) context.Context {
 	return lazycontroller.LazyDevContext(ctx)
 }
 
-func lazyDevControlPlane(controlPlane *lazycontrolplane.ControlPlane, renderer *lazycontroller.Renderer, router *lazyroutes.Scope, assets *lazyassets.Registry, cache *lazycache.Cache, dependencies *lazydeps.Scope, jobs *lazyjobs.JobRunner) *lazycontrolplane.ControlPlane {
+func lazyDevControlPlane(controlPlane *lazycontrolplane.ControlPlane, renderer *lazycontroller.Renderer, router *lazyroutes.Scope, assets *lazyassets.Registry, cache *lazycache.Cache, dependencies *lazydeps.Scope, jobs *lazyjobs.JobRunner, runtime *runtimeState) *lazycontrolplane.ControlPlane {
 	if controlPlane == nil {
 		controlPlane = lazycontrolplane.New(lazycontrolplane.Config{})
+	}
+	if runtime != nil {
+		controlPlane.AddReadinessCheck(lazycontrolplane.ReadinessCheck{
+			Name:  "shutdown",
+			Check: runtime.ReadinessCheck,
+		})
 	}
 	registerLazyDevViewHandlers(controlPlane, renderer)
 	lazyroutes.RegisterLazyDevHandlers(controlPlane, router)
@@ -36,7 +42,7 @@ func lazyDevControlPlane(controlPlane *lazycontrolplane.ControlPlane, renderer *
 	lazybuildinfo.RegisterLazyDevHandlers(controlPlane)
 	lazyassets.RegisterLazyDevHandlers(controlPlane, assets)
 	lazycache.RegisterLazyDevHandlers(controlPlane, cache)
-	lazydeps.RegisterLazyDevHandlers(controlPlane, dependencies)
+	lazydeps.RegisterLazyDevHandlers(controlPlane, dependencies, lazydeps.WithLazyDevRuntime(runtime))
 	lazyjobs.RegisterLazyDevHandlers(controlPlane, jobs)
 	lazytelemetry.RegisterLazyDevHandlers(controlPlane)
 	return controlPlane

@@ -96,6 +96,17 @@ func (plane *ControlPlane) Handle(pattern string, handler http.Handler) {
 	plane.handle(pattern, controlPlanePatternPath(pattern), handler)
 }
 
+// AddReadinessCheck appends a readiness check to /readyz.
+func (plane *ControlPlane) AddReadinessCheck(check ReadinessCheck) {
+	if plane == nil {
+		panic("lazycontrolplane: control plane is nil")
+	}
+	if check.Check == nil {
+		panic("lazycontrolplane: readiness check is nil")
+	}
+	plane.checks = append(plane.checks, check)
+}
+
 func controlPlanePatternPath(pattern string) string {
 	fields := strings.Fields(pattern)
 	if len(fields) == 0 {

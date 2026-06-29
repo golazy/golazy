@@ -63,6 +63,7 @@ type App struct {
 	Jobs         *lazyjobs.JobRunner
 	ControlPlane *lazycontrolplane.ControlPlane
 	Dependencies *lazydeps.Scope
+	runtime      *runtimeState
 }
 
 type assetsMiddleware struct {
@@ -97,6 +98,7 @@ func New(config Config) *App {
 	ctx = lazycache.WithBuildVersion(ctx, appBuildVersion())
 	telemetryConfig := lazytelemetry.MustLoadConfig()
 	telemetryRegistry := lazymetrics.NewRegistry()
+	runtime := newRuntimeState()
 	var controlPlane *lazycontrolplane.ControlPlane
 	if config.ControlPlane != nil {
 		controlPlane = config.ControlPlane.BuildControlPlane()
@@ -222,7 +224,7 @@ func New(config Config) *App {
 		renderer.AddHelpers(helpers)
 	}
 	controlPlane = jobsControlPlane(controlPlane, jobs)
-	controlPlane = lazyDevControlPlane(controlPlane, renderer, router, assets, cache, dependencies, jobs)
+	controlPlane = lazyDevControlPlane(controlPlane, renderer, router, assets, cache, dependencies, jobs, runtime)
 	controlPlane = telemetryControlPlane(controlPlane, telemetryConfig, telemetryRegistry, cache)
 	if err := renderer.Cache(); err != nil {
 		panic(fmt.Errorf("cache views: %w", err))
@@ -263,6 +265,7 @@ func New(config Config) *App {
 		Jobs:         jobs,
 		ControlPlane: controlPlane,
 		Dependencies: dependencies,
+		runtime:      runtime,
 	}
 }
 
@@ -291,7 +294,7 @@ func (app *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		controlPlane.ServeHTTP(w, r)
 		return
 	}
-	app.Dispatcher.ServeHTTP(w, r)
+	app.handler().ServeHTTP(w, r)
 }
 
 // ListenAndServe starts the app server on ADDR, PORT, or 127.0.0.1:3000.
@@ -303,12 +306,12 @@ func (app *App) ListenAndServe() error {
 	appAddr := listenAddr()
 	controlAddr, controlAddrSet := controlPlaneListenAddr()
 	appHandler, controlHandler := app.handlersForListen(appAddr, controlAddr, controlAddrSet)
-	appServer := app.newServer(appAddr, appHandler)
+	appServer := app.newServer(appAddr, appHandler, true)
 	if controlHandler == nil {
 		return listenAndServe(appServer)
 	}
 
-	controlServer := app.newServer(controlAddr, controlHandler)
+	controlServer := app.newServer(controlAddr, controlHandler, false)
 	return listenAndServeBoth(appServer, controlServer)
 }
 
@@ -365,7 +368,7 @@ func (app *App) controlPlaneForListen(controlAddrSet bool) *lazycontrolplane.Con
 
 func (app *App) handlersForListen(appAddr string, controlAddr string, controlAddrSet bool) (http.Handler, http.Handler) {
 	controlPlane := app.controlPlaneForListen(controlAddrSet)
-	appHandler := http.Handler(app.Dispatcher)
+	appHandler := app.handler()
 	if controlPlane == nil {
 		return appHandler, nil
 	}
@@ -379,14 +382,25 @@ func (app *App) handlersForListen(appAddr string, controlAddr string, controlAdd
 	return appHandler, controlPlane
 }
 
-func (app *App) newServer(addr string, handler http.Handler) *http.Server {
-	return &http.Server{
+func (app *App) handler() http.Handler {
+	if app == nil || app.runtime == nil {
+		return app.Dispatcher
+	}
+	return app.runtime.Handler(app.Dispatcher)
+}
+
+func (app *App) newServer(addr string, handler http.Handler, trackConnections bool) *http.Server {
+	server := &http.Server{
 		Addr:    addr,
 		Handler: handler,
 		BaseContext: func(_ net.Listener) context.Context {
 			return app.Context
 		},
 	}
+	if trackConnections && app != nil && app.runtime != nil {
+		server.ConnState = app.runtime.ConnState
+	}
+	return server
 }
 
 func listenAndServe(server *http.Server) error {

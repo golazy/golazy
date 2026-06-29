@@ -171,6 +171,22 @@ func (u *Scope) Graph() Graph {
 }
 
 func (u *Scope) Shutdown(ctx context.Context, reason string) error {
+	return u.shutdown(ctx, reason, shutdownOptions{})
+}
+
+type shutdownOptions struct {
+	Delay    time.Duration
+	Observer func(shutdownEvent)
+}
+
+type shutdownEvent struct {
+	Service  string
+	State    string
+	Duration time.Duration
+	Err      error
+}
+
+func (u *Scope) shutdown(ctx context.Context, reason string, options shutdownOptions) error {
 	if u == nil {
 		return fmt.Errorf("lazydeps: nil Scope")
 	}
@@ -182,7 +198,8 @@ func (u *Scope) Shutdown(ctx context.Context, reason string) error {
 	}
 
 	var errs []error
-	for _, node := range u.shutdownOrder() {
+	order := u.shutdownOrder()
+	for index, node := range order {
 		select {
 		case <-ctx.Done():
 			return errors.Join(append(errs, ctx.Err())...)
@@ -192,6 +209,7 @@ func (u *Scope) Shutdown(ctx context.Context, reason string) error {
 		logger := u.loggerForUse()
 		logger.Info("lazydeps: canceling service context", "service", node.name, "reason", reason)
 		started := time.Now()
+		notifyShutdownObserver(options.Observer, shutdownEvent{Service: node.name, State: "canceling"})
 		finished := make(chan struct{})
 		go func() {
 			node.shutdown(errors.New(reason))
@@ -200,16 +218,32 @@ func (u *Scope) Shutdown(ctx context.Context, reason string) error {
 
 		select {
 		case <-finished:
-			logger.Info("lazydeps: service cleanup finished", "service", node.name, "duration", time.Since(started).String())
+			duration := time.Since(started)
+			logger.Info("lazydeps: service cleanup finished", "service", node.name, "duration", duration.String())
+			notifyShutdownObserver(options.Observer, shutdownEvent{Service: node.name, State: "stopped", Duration: duration})
 		case <-ctx.Done():
 			elapsed := time.Since(started)
 			err := fmt.Errorf("lazydeps: service %q cleanup interrupted after %s: %w", node.name, elapsed, ctx.Err())
 			logger.Error("lazydeps: service cleanup interrupted", "service", node.name, "duration", elapsed.String(), "err", ctx.Err())
+			notifyShutdownObserver(options.Observer, shutdownEvent{Service: node.name, State: "interrupted", Duration: elapsed, Err: err})
 			errs = append(errs, err)
 			return errors.Join(errs...)
 		}
+		if options.Delay > 0 && index < len(order)-1 {
+			select {
+			case <-ctx.Done():
+				return errors.Join(append(errs, ctx.Err())...)
+			case <-time.After(options.Delay):
+			}
+		}
 	}
 	return errors.Join(errs...)
+}
+
+func notifyShutdownObserver(observer func(shutdownEvent), event shutdownEvent) {
+	if observer != nil {
+		observer(event)
+	}
 }
 
 func (u *Scope) begin(name string) {

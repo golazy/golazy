@@ -18,7 +18,7 @@ func lazyDevContext(ctx context.Context) context.Context {
 	return ctx
 }
 
-func lazyDevControlPlane(controlPlane *lazycontrolplane.ControlPlane, _ *lazycontroller.Renderer, _ *lazyroutes.Scope, _ *lazyassets.Registry, _ *lazycache.Cache, _ *lazydeps.Scope, _ *lazyjobs.JobRunner) *lazycontrolplane.ControlPlane {
+func lazyDevControlPlane(controlPlane *lazycontrolplane.ControlPlane, _ *lazycontroller.Renderer, _ *lazyroutes.Scope, _ *lazyassets.Registry, _ *lazycache.Cache, _ *lazydeps.Scope, _ *lazyjobs.JobRunner, _ *runtimeState) *lazycontrolplane.ControlPlane {
 	return controlPlane
 }
 

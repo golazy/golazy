@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestServiceTracksAppAndServiceDependencies(t *testing.T) {
@@ -34,6 +35,48 @@ func TestServiceTracksAppAndServiceDependencies(t *testing.T) {
 	}
 	if !slices.Equal(graph.Edges, wantEdges) {
 		t.Fatalf("edges = %#v, want %#v", graph.Edges, wantEdges)
+	}
+}
+
+func TestShutdownObserverReportsNodeState(t *testing.T) {
+	u := New(context.Background())
+	events := []string{}
+
+	db, err := Service(u, "db", func(ctx context.Context) (context.Context, string, error, context.CancelFunc) {
+		return ctx, "db", nil, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = Service(u, "posts", func(ctx context.Context) (context.Context, string, error, context.CancelFunc) {
+		_ = db.Use()
+		return ctx, "posts", nil, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	started := time.Now()
+	if err := u.shutdown(context.Background(), "lazydev shutdown simulation", shutdownOptions{
+		Delay: 10 * time.Millisecond,
+		Observer: func(event shutdownEvent) {
+			events = append(events, event.Service+":"+event.State)
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	want := []string{
+		"posts:canceling",
+		"posts:stopped",
+		"db:canceling",
+		"db:stopped",
+	}
+	if !slices.Equal(events, want) {
+		t.Fatalf("events = %#v, want %#v", events, want)
+	}
+	if elapsed := time.Since(started); elapsed < 10*time.Millisecond {
+		t.Fatalf("shutdown elapsed = %s, want visible delay between services", elapsed)
 	}
 }
 

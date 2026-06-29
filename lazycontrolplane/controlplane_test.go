@@ -59,6 +59,26 @@ func TestReadyzReportsFailedCheck(t *testing.T) {
 	}
 }
 
+func TestAddReadinessCheckAppendsReadyzCheck(t *testing.T) {
+	plane := New(Config{})
+	plane.AddReadinessCheck(ReadinessCheck{
+		Name: "shutdown",
+		Check: func(context.Context) error {
+			return errors.New("application is draining")
+		},
+	})
+
+	response := httptest.NewRecorder()
+	plane.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusServiceUnavailable)
+	}
+	if got := response.Body.String(); !strings.Contains(got, "not ready: shutdown: application is draining") {
+		t.Fatalf("body = %q, want added check failure", got)
+	}
+}
+
 func TestMetricsIsOptional(t *testing.T) {
 	plane := New(Config{})
 

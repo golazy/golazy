@@ -64,6 +64,21 @@ type App struct {
 	Dependencies *lazydeps.Scope
 }
 
+type assetsMiddleware struct {
+	registry *lazyassets.Registry
+}
+
+func (assetsMiddleware) MiddlewareName() string {
+	return "lazyassets.Registry"
+}
+
+func (middleware assetsMiddleware) Handler(next http.Handler) http.Handler {
+	if middleware.registry == nil {
+		return next
+	}
+	return middleware.registry.Handler(next)
+}
+
 var afterDraw = func(*lazyroutes.Scope) {}
 
 func MustSub(fsys fs.FS, dir string) func() (fs.FS, error) {
@@ -205,7 +220,7 @@ func New(config Config) *App {
 		renderer.AddHelpers(helpers)
 	}
 	controlPlane = jobsControlPlane(controlPlane, jobs)
-	controlPlane = lazyDevControlPlane(controlPlane, renderer, router, cache, jobs)
+	controlPlane = lazyDevControlPlane(controlPlane, renderer, router, assets, cache, jobs)
 	controlPlane = telemetryControlPlane(controlPlane, telemetryConfig, telemetryRegistry, cache)
 	if err := renderer.Cache(); err != nil {
 		panic(fmt.Errorf("cache views: %w", err))
@@ -235,9 +250,7 @@ func New(config Config) *App {
 	dispatcher.Use(metadata)
 	dispatcher.Use(lazydispatch.Router(router))
 	if !assets.Empty() {
-		dispatcher.Use(lazydispatch.MiddlewareFunc(func(next http.Handler) http.Handler {
-			return assets.Handler(next)
-		}))
+		dispatcher.Use(assetsMiddleware{registry: assets})
 	}
 
 	return &App{

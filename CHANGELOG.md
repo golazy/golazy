@@ -32,6 +32,9 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `golazy.dev/lazysupport/inflection.Irregular` for registering
   application-specific singular/plural pairs before conventional resource names
   are derived.
+- Lazydev control-plane endpoints now expose the lazy asset manifest at
+  `GET /assets` and can clear request trace sidecars with
+  `POST /requests/traces/clear`.
 
 ### Changed
 
@@ -41,6 +44,12 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Lazydev request trace capture is off by default and no longer depends on OTEL
   exporter environment variables. `OTEL_SDK_DISABLED=true` remains the hard
   disable for lazydev request telemetry.
+- Lazydev request trace snapshots now support path and category filtering,
+  include the middleware that handled each request, and classify requests as
+  framework, asset, or other traffic.
+- Lazydev middleware tracing records whether each middleware called the next
+  handler, allowing the panel to identify the middleware that handled a
+  request.
 - `lazyfiles` and `lazymedia` now keep their append-only JSONL repository
   implementations in `golazy.dev/lazyfiles/jsonl` and
   `golazy.dev/lazymedia/jsonl`, with `JSONLRepository` types that satisfy the

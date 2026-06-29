@@ -1,6 +1,7 @@
 package lazydispatch
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -28,6 +29,8 @@ type Dispatcher struct {
 	middlewares []Middleware
 }
 
+type nextCallMarkerKey struct{}
+
 func NewDispatcher() *Dispatcher {
 	return &Dispatcher{}
 }
@@ -54,18 +57,32 @@ func (d *Dispatcher) Handler(next http.Handler) http.Handler {
 }
 
 func instrumentMiddleware(middleware Middleware, next http.Handler, index int) http.Handler {
-	handler := middleware.Handler(next)
 	name := middlewareName(middleware)
+	nextWithMarker := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if marker, ok := r.Context().Value(nextCallMarkerKey{}).(*bool); ok && marker != nil {
+			*marker = true
+		}
+		next.ServeHTTP(w, r)
+	})
+	handler := middleware.Handler(nextWithMarker)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		nextCalled := false
 		ctx, span := lazytracing.StartRegion(r.Context(), "middleware "+name,
 			slog.String("middleware.name", name),
 			slog.Int("middleware.index", index),
 		)
+		ctx = context.WithValue(ctx, nextCallMarkerKey{}, &nextCalled)
 		if span == nil {
-			handler.ServeHTTP(w, r)
+			handler.ServeHTTP(w, r.WithContext(ctx))
 			return
 		}
-		defer span.End()
+		defer func() {
+			span.AddAttributes(
+				slog.Bool("middleware.next_called", nextCalled),
+				slog.Bool("middleware.handled", !nextCalled),
+			)
+			span.End()
+		}()
 		handler.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

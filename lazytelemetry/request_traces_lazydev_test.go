@@ -86,6 +86,71 @@ func TestLazyDevRequestTracesHandlerListsCapturesWithLogs(t *testing.T) {
 	}
 }
 
+func TestLazyDevRequestTracesHandlerFiltersByPathAndCategoryAndClearsFiles(t *testing.T) {
+	t.Chdir(t.TempDir())
+	if err := os.MkdirAll(requestCaptureDirectory, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	startedAt := time.Date(2026, 6, 29, 9, 15, 0, 0, time.UTC)
+	writeJSONFile(t, filepath.Join(requestCaptureDirectory, "framework.spans"), requestCaptureDocument{
+		RequestID: "framework",
+		Method:    http.MethodGet,
+		Path:      "/pools",
+		StartedAt: startedAt,
+		Category:  "framework",
+		HandledBy: "lazydispatch.Router",
+	})
+	writeJSONFile(t, filepath.Join(requestCaptureDirectory, "asset.spans"), requestCaptureDocument{
+		RequestID: "asset",
+		Method:    http.MethodGet,
+		Path:      "/assets/app.js",
+		StartedAt: startedAt.Add(time.Second),
+		Category:  "assets",
+		HandledBy: "lazyassets.Registry",
+	})
+	for _, name := range []string{"framework.trace", "framework.log.json", "asset.trace", "asset.log.json"} {
+		if err := os.WriteFile(filepath.Join(requestCaptureDirectory, name), []byte("x\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	plane := lazycontrolplane.New(lazycontrolplane.Config{})
+	RegisterLazyDevHandlers(plane)
+
+	response := httptest.NewRecorder()
+	plane.ServeHTTP(response, httptest.NewRequest(http.MethodGet, LazyDevRequestTracesPath+"?q=pools&type=framework", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("filtered status = %d, want %d: %s", response.Code, http.StatusOK, response.Body.String())
+	}
+	var filtered struct {
+		Traces []struct {
+			RequestID string `json:"request_id"`
+			Category  string `json:"category"`
+			HandledBy string `json:"handled_by"`
+		} `json:"traces"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &filtered); err != nil {
+		t.Fatalf("decode filtered response: %v", err)
+	}
+	if len(filtered.Traces) != 1 || filtered.Traces[0].RequestID != "framework" || filtered.Traces[0].Category != "framework" || filtered.Traces[0].HandledBy != "lazydispatch.Router" {
+		t.Fatalf("filtered traces = %#v, want framework request", filtered.Traces)
+	}
+
+	response = httptest.NewRecorder()
+	plane.ServeHTTP(response, httptest.NewRequest(http.MethodPost, LazyDevRequestTracesClearPath, nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("clear status = %d, want %d: %s", response.Code, http.StatusOK, response.Body.String())
+	}
+	entries, err := os.ReadDir(requestCaptureDirectory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("trace directory entries after clear = %#v, want empty", entries)
+	}
+}
+
 func writeJSONFile(t *testing.T, path string, value interface{}) {
 	t.Helper()
 	file, err := os.Create(path)

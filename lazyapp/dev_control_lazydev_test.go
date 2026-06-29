@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 
+	"golazy.dev/lazyassets"
 	"golazy.dev/lazycache"
 	"golazy.dev/lazycontroller"
 	"golazy.dev/lazyroutes"
@@ -96,6 +97,7 @@ func TestLazyDevControlPlaneAggregatesPackageHandlers(t *testing.T) {
 		lazyDevReloadViewsPath,
 		lazyroutes.LazyDevRoutesPath,
 		lazycontroller.LazyDevOpenEditorPath,
+		lazyassets.LazyDevAssetsPath,
 		lazycache.LazyDevCachePath,
 		lazycache.LazyDevCacheOnPath,
 		lazycache.LazyDevCacheOffPath,
@@ -103,6 +105,7 @@ func TestLazyDevControlPlaneAggregatesPackageHandlers(t *testing.T) {
 		lazytelemetry.LazyDevRequestMonitoringOnPath,
 		lazytelemetry.LazyDevRequestMonitoringOffPath,
 		lazytelemetry.LazyDevRequestTracesPath,
+		lazytelemetry.LazyDevRequestTracesClearPath,
 	} {
 		if !app.ControlPlane.HandlesPath(path) {
 			t.Fatalf("control plane does not handle %s", path)

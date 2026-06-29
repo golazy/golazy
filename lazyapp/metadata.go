@@ -81,6 +81,10 @@ func newMetadataFiles(robots RobotsConfig, sitemap SitemapConfig) (*metadataFile
 	return files, nil
 }
 
+func (m *metadataFiles) MiddlewareName() string {
+	return "lazyapp.Metadata"
+}
+
 func (m *metadataFiles) Handler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, ok := m.body[r.URL.Path]

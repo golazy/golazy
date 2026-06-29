@@ -47,6 +47,8 @@ type requestCaptureDocument struct {
 	TraceFile  string                 `json:"trace_file"`
 	SpansFile  string                 `json:"spans_file"`
 	LogsFile   string                 `json:"logs_file"`
+	HandledBy  string                 `json:"handled_by,omitempty"`
+	Category   string                 `json:"category,omitempty"`
 	Runtime    requestRuntimeSummary  `json:"runtime"`
 	Memory     requestMemorySummary   `json:"memory"`
 	Spans      []requestSpanDocument  `json:"spans"`
@@ -201,6 +203,8 @@ func (capture *requestCapture) document(result requestCaptureResult, span *lazyt
 	if result.Panic != nil {
 		panicValue = fmt.Sprint(result.Panic)
 	}
+	spans := spanDocuments(span)
+	handledBy, category := requestHandledBy(spans)
 	return requestCaptureDocument{
 		RequestID:  result.RequestID,
 		Method:     result.Method,
@@ -215,6 +219,8 @@ func (capture *requestCapture) document(result requestCaptureResult, span *lazyt
 		TraceFile:  filepath.ToSlash(capture.path(".trace")),
 		SpansFile:  filepath.ToSlash(capture.path(".spans")),
 		LogsFile:   filepath.ToSlash(capture.path(".log.json")),
+		HandledBy:  handledBy,
+		Category:   category,
 		Runtime: requestRuntimeSummary{
 			GoVersion:       runtime.Version(),
 			GOOS:            runtime.GOOS,
@@ -224,7 +230,7 @@ func (capture *requestCapture) document(result requestCaptureResult, span *lazyt
 			GoroutinesEnd:   endGoroutines,
 		},
 		Memory: memorySummary(capture.startMem, endMem),
-		Spans:  spanDocuments(span),
+		Spans:  spans,
 		Errors: append([]string(nil), capture.errors...),
 	}
 }
@@ -390,6 +396,44 @@ func spanDocument(span *lazytracing.Span) requestSpanDocument {
 		}
 	}
 	return document
+}
+
+func requestHandledBy(spans []requestSpanDocument) (string, string) {
+	var handledBy string
+	for _, span := range spans {
+		if !spanHandledRequest(span) {
+			continue
+		}
+		if name, ok := span.Attributes["middleware.name"].(string); ok && strings.TrimSpace(name) != "" {
+			handledBy = strings.TrimSpace(name)
+			continue
+		}
+		handledBy = strings.TrimPrefix(span.Name, "middleware ")
+	}
+	if handledBy == "" {
+		return "", "other"
+	}
+	switch handledBy {
+	case "lazydispatch.Router", "lazydispatch.RouteOnly":
+		return handledBy, "framework"
+	case "lazyassets.Registry":
+		return handledBy, "assets"
+	default:
+		return handledBy, "other"
+	}
+}
+
+func spanHandledRequest(span requestSpanDocument) bool {
+	if span.Attributes == nil {
+		return false
+	}
+	if handled, ok := span.Attributes["middleware.handled"].(bool); ok {
+		return handled
+	}
+	if nextCalled, ok := span.Attributes["middleware.next_called"].(bool); ok {
+		return !nextCalled
+	}
+	return false
 }
 
 func selfSpanDuration(span requestSpanDocument, children []requestSpanDocumentNode) time.Duration {

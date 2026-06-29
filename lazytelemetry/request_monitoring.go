@@ -18,6 +18,9 @@ const LazyDevRequestMonitoringOffPath = "/requests/monitoring/off"
 // request trace summaries.
 const LazyDevRequestTracesPath = "/requests/traces"
 
+// LazyDevRequestTracesClearPath clears recorded lazydev request trace files.
+const LazyDevRequestTracesClearPath = "/requests/traces/clear"
+
 var requestMonitoringEnabled atomic.Bool
 
 // RequestMonitoringSnapshot describes detailed lazydev request monitoring.

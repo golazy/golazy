@@ -5,6 +5,7 @@ package lazyapp
 import (
 	"context"
 
+	"golazy.dev/lazyassets"
 	"golazy.dev/lazycache"
 	"golazy.dev/lazycontroller"
 	"golazy.dev/lazycontrolplane"
@@ -16,7 +17,7 @@ func lazyDevContext(ctx context.Context) context.Context {
 	return ctx
 }
 
-func lazyDevControlPlane(controlPlane *lazycontrolplane.ControlPlane, _ *lazycontroller.Renderer, _ *lazyroutes.Scope, _ *lazycache.Cache, _ *lazyjobs.JobRunner) *lazycontrolplane.ControlPlane {
+func lazyDevControlPlane(controlPlane *lazycontrolplane.ControlPlane, _ *lazycontroller.Renderer, _ *lazyroutes.Scope, _ *lazyassets.Registry, _ *lazycache.Cache, _ *lazyjobs.JobRunner) *lazycontrolplane.ControlPlane {
 	return controlPlane
 }
 

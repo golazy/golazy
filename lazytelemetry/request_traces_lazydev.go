@@ -26,9 +26,14 @@ type requestTraceSnapshot struct {
 	Logs []map[string]interface{} `json:"logs,omitempty"`
 }
 
-func handleRequestTraces(w http.ResponseWriter, _ *http.Request) {
+type requestTraceFilter struct {
+	Query    string
+	Category string
+}
+
+func handleRequestTraces(w http.ResponseWriter, r *http.Request) {
 	response := requestTracesResponse{Directory: requestCaptureDirectory}
-	traces, errors := readRequestTraceSnapshots()
+	traces, errors := readRequestTraceSnapshots(requestTraceFilterFromRequest(r))
 	response.Traces = traces
 	response.Errors = errors
 
@@ -37,7 +42,34 @@ func handleRequestTraces(w http.ResponseWriter, _ *http.Request) {
 	_ = json.NewEncoder(w).Encode(response)
 }
 
-func readRequestTraceSnapshots() ([]requestTraceSnapshot, []string) {
+func handleRequestTracesClear(w http.ResponseWriter, r *http.Request) {
+	if err := clearRequestTraceSnapshots(); err != nil {
+		http.Error(w, fmt.Sprintf("clear request traces: %v", err), http.StatusInternalServerError)
+		return
+	}
+	handleRequestTraces(w, r)
+}
+
+func requestTraceFilterFromRequest(r *http.Request) requestTraceFilter {
+	if r == nil {
+		return requestTraceFilter{Category: "all"}
+	}
+	return requestTraceFilter{
+		Query:    strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q"))),
+		Category: normalizeRequestTraceCategory(r.URL.Query().Get("type")),
+	}
+}
+
+func normalizeRequestTraceCategory(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "framework", "assets", "other":
+		return strings.ToLower(strings.TrimSpace(value))
+	default:
+		return "all"
+	}
+}
+
+func readRequestTraceSnapshots(filter requestTraceFilter) ([]requestTraceSnapshot, []string) {
 	entries, err := os.ReadDir(requestCaptureDirectory)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -66,6 +98,12 @@ func readRequestTraceSnapshots() ([]requestTraceSnapshot, []string) {
 		if strings.TrimSpace(document.RequestID) == "" {
 			document.RequestID = strings.TrimSuffix(entry.Name(), ".spans")
 		}
+		if document.Category == "" {
+			document.HandledBy, document.Category = requestHandledBy(document.Spans)
+		}
+		if !requestTraceMatches(document, filter) {
+			continue
+		}
 		logs, err := readRequestTraceLogs(filepath.Join(requestCaptureDirectory, strings.TrimSuffix(entry.Name(), ".spans")+".log.json"))
 		if err != nil {
 			errors = append(errors, err.Error())
@@ -83,6 +121,39 @@ func readRequestTraceSnapshots() ([]requestTraceSnapshot, []string) {
 		snapshots = snapshots[:maxRequestTraceSnapshots]
 	}
 	return snapshots, errors
+}
+
+func requestTraceMatches(document requestCaptureDocument, filter requestTraceFilter) bool {
+	if filter.Query != "" && !strings.Contains(strings.ToLower(document.Path), filter.Query) {
+		return false
+	}
+	if filter.Category != "" && filter.Category != "all" && document.Category != filter.Category {
+		return false
+	}
+	return true
+}
+
+func clearRequestTraceSnapshots() error {
+	entries, err := os.ReadDir(requestCaptureDirectory)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if !strings.HasSuffix(name, ".trace") && !strings.HasSuffix(name, ".spans") && !strings.HasSuffix(name, ".log.json") {
+			continue
+		}
+		if err := os.Remove(filepath.Join(requestCaptureDirectory, name)); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+	return nil
 }
 
 func readRequestTraceLogs(path string) ([]map[string]interface{}, error) {

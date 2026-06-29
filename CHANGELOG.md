@@ -14,6 +14,8 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   request-local log JSONL under `.tmp/traces`.
 - Lazydev request span JSON now includes per-region total and self duration
   plus sampled allocation bytes, malloc counts, and free counts.
+- Lazydev request span JSON now includes a goroutine id for each region so
+  development tooling can highlight regions that cross goroutine boundaries.
 - Framework telemetry records child regions for dispatched middleware, routing,
   dispatch, controller setup, action calls, view rendering, layouts, and
   partials when a request span is active. Request ids are attached to request
@@ -50,6 +52,11 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Lazydev middleware tracing records whether each middleware called the next
   handler, allowing the panel to identify the middleware that handled a
   request.
+- `lazycontroller.Base.Layout` is now the layout-selection API. The older
+  `SetLayout` alias was removed.
+- `lazycontroller.Base.CacheKey` and `CacheKeyF` now return `true` when an
+  existing cached response was written and `false` when the action should
+  continue and render a body for storage.
 - `lazyfiles` and `lazymedia` now keep their append-only JSONL repository
   implementations in `golazy.dev/lazyfiles/jsonl` and
   `golazy.dev/lazymedia/jsonl`, with `JSONLRepository` types that satisfy the

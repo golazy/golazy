@@ -365,8 +365,8 @@ func TestRenderUsesControllerCacheKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	base.Set("title", "First")
-	if err := base.CacheKey(1, "stamp"); err != nil {
-		t.Fatal(err)
+	if base.CacheKey(1, "stamp") {
+		t.Fatal("CacheKey returned true before cache was populated")
 	}
 	if err := base.Render(""); err != nil {
 		t.Fatal(err)
@@ -385,8 +385,8 @@ func TestRenderUsesControllerCacheKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	base.Set("title", "Second")
-	if err := base.CacheKey(1, "stamp"); err != nil {
-		t.Fatal(err)
+	if !base.CacheKey(1, "stamp") {
+		t.Fatal("CacheKey returned false for populated cache")
 	}
 	if err := base.Render(""); err != nil {
 		t.Fatal(err)
@@ -433,8 +433,8 @@ func TestRenderUsesControllerFullCacheKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	base.Set("title", "Post")
-	if err := base.CacheKeyF("post", 1, "stamp"); err != nil {
-		t.Fatal(err)
+	if base.CacheKeyF("post", 1, "stamp") {
+		t.Fatal("CacheKeyF returned true before cache was populated")
 	}
 	if err := base.Render(""); err != nil {
 		t.Fatal(err)

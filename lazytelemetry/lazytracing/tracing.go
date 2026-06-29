@@ -47,6 +47,7 @@ type Span struct {
 	traceID    string
 	spanID     string
 	parentID   string
+	goroutine  uint64
 	startedAt  time.Time
 	endedAt    time.Time
 	attributes []slog.Attr
@@ -166,6 +167,7 @@ func StartSpan(ctx context.Context, name string, attributes ...slog.Attr) (conte
 		traceID:    traceContext.TraceID,
 		spanID:     traceContext.SpanID,
 		parentID:   parentID,
+		goroutine:  currentGoroutineID(),
 		startedAt:  time.Now(),
 		attributes: append([]slog.Attr(nil), attributes...),
 		parent:     parentSpan,
@@ -264,6 +266,15 @@ func (s *Span) ParentID() string {
 		return ""
 	}
 	return s.parentID
+}
+
+// GoroutineID returns the goroutine identifier captured for development
+// diagnostics. Production builds return zero.
+func (s *Span) GoroutineID() uint64 {
+	if s == nil {
+		return 0
+	}
+	return s.goroutine
 }
 
 // StartedAt returns the time the span started.

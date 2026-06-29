@@ -57,6 +57,8 @@ type cacheKeySpec struct {
 	set   bool
 	full  bool
 	parts []any
+	key   string
+	hit   bool
 }
 
 func NewBase(ctx context.Context, viewPath ...string) (Base, error) {
@@ -167,10 +169,6 @@ func (b *Base) Layout(layout string) {
 	b.useLayout = true
 }
 
-func (b *Base) SetLayout(layout string) {
-	b.Layout(layout)
-}
-
 func (b *Base) NoLayout() {
 	b.useLayout = false
 }
@@ -194,20 +192,44 @@ func (b *Base) Cache() *lazycache.Cache {
 	return cache
 }
 
-func (b *Base) CacheKey(parts ...any) error {
-	if _, err := lazycache.Key(parts...); err != nil {
-		return err
-	}
-	b.cacheKey = cacheKeySpec{set: true, parts: append([]any(nil), parts...)}
-	return nil
+func (b *Base) CacheKey(parts ...any) bool {
+	return b.setCacheKey(false, parts...)
 }
 
-func (b *Base) CacheKeyF(parts ...any) error {
-	if _, err := lazycache.Key(parts...); err != nil {
-		return err
+func (b *Base) CacheKeyF(parts ...any) bool {
+	return b.setCacheKey(true, parts...)
+}
+
+func (b *Base) setCacheKey(full bool, parts ...any) bool {
+	b.cacheKey = cacheKeySpec{set: true, full: full, parts: append([]any(nil), parts...)}
+	key, ok, err := b.renderCacheKey(strings.ToLower(b.route.Action), b.Format())
+	if err != nil || !ok {
+		return false
 	}
-	b.cacheKey = cacheKeySpec{set: true, full: true, parts: append([]any(nil), parts...)}
-	return nil
+	b.cacheKey.key = key
+	cache := b.Cache()
+	if cache == nil {
+		return false
+	}
+	body, err := lazycache.Get[string](cache, key)
+	if err != nil {
+		return false
+	}
+	buffer := newBufferedResponse()
+	copyHeaders(buffer.Header(), b.writer.Header())
+	format := b.Format()
+	if b.IsTurboFrame() {
+		format = HTML
+	}
+	if buffer.Header().Get("Content-Type") == "" {
+		buffer.Header().Set("Content-Type", contentTypeForFormat(format))
+	}
+	_, _ = buffer.Write([]byte(body))
+	if b.writeBufferedResponse(buffer) != nil {
+		return false
+	}
+	b.cacheKey.hit = true
+	return true
 }
 
 func (b *Base) Helpers(helpers map[string]any) {
@@ -301,6 +323,9 @@ func (b *Base) RenderTurboFrame(id string, opts ...lazyturbo.FrameOption) error 
 }
 
 func (b *Base) renderTurboFrame(id string, opts []lazyturbo.FrameOption, action string) error {
+	if b.cacheKey.hit {
+		return nil
+	}
 	id = strings.TrimSpace(id)
 	if err := lazyturbo.ValidateFrameID(id); err != nil {
 		return err
@@ -391,6 +416,9 @@ func (b *Base) renderCachedTurboFrame(id string, opts []lazyturbo.FrameOption, k
 }
 
 func (b *Base) renderView(options lazyview.Options, format Format) error {
+	if b.cacheKey.hit {
+		return nil
+	}
 	options.Format = string(format)
 	if b.IsTurboFrame() {
 		options.Format = string(HTML)
@@ -457,6 +485,9 @@ func (b *Base) renderCacheKey(action string, format Format) (string, bool, error
 	if !b.cacheKey.set {
 		return "", false, nil
 	}
+	if b.cacheKey.key != "" {
+		return b.cacheKey.key, true, nil
+	}
 	if b.cacheKey.full {
 		key, err := lazycache.Key(b.cacheKey.parts...)
 		return key, true, err
@@ -464,6 +495,10 @@ func (b *Base) renderCacheKey(action string, format Format) (string, bool, error
 	parts := []any{}
 	if strings.TrimSpace(b.route.Namespace) != "" {
 		parts = append(parts, b.route.Namespace)
+	}
+	action = strings.TrimSpace(action)
+	if action == "" {
+		action = strings.ToLower(b.route.Action)
 	}
 	parts = append(parts, b.controller, action, string(format))
 	parts = append(parts, b.cacheKey.parts...)

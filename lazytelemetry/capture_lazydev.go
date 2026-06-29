@@ -99,6 +99,7 @@ type requestSpanDocument struct {
 	TraceID        string                     `json:"trace_id"`
 	SpanID         string                     `json:"span_id"`
 	ParentID       string                     `json:"parent_id,omitempty"`
+	GoroutineID    uint64                     `json:"goroutine_id,omitempty"`
 	StartedAt      time.Time                  `json:"started_at"`
 	EndedAt        time.Time                  `json:"ended_at"`
 	DurationMS     float64                    `json:"duration_ms"`
@@ -377,16 +378,17 @@ func spanDocument(span *lazytracing.Span) requestSpanDocument {
 		})
 	}
 	document := requestSpanDocument{
-		Name:       span.Name(),
-		TraceID:    span.TraceID(),
-		SpanID:     span.SpanID(),
-		ParentID:   span.ParentID(),
-		StartedAt:  span.StartedAt(),
-		EndedAt:    span.EndedAt(),
-		DurationMS: durationMilliseconds(span.Duration()),
-		Attributes: attrsMap(span.Attributes()),
-		Events:     eventDocuments,
-		Error:      errorMessage,
+		Name:        span.Name(),
+		TraceID:     span.TraceID(),
+		SpanID:      span.SpanID(),
+		ParentID:    span.ParentID(),
+		GoroutineID: span.GoroutineID(),
+		StartedAt:   span.StartedAt(),
+		EndedAt:     span.EndedAt(),
+		DurationMS:  durationMilliseconds(span.Duration()),
+		Attributes:  attrsMap(span.Attributes()),
+		Events:      eventDocuments,
+		Error:       errorMessage,
 	}
 	if memory, ok := lazytracing.SpanAllocationSummary(span); ok {
 		document.Memory = &requestSpanMemoryDocument{

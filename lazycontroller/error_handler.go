@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"sync"
 )
 
 type requestErrorStateKey struct{}
@@ -12,6 +13,12 @@ type requestErrorStateKey struct{}
 type requestErrorState struct {
 	controller any
 	err        error
+}
+
+var requestErrorStatePool = sync.Pool{
+	New: func() any {
+		return &requestErrorState{}
+	},
 }
 
 type controllerErrorHandler interface {
@@ -24,10 +31,11 @@ func ErrorHandler(ctx context.Context) func(http.Handler) http.Handler {
 			next = http.NotFoundHandler()
 		}
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			state := &requestErrorState{}
+			state := acquireRequestErrorState()
 			r = r.WithContext(context.WithValue(r.Context(), requestErrorStateKey{}, state))
 
 			defer func() {
+				defer releaseRequestErrorState(state)
 				if recovered := recover(); recovered != nil {
 					state.err = PanicError(recovered)
 				}
@@ -40,6 +48,19 @@ func ErrorHandler(ctx context.Context) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+func acquireRequestErrorState() *requestErrorState {
+	return requestErrorStatePool.Get().(*requestErrorState)
+}
+
+func releaseRequestErrorState(state *requestErrorState) {
+	if state == nil {
+		return
+	}
+	state.controller = nil
+	state.err = nil
+	requestErrorStatePool.Put(state)
 }
 
 func ReportController(r *http.Request, controller any) bool {

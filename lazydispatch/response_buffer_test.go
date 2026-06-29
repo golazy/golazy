@@ -91,14 +91,14 @@ func TestResponseBufferCanStartStreaming(t *testing.T) {
 }
 
 func TestPooledResponseBufferClearsState(t *testing.T) {
-	first := acquireBufferedResponseWriter(httptest.NewRecorder())
+	first := AcquireBufferedResponseWriter(httptest.NewRecorder())
 	first.Header().Set("X-Test", "stale")
 	first.WriteHeader(http.StatusCreated)
 	_, _ = fmt.Fprint(first, "stale")
-	releaseBufferedResponseWriter(first)
+	ReleaseBufferedResponseWriter(first)
 
-	second := acquireBufferedResponseWriter(httptest.NewRecorder())
-	defer releaseBufferedResponseWriter(second)
+	second := AcquireBufferedResponseWriter(httptest.NewRecorder())
+	defer ReleaseBufferedResponseWriter(second)
 	if got := second.Header().Get("X-Test"); got != "" {
 		t.Fatalf("pooled header = %q, want empty", got)
 	}

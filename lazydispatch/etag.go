@@ -2,7 +2,7 @@ package lazydispatch
 
 import (
 	"crypto/sha256"
-	"fmt"
+	"encoding/hex"
 	"net/http"
 	"strings"
 )
@@ -26,19 +26,20 @@ func (etagMiddleware) Handler(next http.Handler) http.Handler {
 		buffer, ok := w.(*BufferedResponseWriter)
 		if ok {
 			next.ServeHTTP(buffer, r)
-			applyETag(buffer, r)
+			ApplyETag(buffer, r)
 			return
 		}
 
-		buffer = acquireBufferedResponseWriter(w)
-		defer releaseBufferedResponseWriter(buffer)
+		buffer = AcquireBufferedResponseWriter(w)
+		defer ReleaseBufferedResponseWriter(buffer)
 		next.ServeHTTP(buffer, r)
-		applyETag(buffer, r)
+		ApplyETag(buffer, r)
 		_ = buffer.Flush()
 	})
 }
 
-func applyETag(w *BufferedResponseWriter, r *http.Request) {
+// ApplyETag adds or validates an ETag for an eligible buffered response.
+func ApplyETag(w *BufferedResponseWriter, r *http.Request) {
 	if !etagEligible(w, r) {
 		return
 	}
@@ -88,7 +89,11 @@ func etagEligible(w *BufferedResponseWriter, r *http.Request) bool {
 
 func etagFor(body []byte) string {
 	sum := sha256.Sum256(body)
-	return fmt.Sprintf("%q", fmt.Sprintf("%x", sum[:]))
+	var out [sha256.Size*2 + 2]byte
+	out[0] = '"'
+	hex.Encode(out[1:len(out)-1], sum[:])
+	out[len(out)-1] = '"'
+	return string(out[:])
 }
 
 func etagMatches(header, etag string) bool {

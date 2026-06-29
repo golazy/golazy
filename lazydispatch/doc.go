@@ -7,6 +7,6 @@
 // package directly.
 //
 // Use lazydispatch directly when composing a custom http.Handler stack with the
-// same small middleware interface, response buffering, ETag handling, route-only
-// middleware, or static fallback behavior.
+// same small middleware interface, route-only middleware, dynamic route
+// lifecycle helpers, or static fallback behavior.
 package lazydispatch

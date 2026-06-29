@@ -98,12 +98,7 @@ type controllerBinding struct {
 func (b *controllerBinding) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w = ensureResponseState(w)
 	route := routeForRequest(r)
-	ctx, dispatchSpan := lazytelemetry.StartRegion(r.Context(), routeOperationName("dispatch", route),
-		slog.String("http.route", route.Path),
-		slog.String("route.name", route.Name),
-		slog.String("controller", route.Controller),
-		slog.String("action", route.Action),
-	)
+	ctx, dispatchSpan := startRouteRegion(r.Context(), "dispatch", route)
 	if dispatchSpan != nil {
 		defer dispatchSpan.End()
 		r = r.WithContext(ctx)
@@ -126,12 +121,7 @@ func (b *controllerBinding) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	controllerReady := func() bool {
-		_, controllerSpan := lazytelemetry.StartRegion(r.Context(), routeOperationName("controller", route),
-			slog.String("http.route", route.Path),
-			slog.String("route.name", route.Name),
-			slog.String("controller", route.Controller),
-			slog.String("action", route.Action),
-		)
+		_, controllerSpan := startRouteRegion(r.Context(), "controller", route)
 		if controllerSpan != nil {
 			defer controllerSpan.End()
 		}
@@ -169,12 +159,7 @@ func (b *controllerBinding) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	actionRequest, actionSpan := requestRegion(r, routeOperationName("controller.action", route),
-		slog.String("http.route", route.Path),
-		slog.String("route.name", route.Name),
-		slog.String("controller", route.Controller),
-		slog.String("action", route.Action),
-	)
+	actionRequest, actionSpan := requestRouteRegion(r, "controller.action", route)
 	actionErr := callWithActionRegion(actionSpan, func() error {
 		return b.actionPlan.Call(controllerValue, w, actionRequest)
 	})
@@ -210,14 +195,15 @@ func routeForRequest(r *http.Request) lazyview.Route {
 }
 
 func routeOperationName(kind string, route lazyview.Route) string {
-	parts := []string{strings.TrimSpace(route.Controller), strings.TrimSpace(route.Action)}
+	controller := strings.TrimSpace(route.Controller)
+	action := strings.TrimSpace(route.Action)
 	switch {
-	case parts[0] != "" && parts[1] != "":
-		return kind + " " + parts[0] + "." + parts[1]
-	case parts[0] != "":
-		return kind + " " + parts[0]
-	case parts[1] != "":
-		return kind + " " + parts[1]
+	case controller != "" && action != "":
+		return kind + " " + controller + "." + action
+	case controller != "":
+		return kind + " " + controller
+	case action != "":
+		return kind + " " + action
 	default:
 		return kind
 	}
@@ -272,6 +258,26 @@ func requestRegion(r *http.Request, name string, attrs ...slog.Attr) (*http.Requ
 		return r, nil
 	}
 	return r.WithContext(ctx), span
+}
+
+func requestRouteRegion(r *http.Request, kind string, route lazyview.Route) (*http.Request, *lazytracing.Span) {
+	ctx, span := startRouteRegion(r.Context(), kind, route)
+	if span == nil {
+		return r, nil
+	}
+	return r.WithContext(ctx), span
+}
+
+func startRouteRegion(ctx context.Context, kind string, route lazyview.Route) (context.Context, *lazytracing.Span) {
+	if lazytelemetry.SpanFromContext(ctx) == nil {
+		return ctx, nil
+	}
+	return lazytelemetry.StartRegion(ctx, routeOperationName(kind, route),
+		slog.String("http.route", route.Path),
+		slog.String("route.name", route.Name),
+		slog.String("controller", route.Controller),
+		slog.String("action", route.Action),
+	)
 }
 
 func callWithActionRegion(span *lazytracing.Span, call func() error) (err error) {

@@ -16,9 +16,9 @@ asset fallback, and return one application `http.Handler`.
 - `MiddlewareFunc`, an adapter for ordinary functions.
 - `RouteOnly`, a route-table gate for middleware.
 - Router middleware.
-- Form method override through `lazydispatch/middlewares`.
-- Response buffering for registered application routes.
-- Dynamic `ETag` handling for eligible route responses.
+- Dynamic route lifecycle middleware through `lazydispatch/middlewares`,
+  including form method override, response buffering, controller error
+  handling, and dynamic `ETag` handling for eligible route responses.
 - Low-level public static-file middleware for custom assemblies.
 - Final `404 Not Found` behavior.
 
@@ -54,7 +54,7 @@ func App() *lazyapp.App {
 `lazyapp.New` builds this default chain:
 
 ```text
-route-only method override, response buffer, and ETag handling
+route-only dynamic route lifecycle
 application middleware
 router middleware
 asset/public fallback middleware
@@ -62,8 +62,9 @@ asset/public fallback middleware
 ```
 
 Application middleware sees the request before route lookup and asset fallback.
-Method override, response buffering, and dynamic ETags are gated by the route
-table, so public assets are not buffered by the app response layer.
+Method override, response buffering, controller error handling, and dynamic
+ETags are gated by the route table, so public assets are not buffered by the
+app response layer.
 
 ## Middleware
 
@@ -116,13 +117,12 @@ Use `RouteOnly` to apply middleware only to routed application requests:
 ```go
 dispatcher.Use(lazydispatch.RouteOnly(
     router,
-    lazydispatch.ResponseBuffer(),
-    lazydispatch.ETag(),
+    middlewares.DynamicRoute(appCtx),
 ))
 ```
 
-This is how `lazyapp` applies response buffering and ETag handling without
-buffering public assets.
+This is how `lazyapp` applies the dynamic route lifecycle without buffering
+public assets.
 
 ## ETag Responses
 
@@ -197,13 +197,12 @@ Register middleware manually:
 dispatcher.Use(middleware)
 ```
 
-Install route-only response middleware manually:
+Install route-only dynamic route middleware manually:
 
 ```go
 dispatcher.Use(lazydispatch.RouteOnly(
     router,
-    lazydispatch.ResponseBuffer(),
-    lazydispatch.ETag(),
+    middlewares.DynamicRoute(appCtx),
 ))
 ```
 

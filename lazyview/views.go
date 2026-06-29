@@ -14,6 +14,7 @@ import (
 	"sync"
 
 	"golazy.dev/lazytelemetry"
+	"golazy.dev/lazytelemetry/lazytracing"
 )
 
 const maxPooledRenderBufferBody = 64 << 10
@@ -121,12 +122,12 @@ func (v *Views) Render(options Options) error {
 
 	if !options.UseLayout {
 		setContentType(options.Writer, renderContext.Format)
-		return v.renderNamedTemplate(renderContext, options.Writer, file, templateRegionName("view.render", file))
+		return v.renderNamedTemplate(renderContext, options.Writer, file, "view.render")
 	}
 
 	content := acquireRenderBuffer()
 	defer releaseRenderBuffer(content)
-	if err := v.renderNamedTemplate(renderContext, content, file, templateRegionName("view.render", file)); err != nil {
+	if err := v.renderNamedTemplate(renderContext, content, file, "view.render"); err != nil {
 		return err
 	}
 
@@ -145,7 +146,7 @@ func (v *Views) Render(options Options) error {
 	layoutContext.Data = layoutContext.Variables
 
 	setContentType(options.Writer, renderContext.Format)
-	return v.renderNamedTemplate(&layoutContext, options.Writer, layoutFile, templateRegionName("view.layout", layoutFile))
+	return v.renderNamedTemplate(&layoutContext, options.Writer, layoutFile, "view.layout")
 }
 
 // RenderString renders a view to a string.
@@ -229,11 +230,14 @@ func (v *Views) renderTemplate(ctx *Context, writer io.Writer, file string) erro
 	return engine.Render(ctx, writer, file)
 }
 
-func (v *Views) renderNamedTemplate(ctx *Context, writer io.Writer, file string, regionName string) (err error) {
+func (v *Views) renderNamedTemplate(ctx *Context, writer io.Writer, file string, regionKind string) (err error) {
 	if ctx == nil {
 		return v.renderTemplate(ctx, writer, file)
 	}
-	regionCtx, span := lazytelemetry.StartRegion(ctx.Context, regionName, renderAttributes(ctx, file)...)
+	if lazytelemetry.SpanFromContext(ctx.Context) == nil {
+		return v.renderTemplate(ctx, writer, file)
+	}
+	regionCtx, span := lazytelemetry.StartRegion(ctx.Context, templateRegionName(regionKind, file), renderAttributes(ctx, file)...)
 	if span == nil {
 		return v.renderTemplate(ctx, writer, file)
 	}
@@ -379,11 +383,15 @@ func (ctx *Context) partial(args ...any) (Fragment, error) {
 		}
 	}
 
-	partialCtx, span := lazytelemetry.StartRegion(ctx.Context, partialRegionName(name),
-		slog.String("view.partial", name),
-		slog.String("view.controller", ctx.Controller),
-		slog.String("view.format", ctx.Format),
-	)
+	partialCtx := ctx.Context
+	var span *lazytracing.Span
+	if lazytelemetry.SpanFromContext(ctx.Context) != nil {
+		partialCtx, span = lazytelemetry.StartRegion(ctx.Context, partialRegionName(name),
+			slog.String("view.partial", name),
+			slog.String("view.controller", ctx.Controller),
+			slog.String("view.format", ctx.Format),
+		)
+	}
 	if span != nil {
 		defer span.End()
 	}

@@ -66,16 +66,20 @@ func instrumentMiddleware(middleware Middleware, next http.Handler, index int) h
 	})
 	handler := middleware.Handler(nextWithMarker)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		nextCalled := false
+		if lazytracing.SpanFromContext(r.Context()) == nil {
+			handler.ServeHTTP(w, r)
+			return
+		}
 		ctx, span := lazytracing.StartRegion(r.Context(), "middleware "+name,
 			slog.String("middleware.name", name),
 			slog.Int("middleware.index", index),
 		)
-		ctx = context.WithValue(ctx, nextCallMarkerKey{}, &nextCalled)
 		if span == nil {
-			handler.ServeHTTP(w, r.WithContext(ctx))
+			handler.ServeHTTP(w, r)
 			return
 		}
+		nextCalled := false
+		ctx = context.WithValue(ctx, nextCallMarkerKey{}, &nextCalled)
 		defer func() {
 			span.AddAttributes(
 				slog.Bool("middleware.next_called", nextCalled),

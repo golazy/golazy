@@ -234,10 +234,7 @@ func New(config Config) *App {
 	}
 	dispatcher.Use(lazydispatch.RouteOnly(
 		router,
-		middlewares.MethodOverride(),
-		lazydispatch.ResponseBuffer(),
-		lazydispatch.MiddlewareFunc(lazycontroller.ErrorHandler(ctx)),
-		lazydispatch.ETag(),
+		middlewares.DynamicRoute(ctx),
 	))
 	if sessions != nil {
 		dispatcher.Use(sessions)

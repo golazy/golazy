@@ -154,14 +154,17 @@ func requestWithFormat(r *http.Request, path string, format lazycontroller.Forma
 func routeContextMiddleware(handler http.Handler, route Route) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), routeContextKey{}, routeContextFromRequest(route, r))
-		if span := lazytelemetry.SpanFromContext(ctx); span != nil {
-			span.AddAttributes(
-				slog.String("http.route", route.Path),
-				slog.String("route.name", route.Name),
-				slog.String("controller", route.Controller),
-				slog.String("action", route.Action),
-			)
+		span := lazytelemetry.SpanFromContext(ctx)
+		if span == nil {
+			handler.ServeHTTP(w, r.WithContext(ctx))
+			return
 		}
+		span.AddAttributes(
+			slog.String("http.route", route.Path),
+			slog.String("route.name", route.Name),
+			slog.String("controller", route.Controller),
+			slog.String("action", route.Action),
+		)
 		ctx, region := lazytelemetry.StartRegion(ctx, "router",
 			slog.String("http.route", route.Path),
 			slog.String("route.name", route.Name),

@@ -34,8 +34,8 @@ func (responseBuffer) Handler(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		buffer := acquireBufferedResponseWriter(w)
-		defer releaseBufferedResponseWriter(buffer)
+		buffer := AcquireBufferedResponseWriter(w)
+		defer ReleaseBufferedResponseWriter(buffer)
 		next.ServeHTTP(buffer, r)
 		_ = buffer.Flush()
 	})
@@ -57,13 +57,19 @@ func NewBufferedResponseWriter(w http.ResponseWriter) *BufferedResponseWriter {
 	return buffer
 }
 
-func acquireBufferedResponseWriter(w http.ResponseWriter) *BufferedResponseWriter {
+// AcquireBufferedResponseWriter returns a pooled buffered response writer.
+//
+// Callers must pass the returned writer to ReleaseBufferedResponseWriter after
+// the request path no longer needs it.
+func AcquireBufferedResponseWriter(w http.ResponseWriter) *BufferedResponseWriter {
 	buffer := bufferedResponseWriterPool.Get().(*BufferedResponseWriter)
 	buffer.init(w)
 	return buffer
 }
 
-func releaseBufferedResponseWriter(w *BufferedResponseWriter) {
+// ReleaseBufferedResponseWriter resets and releases a writer acquired from
+// AcquireBufferedResponseWriter.
+func ReleaseBufferedResponseWriter(w *BufferedResponseWriter) {
 	if w == nil {
 		return
 	}

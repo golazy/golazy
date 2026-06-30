@@ -101,6 +101,42 @@ func TestMiddlewareGeneratesRequestIDWhenHeaderIsInvalid(t *testing.T) {
 	}
 }
 
+func TestMiddlewareCollapsesUnknownMethodsForMetrics(t *testing.T) {
+	registry := lazymetrics.NewRegistry()
+	middleware := Middleware(
+		WithMiddlewareLogger(slog.New(slog.NewJSONHandler(&bytes.Buffer{}, nil))),
+		WithMetricsRegistry(registry),
+	)
+	handler := middleware.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}))
+
+	for _, method := range []string{"X-UNIQUE-1", "X-UNIQUE-2", "X-UNIQUE-3"} {
+		request := httptest.NewRequest(method, "/articles", nil)
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+	}
+
+	snapshot := registry.Snapshot()
+	labels := lazymetrics.Labels{
+		"method":       "UNKNOWN",
+		"route":        "unknown",
+		"status_class": "4xx",
+	}
+	if got := findCounter(snapshot.Counters, "http_server_requests_total", labels); got != 3 {
+		t.Fatalf("unknown method request counter = %v, want 3", got)
+	}
+	if got := findHistogramCount(snapshot.Histograms, "http_server_request_duration_seconds", labels); got != 3 {
+		t.Fatalf("unknown method duration histogram count = %d, want 3", got)
+	}
+	if got := len(snapshot.Counters); got != 1 {
+		t.Fatalf("counter series = %d, want 1", got)
+	}
+	if got := len(snapshot.Histograms); got != 1 {
+		t.Fatalf("histogram series = %d, want 1", got)
+	}
+}
+
 func findCounter(metrics []lazymetrics.MetricSnapshot, name string, labels lazymetrics.Labels) float64 {
 	for _, metric := range metrics {
 		if metric.Name == name && sameMetricLabels(metric.Labels, labels) {

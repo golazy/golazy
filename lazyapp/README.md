@@ -48,14 +48,20 @@ default server shortcut; it uses `ADDR`, then `PORT`, then
 control plane and either mounts it into the app server when the addresses match
 or starts a second server when the address differs. It also sets the server base
 context to `app.Context`, so request contexts include the dependencies
-initialized by `lazyapp.New`.
+initialized by `lazyapp.New`. The shortcut configures conservative HTTP
+timeouts (`ReadHeaderTimeout`, `ReadTimeout`, `WriteTimeout`, and
+`IdleTimeout`) to protect directly exposed apps from slow clients.
 
-When using your own `http.Server`, set `BaseContext` manually:
+When using your own `http.Server`, set `BaseContext` and HTTP timeouts manually:
 
 ```go
 server := &http.Server{
-    Addr:    ":3000",
-    Handler: app,
+    Addr:              ":3000",
+    Handler:           app,
+    ReadHeaderTimeout: 5 * time.Second,
+    ReadTimeout:       30 * time.Second,
+    WriteTimeout:      30 * time.Second,
+    IdleTimeout:       120 * time.Second,
     BaseContext: func(_ net.Listener) context.Context {
         return app.Context
     },

@@ -1076,6 +1076,33 @@ func TestAppMountsPrometheusMetricsFromOTELEnv(t *testing.T) {
 	}
 }
 
+func TestNewServerConfiguresTimeoutsAndBaseContext(t *testing.T) {
+	type contextKey struct{}
+	app := New(Config{
+		Dependencies: func(deps *lazydeps.Scope) error {
+			deps.SetContext(context.WithValue(deps.Context(), contextKey{}, "initialized"))
+			return nil
+		},
+	})
+
+	server := app.newServer("127.0.0.1:0", app)
+	if server.ReadHeaderTimeout != defaultReadHeaderTimeout {
+		t.Fatalf("ReadHeaderTimeout = %s, want %s", server.ReadHeaderTimeout, defaultReadHeaderTimeout)
+	}
+	if server.ReadTimeout != defaultReadTimeout {
+		t.Fatalf("ReadTimeout = %s, want %s", server.ReadTimeout, defaultReadTimeout)
+	}
+	if server.WriteTimeout != defaultWriteTimeout {
+		t.Fatalf("WriteTimeout = %s, want %s", server.WriteTimeout, defaultWriteTimeout)
+	}
+	if server.IdleTimeout != defaultIdleTimeout {
+		t.Fatalf("IdleTimeout = %s, want %s", server.IdleTimeout, defaultIdleTimeout)
+	}
+	if got := server.BaseContext(nil).Value(contextKey{}); got != "initialized" {
+		t.Fatalf("base context value = %v, want initialized", got)
+	}
+}
+
 func TestControlPlaneListenAddr(t *testing.T) {
 	t.Setenv("CONTROL_PLANE_ADDR", "9090")
 	reloadEnvironmentForTest(t)

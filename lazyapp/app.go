@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"time"
 
 	"golazy.dev/lazyassets"
 	"golazy.dev/lazycache"
@@ -61,6 +62,13 @@ type App struct {
 }
 
 var afterDraw = func(*lazyroutes.Scope) {}
+
+const (
+	defaultReadHeaderTimeout = 5 * time.Second
+	defaultReadTimeout       = 30 * time.Second
+	defaultWriteTimeout      = 30 * time.Second
+	defaultIdleTimeout       = 120 * time.Second
+)
 
 func MustSub(fsys fs.FS, dir string) func() (fs.FS, error) {
 	sub, err := fs.Sub(fsys, dir)
@@ -243,8 +251,10 @@ func (app *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // ListenAndServe starts the app server on ADDR, PORT, or 127.0.0.1:3000.
 //
 // It installs app.Context as the server base context, so every request context
-// includes the dependencies initialized by New. When using a custom http.Server,
-// set BaseContext to return app.Context.
+// includes the dependencies initialized by New. It also configures conservative
+// HTTP timeouts so slow clients cannot hold connections open indefinitely. When
+// using a custom http.Server, set BaseContext to return app.Context and configure
+// ReadHeaderTimeout, ReadTimeout, WriteTimeout, and IdleTimeout for your app.
 func (app *App) ListenAndServe() error {
 	appAddr := listenAddr()
 	controlAddr, controlAddrSet := controlPlaneListenAddr()
@@ -323,8 +333,12 @@ func (app *App) handlersForListen(appAddr string, controlAddr string, controlAdd
 
 func (app *App) newServer(addr string, handler http.Handler) *http.Server {
 	return &http.Server{
-		Addr:    addr,
-		Handler: handler,
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: defaultReadHeaderTimeout,
+		ReadTimeout:       defaultReadTimeout,
+		WriteTimeout:      defaultWriteTimeout,
+		IdleTimeout:       defaultIdleTimeout,
 		BaseContext: func(_ net.Listener) context.Context {
 			return app.Context
 		},

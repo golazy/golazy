@@ -7,6 +7,12 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `golazy.dev/lazywebsocket`, an adapted Gorilla WebSocket implementation for
+  framework and development tooling without adding an external module
+  dependency.
+
 ## [0.1.18] - 2026-06-30
 
 ### Added

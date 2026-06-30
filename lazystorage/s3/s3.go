@@ -2,13 +2,13 @@
 package s3
 
 import (
-	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/xml"
 	"fmt"
+	"hash"
 	"io"
 	"net/http"
 	"net/url"
@@ -21,7 +21,10 @@ import (
 	"golazy.dev/lazystorage"
 )
 
-const service = "s3"
+const (
+	service         = "s3"
+	unsignedPayload = "UNSIGNED-PAYLOAD"
+)
 
 // Storage stores objects in an S3-compatible bucket.
 type Storage struct {
@@ -130,11 +133,6 @@ func (s *Storage) Put(ctx context.Context, key string, body io.Reader, options .
 	if body == nil {
 		return lazystorage.Info{}, options, fmt.Errorf("lazystorage/s3: nil body")
 	}
-	data, err := io.ReadAll(body)
-	if err != nil {
-		return lazystorage.Info{}, options, err
-	}
-
 	contentType, remaining, _ := lazystorage.Take[lazystorage.ContentType](options)
 	cacheControl, remaining, _ := lazystorage.Take[lazystorage.CacheControl](remaining)
 	disposition, remaining, _ := lazystorage.Take[lazystorage.ContentDisposition](remaining)
@@ -149,8 +147,10 @@ func (s *Storage) Put(ctx context.Context, key string, body io.Reader, options .
 	if disposition.Value != "" {
 		header.Set("Content-Disposition", disposition.Value)
 	}
+	header.Set("X-Amz-Content-Sha256", unsignedPayload)
 
-	req, err := s.newRequest(ctx, http.MethodPut, key, bytes.NewReader(data), header)
+	tracked := &hashingReader{reader: body, hash: sha256.New()}
+	req, err := s.newRequest(ctx, http.MethodPut, key, tracked, header)
 	if err != nil {
 		return lazystorage.Info{}, remaining, err
 	}
@@ -160,12 +160,11 @@ func (s *Storage) Put(ctx context.Context, key string, body io.Reader, options .
 	}
 	_ = resp.Body.Close()
 
-	hash := sha256.Sum256(data)
 	return lazystorage.Info{
 		Key:         key,
 		ContentType: contentType.Value,
-		Size:        int64(len(data)),
-		Checksum:    "sha256:" + hex.EncodeToString(hash[:]),
+		Size:        tracked.size,
+		Checksum:    "sha256:" + hex.EncodeToString(tracked.hash.Sum(nil)),
 		ModifiedAt:  time.Now().UTC(),
 	}, remaining, nil
 }
@@ -353,7 +352,10 @@ func (s *Storage) sign(req *http.Request) error {
 	now := time.Now().UTC()
 	amzDate := now.Format("20060102T150405Z")
 	date := now.Format("20060102")
-	payloadHash := hashPayload(req)
+	payloadHash := req.Header.Get("X-Amz-Content-Sha256")
+	if payloadHash == "" {
+		payloadHash = hashPayload(req)
+	}
 
 	req.Header.Set("Host", req.URL.Host)
 	req.Header.Set("X-Amz-Date", amzDate)
@@ -383,6 +385,21 @@ func (s *Storage) sign(req *http.Request) error {
 	signature := hex.EncodeToString(hmacSHA256(signingKey, stringToSign))
 	req.Header.Set("Authorization", "AWS4-HMAC-SHA256 Credential="+s.accessKeyID+"/"+scope+", SignedHeaders="+signedHeaders+", Signature="+signature)
 	return nil
+}
+
+type hashingReader struct {
+	reader io.Reader
+	hash   hash.Hash
+	size   int64
+}
+
+func (r *hashingReader) Read(p []byte) (int, error) {
+	n, err := r.reader.Read(p)
+	if n > 0 {
+		_, _ = r.hash.Write(p[:n])
+		r.size += int64(n)
+	}
+	return n, err
 }
 
 func hashPayload(req *http.Request) string {

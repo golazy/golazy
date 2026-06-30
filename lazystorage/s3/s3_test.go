@@ -26,6 +26,9 @@ func TestStoragePutOpenListDeleteAndURL(t *testing.T) {
 				w.WriteHeader(http.StatusOK)
 				return
 			}
+			if r.Header.Get("X-Amz-Content-Sha256") != unsignedPayload {
+				t.Errorf("X-Amz-Content-Sha256 = %q, want %q", r.Header.Get("X-Amz-Content-Sha256"), unsignedPayload)
+			}
 			data, _ := io.ReadAll(r.Body)
 			objects[key] = string(data)
 			w.WriteHeader(http.StatusOK)
@@ -69,8 +72,12 @@ func TestStoragePutOpenListDeleteAndURL(t *testing.T) {
 	if err := storage.EnsureBucket(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := storage.Put(ctx, "assets/app.js", strings.NewReader("console.log('ok');"), lazystorage.ContentType{Value: "text/javascript"}); err != nil {
+	info, _, err := storage.Put(ctx, "assets/app.js", strings.NewReader("console.log('ok');"), lazystorage.ContentType{Value: "text/javascript"})
+	if err != nil {
 		t.Fatal(err)
+	}
+	if info.Size != 18 || info.Checksum != "sha256:16ba942cc0730b9c1416eb532c015b5d26bf8419618e315abe2544b87ae63a16" {
+		t.Fatalf("Put info = %#v", info)
 	}
 	opened, _, err := storage.Open(ctx, "assets/app.js")
 	if err != nil {
@@ -88,12 +95,12 @@ func TestStoragePutOpenListDeleteAndURL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	info, err := iterator.Next()
+	listed, err := iterator.Next()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Key != "assets/app.js" {
-		t.Fatalf("listed key = %q", info.Key)
+	if listed.Key != "assets/app.js" {
+		t.Fatalf("listed key = %q", listed.Key)
 	}
 	resolved, _, err := storage.URL(ctx, "assets/app.js")
 	if err != nil {

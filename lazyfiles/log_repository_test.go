@@ -3,6 +3,7 @@ package lazyfiles
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -31,5 +32,44 @@ func TestLogRepositoryReplaysEvents(t *testing.T) {
 	}
 	if len(locations) != 1 || locations[0].Key != "card.txt" {
 		t.Fatalf("locations = %#v, want card.txt", locations)
+	}
+}
+
+func TestLogRepositoryReplaysLargeRecordWithinLimit(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "files.log.jsonl")
+	repo, err := NewLogRepository(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	filename := strings.Repeat("a", 70*1024)
+	file := File{ID: "file-1", Filename: filename}
+	location := Location{FileID: "file-1", Storage: "local", Key: "card.txt", Role: RolePrimary, Status: StatusActive}
+	if _, _, err := repo.Put(context.Background(), file, location); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := NewLogRepository(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _, _, err := reopened.Find(context.Background(), Query{ID: "file-1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Filename != filename {
+		t.Fatalf("Filename length = %d, want %d", len(got.Filename), len(filename))
+	}
+}
+
+func TestLogRepositoryRejectsOversizedRecord(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "files.log.jsonl")
+	repo, err := NewLogRepository(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	file := File{ID: "file-1", Filename: strings.Repeat("a", maxLogRecordBytes)}
+	location := Location{FileID: "file-1", Storage: "local", Key: "card.txt", Role: RolePrimary, Status: StatusActive}
+	if _, _, err := repo.Put(context.Background(), file, location); err == nil {
+		t.Fatal("Put succeeded, want oversized log record error")
 	}
 }

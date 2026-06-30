@@ -60,6 +60,8 @@ type App struct {
 	Dependencies *lazydeps.Scope
 }
 
+const defaultCacheMaxEntries = 1024
+
 var afterDraw = func(*lazyroutes.Scope) {}
 
 func MustSub(fsys fs.FS, dir string) func() (fs.FS, error) {
@@ -85,7 +87,7 @@ func New(config Config) *App {
 	}
 	cacheOptions := config.Cache
 	if cacheOptions.Backend == nil {
-		backend, err := inmemorycache.New(inmemorycache.Options{})
+		backend, err := inmemorycache.New(inmemorycache.Options{MaxEntries: defaultCacheMaxEntries})
 		if err != nil {
 			panic(fmt.Errorf("initialize cache backend: %w", err))
 		}

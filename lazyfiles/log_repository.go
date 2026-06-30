@@ -12,6 +12,8 @@ import (
 	"time"
 )
 
+const maxLogRecordBytes = 1 << 20
+
 // LogRepository stores file metadata in an append-only JSONL log.
 type LogRepository struct {
 	mu        sync.RWMutex
@@ -125,6 +127,7 @@ func (r *LogRepository) replay() error {
 	defer file.Close()
 
 	scanner := bufio.NewScanner(file)
+	scanner.Buffer(make([]byte, 0, 64*1024), maxLogRecordBytes)
 	for scanner.Scan() {
 		var event logEvent
 		if err := json.Unmarshal(scanner.Bytes(), &event); err != nil {
@@ -156,6 +159,9 @@ func (r *LogRepository) append(event logEvent) error {
 	data, err := json.Marshal(event)
 	if err != nil {
 		return err
+	}
+	if len(data) > maxLogRecordBytes {
+		return fmt.Errorf("lazyfiles: log record is %d bytes, exceeds %d byte limit", len(data), maxLogRecordBytes)
 	}
 	if _, err := file.Write(append(data, '\n')); err != nil {
 		return err

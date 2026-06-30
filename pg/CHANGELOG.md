@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.18] - 2026-06-30
+
 - Added `WithPool` and `FromContext` helpers for sharing an app-owned
   `pgxpool.Pool` through the GoLazy application context.
 - Added PostgreSQL implementations for `lazyfiles`, `lazymedia`, and

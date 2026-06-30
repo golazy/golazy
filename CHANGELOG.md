@@ -7,20 +7,26 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-- `golazy.dev/pg` now includes PostgreSQL implementations for file catalogs,
-  media variants, and object storage: `pgfiles`, `pgmedia`, and `pgstorage`.
+## [0.1.18] - 2026-06-30
 
 ### Added
 
 - `golazy.dev/pg` now provides `WithPool` and `FromContext` helpers so
   application dependencies, jobs, and request handlers can share a `pgxpool`
   through the app context without each app defining its own key.
+- `golazy.dev/pg` now includes PostgreSQL implementations for file catalogs,
+  media variants, and object storage: `pgfiles`, `pgmedia`, and `pgstorage`,
+  each with embedded migrations for `lazymigrate`.
 
 ### Changed
 
 - `lazyapp.Config.Jobs` is now a context-aware initializer that runs after
   `Dependencies`. Static job configs can use `lazyapp.Jobs(lazyjobs.Config{...})`,
   while durable backends can resolve shared dependencies from the app context.
+- Expanded package documentation and runnable examples across the framework,
+  including lazyapp, controller, routing, assets, files, media, storage,
+  migrations, jobs, dependencies, forms, SEO, sessions, SSE, Turbo, and view
+  helpers.
 
 ## [0.1.17] - 2026-06-29
 
@@ -515,7 +521,8 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Route construction with embedded public-file fallback.
 - Method-not-allowed handling for application routes.
 
-[Unreleased]: https://github.com/golazy/golazy/compare/v0.1.17...HEAD
+[Unreleased]: https://github.com/golazy/golazy/compare/v0.1.18...HEAD
+[0.1.18]: https://github.com/golazy/golazy/compare/v0.1.17...v0.1.18
 [0.1.17]: https://github.com/golazy/golazy/compare/v0.1.16...v0.1.17
 [0.1.16]: https://github.com/golazy/golazy/compare/v0.1.15...v0.1.16
 [0.1.15]: https://github.com/golazy/golazy/compare/v0.1.14...v0.1.15

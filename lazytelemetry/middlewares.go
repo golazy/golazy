@@ -115,7 +115,7 @@ func (middleware *middleware) Handler(next http.Handler) http.Handler {
 			slog.String("path", r.URL.Path),
 		)
 		ctx = lazymetrics.WithLabels(ctx, lazymetrics.Labels{
-			"method": r.Method,
+			"method": metricRequestMethod(r.Method),
 			"route":  "unknown",
 		})
 		if traceContext, ok := lazytracing.ParseTraceparent(r.Header.Get("traceparent"), r.Header.Get("tracestate")); ok {
@@ -193,6 +193,31 @@ func (middleware *middleware) Handler(next http.Handler) http.Handler {
 
 		next.ServeHTTP(recorder, request)
 	})
+}
+
+func metricRequestMethod(method string) string {
+	switch strings.ToUpper(strings.TrimSpace(method)) {
+	case http.MethodGet:
+		return http.MethodGet
+	case http.MethodHead:
+		return http.MethodHead
+	case http.MethodPost:
+		return http.MethodPost
+	case http.MethodPut:
+		return http.MethodPut
+	case http.MethodPatch:
+		return http.MethodPatch
+	case http.MethodDelete:
+		return http.MethodDelete
+	case http.MethodConnect:
+		return http.MethodConnect
+	case http.MethodOptions:
+		return http.MethodOptions
+	case http.MethodTrace:
+		return http.MethodTrace
+	default:
+		return "UNKNOWN"
+	}
 }
 
 func requestMetricAttributes(labels lazymetrics.Labels, status int) []attribute.KeyValue {

@@ -79,6 +79,36 @@ func TestMiddlewareAddsRequestIDLoggerSpanAndMetrics(t *testing.T) {
 	}
 }
 
+func TestMiddlewareNormalizesUnknownRequestMethodsForMetrics(t *testing.T) {
+	registry := lazymetrics.NewRegistry()
+	middleware := Middleware(
+		WithMiddlewareLogger(slog.New(slog.NewJSONHandler(&bytes.Buffer{}, nil))),
+		WithMetricsRegistry(registry),
+	)
+	handler := middleware.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+
+	for _, method := range []string{"X000001", "X000002", "x000003"} {
+		request := httptest.NewRequest(method, "/", nil)
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+	}
+
+	snapshot := registry.Snapshot()
+	labels := lazymetrics.Labels{
+		"method":       "UNKNOWN",
+		"route":        "unknown",
+		"status_class": "2xx",
+	}
+	if got := findCounter(snapshot.Counters, "http_server_requests_total", labels); got != 3 {
+		t.Fatalf("request counter = %v, want 3", got)
+	}
+	if got := findHistogramCount(snapshot.Histograms, "http_server_request_duration_seconds", labels); got != 3 {
+		t.Fatalf("duration histogram count = %d, want 3", got)
+	}
+}
+
 func TestMiddlewareGeneratesRequestIDWhenHeaderIsInvalid(t *testing.T) {
 	middleware := Middleware(
 		WithMiddlewareLogger(slog.New(slog.NewJSONHandler(&bytes.Buffer{}, nil))),

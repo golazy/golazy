@@ -5,15 +5,16 @@
 // application context, initializes dependencies, opens configured views, creates
 // the lazycontroller renderer, builds a lazyroutes scope, calls the route drawer,
 // registers framework and application helpers with lazyview, initializes cache,
-// sessions, jobs, robots.txt, sitemap endpoints, and optional control-plane
-// handlers, then returns one http.Handler.
+// sessions, jobs, optional browser workers, PWA metadata, robots.txt, sitemap
+// endpoints, and optional control-plane handlers, then returns one http.Handler.
 //
 // Public files and generated assets are registered with lazyassets and mounted
 // as the final fallback after dynamic routes. View helpers from lazyroutes,
-// lazyassets, lazyforms, lazyseo, lazyturbo, cache helpers, and Config.Helpers
-// are passed to the lazyview renderer before templates are cached. Controllers
-// usually embed lazycontroller.Base; lazyroutes binds each request to that base,
-// and lazycontroller renders through the renderer created here.
+// lazyassets, lazyworkers, lazypwa, lazyforms, lazyseo, lazyturbo, cache helpers,
+// and Config.Helpers are passed to the lazyview renderer before templates are
+// cached. Controllers usually embed lazycontroller.Base; lazyroutes binds each
+// request to that base, and lazycontroller renders through the renderer created
+// here.
 //
 // Direct package use still makes sense when an application needs only one
 // layer: use lazyroutes for a standalone route table, lazyassets for standalone

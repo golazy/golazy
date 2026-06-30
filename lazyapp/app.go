@@ -7,10 +7,10 @@ import (
 	"io/fs"
 	"net"
 	"net/http"
-	"runtime/debug"
 	"strings"
 
 	"golazy.dev/lazyassets"
+	"golazy.dev/lazybuildinfo"
 	"golazy.dev/lazycache"
 	"golazy.dev/lazycache/inmemorycache"
 	"golazy.dev/lazycontroller"
@@ -21,6 +21,7 @@ import (
 	"golazy.dev/lazyforms"
 	"golazy.dev/lazyjobs"
 	"golazy.dev/lazyjobs/inmemoryjobs"
+	"golazy.dev/lazypwa"
 	"golazy.dev/lazyroutes"
 	"golazy.dev/lazyseo"
 	"golazy.dev/lazysession"
@@ -28,12 +29,17 @@ import (
 	"golazy.dev/lazytelemetry/lazymetrics"
 	"golazy.dev/lazyturbo"
 	_ "golazy.dev/lazyview/gotmpl"
+	"golazy.dev/lazyworkers"
 )
 
 type Helpers []map[string]any
 
 // JobsConfig initializes lazyjobs with the dependency-initialized app context.
 type JobsConfig func(context.Context) (lazyjobs.Config, error)
+
+// WorkersConfig registers browser workers with the dependency-initialized app
+// context.
+type WorkersConfig func(context.Context, *lazyworkers.Registry) error
 
 // Jobs adapts a static lazyjobs.Config for Config.Jobs.
 func Jobs(config lazyjobs.Config) JobsConfig {
@@ -57,6 +63,8 @@ type Config struct {
 	Sitemap           SitemapConfig
 	Sessions          lazysession.Config
 	Jobs              JobsConfig
+	Workers           WorkersConfig
+	PWA               lazypwa.Config
 	ControlPlane      lazycontrolplane.Builder
 	Middlewares       []lazydispatch.Middleware
 	ForceDetailErrors bool
@@ -71,6 +79,8 @@ type App struct {
 	Cache        *lazycache.Cache
 	Sessions     *lazysession.Manager
 	Jobs         *lazyjobs.JobRunner
+	Workers      *lazyworkers.Registry
+	PWA          *lazypwa.App
 	ControlPlane *lazycontrolplane.ControlPlane
 	Dependencies *lazydeps.Scope
 	runtime      *runtimeState
@@ -219,6 +229,26 @@ func New(config Config) *App {
 		seo = config.SEO(ctx)
 	}
 
+	workers := lazyworkers.New()
+	if config.Workers != nil {
+		if err := config.Workers(ctx, workers); err != nil {
+			panic(fmt.Errorf("initialize workers: %w", err))
+		}
+	}
+
+	var pwa *lazypwa.App
+	if config.PWA.IsEnabled() {
+		pwa, err = lazypwa.New(config.PWA,
+			lazypwa.WithAppName(config.Name),
+			lazypwa.WithVersion(lazycache.BuildVersionFromContext(ctx)),
+			lazypwa.WithAssets(assets),
+			lazypwa.WithWorkers(workers),
+		)
+		if err != nil {
+			panic(fmt.Errorf("initialize PWA: %w", err))
+		}
+	}
+
 	router := lazyroutes.New(ctx)
 	ctx = lazycontroller.WithPathFor(ctx, router.PathFor)
 	router.Context = ctx
@@ -228,6 +258,10 @@ func New(config Config) *App {
 	afterDraw(router)
 	renderer.AddHelpers(router.RegisterHelpers())
 	renderer.AddHelpers(assets.Helpers())
+	renderer.AddHelpers(workers.Helpers())
+	if pwa != nil && pwa.Enabled() {
+		renderer.AddHelpers(pwa.Helpers())
+	}
 	renderer.AddHelpers(lazyforms.Helpers(router))
 	renderer.AddHelpers(lazyseo.Helpers(seo...))
 	renderer.AddHelpers(lazyturbo.Helpers())
@@ -236,7 +270,7 @@ func New(config Config) *App {
 		renderer.AddHelpers(helpers)
 	}
 	controlPlane = jobsControlPlane(controlPlane, jobs)
-	controlPlane = lazyDevControlPlane(controlPlane, renderer, router, assets, cache, dependencies, jobs, runtime)
+	controlPlane = lazyDevControlPlane(controlPlane, renderer, router, assets, cache, dependencies, jobs, workers, pwa, runtime)
 	controlPlane = telemetryControlPlane(controlPlane, telemetryConfig, telemetryRegistry, cache)
 	if err := renderer.Cache(); err != nil {
 		panic(fmt.Errorf("cache views: %w", err))
@@ -250,6 +284,12 @@ func New(config Config) *App {
 		router,
 		middlewares.DynamicRoute(ctx),
 	))
+	if !workers.Empty() {
+		dispatcher.Use(workers)
+	}
+	if pwa != nil && pwa.Enabled() {
+		dispatcher.Use(pwa)
+	}
 	if sessions != nil {
 		dispatcher.Use(sessions)
 	}
@@ -275,6 +315,8 @@ func New(config Config) *App {
 		Cache:        cache,
 		Sessions:     sessions,
 		Jobs:         jobs,
+		Workers:      workers,
+		PWA:          pwa,
 		ControlPlane: controlPlane,
 		Dependencies: dependencies,
 		runtime:      runtime,
@@ -282,15 +324,7 @@ func New(config Config) *App {
 }
 
 func appBuildVersion() string {
-	info, ok := debug.ReadBuildInfo()
-	if !ok {
-		return "devel"
-	}
-	version := strings.TrimSpace(info.Main.Version)
-	if version == "" || version == "(devel)" {
-		return "devel"
-	}
-	return version
+	return lazybuildinfo.Version()
 }
 
 func (app *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {

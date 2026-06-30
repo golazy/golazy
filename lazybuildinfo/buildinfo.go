@@ -2,6 +2,7 @@ package lazybuildinfo
 
 import (
 	"runtime/debug"
+	"strings"
 )
 
 type buildInfo struct {
@@ -51,6 +52,27 @@ func snapshot() buildInfo {
 		})
 	}
 	return out
+}
+
+// Version returns the best available application build version.
+//
+// It prefers the main module version recorded by the Go tool, then the VCS
+// revision setting, and falls back to "devel" when neither value is available.
+func Version() string {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return "devel"
+	}
+	version := strings.TrimSpace(info.Main.Version)
+	if version != "" && version != "(devel)" {
+		return version
+	}
+	for _, setting := range info.Settings {
+		if setting.Key == "vcs.revision" && strings.TrimSpace(setting.Value) != "" {
+			return strings.TrimSpace(setting.Value)
+		}
+	}
+	return "devel"
 }
 
 func moduleFromDebug(in debug.Module) module {

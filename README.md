@@ -58,6 +58,7 @@ golazy.dev/lazymailer              Mailer rendering and delivery interfaces
 golazy.dev/lazymedia               Generated file/media variants
 golazy.dev/lazymigrate             Backend-agnostic migration loading and planning
 golazy.dev/lazypath                Route path and URL parameter helpers
+golazy.dev/lazypwa                 Progressive web app metadata and service worker support
 golazy.dev/lazyroutes              Route DSL, resources, scopes, and route table
 golazy.dev/lazyschema              Form decoding and field naming
 golazy.dev/lazyseo                 Optional SEO metadata view helpers
@@ -68,6 +69,7 @@ golazy.dev/lazytest                HTTP-level application test helpers
 golazy.dev/lazyturbo               Turbo Frame view/controller helpers
 golazy.dev/lazyview                View rendering and helper registry
 golazy.dev/lazyview/gotmpl         html/template engine for lazyview
+golazy.dev/lazyworkers             Browser worker registry and helpers
 golazy.dev/lazysupport/inflection  Naming and inflection helpers
 ```
 

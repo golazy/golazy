@@ -89,3 +89,29 @@ func TestResponseBufferCanStartStreaming(t *testing.T) {
 		t.Fatalf("body = %q, want %q", got, want)
 	}
 }
+
+func TestResponseBufferStreamsWhenLimitExceeded(t *testing.T) {
+	firstWriteReached := false
+	handler := ResponseBuffer().Handler(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("X-Test", "large")
+		_, _ = w.Write(make([]byte, defaultResponseBufferLimit))
+		_, _ = w.Write([]byte("x"))
+		firstWriteReached = true
+	}))
+
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	if !firstWriteReached {
+		t.Fatal("handler did not finish")
+	}
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+	if got, want := response.Body.Len(), defaultResponseBufferLimit+1; got != want {
+		t.Fatalf("body length = %d, want %d", got, want)
+	}
+	if response.Header().Get("X-Test") != "large" {
+		t.Fatalf("X-Test = %q, want large", response.Header().Get("X-Test"))
+	}
+}

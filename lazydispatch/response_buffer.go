@@ -5,7 +5,11 @@ import (
 	"net/http"
 )
 
+const defaultResponseBufferLimit = 1 << 20
+
 // ResponseBuffer delays sending a response until the downstream handler returns.
+// Responses larger than the in-memory limit are streamed to the client to avoid
+// unbounded memory growth.
 func ResponseBuffer() Middleware {
 	return responseBuffer{}
 }
@@ -35,12 +39,14 @@ type BufferedResponseWriter struct {
 	status int
 	sent   bool
 	stream bool
+	limit  int
 }
 
 func NewBufferedResponseWriter(w http.ResponseWriter) *BufferedResponseWriter {
 	return &BufferedResponseWriter{
 		writer: w,
 		header: make(http.Header),
+		limit:  defaultResponseBufferLimit,
 	}
 }
 
@@ -54,6 +60,13 @@ func (w *BufferedResponseWriter) Write(data []byte) (int, error) {
 	}
 	if !w.sent {
 		w.WriteHeader(http.StatusOK)
+	}
+	if w.limit > 0 && w.body.Len()+len(data) > w.limit {
+		stream, err := w.startStream(w.status, true)
+		if err != nil {
+			return 0, err
+		}
+		return stream.Write(data)
 	}
 	return w.body.Write(data)
 }
@@ -109,6 +122,10 @@ func (w *BufferedResponseWriter) Unwrap() http.ResponseWriter {
 // StartStream commits the buffered headers and lets callers write directly to
 // the wrapped response writer.
 func (w *BufferedResponseWriter) StartStream(status int) (http.ResponseWriter, error) {
+	return w.startStream(status, false)
+}
+
+func (w *BufferedResponseWriter) startStream(status int, flushBuffered bool) (http.ResponseWriter, error) {
 	if status == 0 {
 		status = http.StatusOK
 	}
@@ -116,10 +133,18 @@ func (w *BufferedResponseWriter) StartStream(status int) (http.ResponseWriter, e
 		w.writer.Header().Del(key)
 		w.writer.Header()[key] = append([]string(nil), values...)
 	}
+	var buffered []byte
+	if flushBuffered {
+		buffered = append([]byte(nil), w.body.Bytes()...)
+	}
 	w.body.Reset()
 	w.status = status
 	w.sent = true
 	w.stream = true
 	w.writer.WriteHeader(status)
-	return w.writer, nil
+	if len(buffered) == 0 {
+		return w.writer, nil
+	}
+	_, err := w.writer.Write(buffered)
+	return w.writer, err
 }

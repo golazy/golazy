@@ -21,6 +21,10 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `lazymedia.Repository` implementations can opt into
   `lazymedia.VariantLister`; the JSONL and PostgreSQL repositories implement
   both listing contracts.
+- `lazyapp.Config.Migrations` can now bundle backend-agnostic
+  `lazymigrate.Databases` into the app binary. `LAZYAPP_MIGRATE=up` runs
+  pending migrations and exits, while `LAZYAPP_MIGRATE=auto` runs them before
+  jobs and normal app startup.
 
 ## [0.1.18] - 2026-06-30
 

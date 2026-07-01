@@ -109,44 +109,59 @@ func (m *Migrator) PlanRedo(ctx context.Context, limit int) (Plan, error) {
 }
 
 func (m *Migrator) Up(ctx context.Context, limit int) (Plan, error) {
+	if err := m.Setup(ctx); err != nil {
+		return Plan{}, err
+	}
 	plan, err := m.PlanUp(ctx, limit)
 	if err != nil {
 		return Plan{}, err
 	}
-	if err := m.Apply(ctx, plan); err != nil {
+	if err := m.apply(ctx, plan, false); err != nil {
 		return plan, err
 	}
 	return plan, nil
 }
 
 func (m *Migrator) Down(ctx context.Context, limit int) (Plan, error) {
+	if err := m.Setup(ctx); err != nil {
+		return Plan{}, err
+	}
 	plan, err := m.PlanDown(ctx, limit)
 	if err != nil {
 		return Plan{}, err
 	}
-	if err := m.Apply(ctx, plan); err != nil {
+	if err := m.apply(ctx, plan, false); err != nil {
 		return plan, err
 	}
 	return plan, nil
 }
 
 func (m *Migrator) Redo(ctx context.Context, limit int) (Plan, error) {
+	if err := m.Setup(ctx); err != nil {
+		return Plan{}, err
+	}
 	plan, err := m.PlanRedo(ctx, limit)
 	if err != nil {
 		return Plan{}, err
 	}
-	if err := m.Apply(ctx, plan); err != nil {
+	if err := m.apply(ctx, plan, false); err != nil {
 		return plan, err
 	}
 	return plan, nil
 }
 
 func (m *Migrator) Apply(ctx context.Context, plan Plan) error {
+	return m.apply(ctx, plan, true)
+}
+
+func (m *Migrator) apply(ctx context.Context, plan Plan, setup bool) error {
 	if m == nil || m.backend == nil {
 		return fmt.Errorf("lazymigrate: migrator is not initialized")
 	}
-	if err := m.backend.Setup(ctx); err != nil {
-		return err
+	if setup {
+		if err := m.backend.Setup(ctx); err != nil {
+			return err
+		}
 	}
 	for _, step := range plan.Steps {
 		if err := step.validate(); err != nil {

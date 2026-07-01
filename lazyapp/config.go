@@ -12,6 +12,7 @@ var environment = lazyconfig.MustGetenv[struct {
 	Addr             string `default:"127.0.0.1:3000"`
 	Port             int    `default:"0"`
 	ControlPlaneAddr string
+	LazyappMigrate   string `var:"LAZYAPP_MIGRATE"`
 }]()
 
 func listenAddr() string {

@@ -5,8 +5,17 @@
 // application context, initializes dependencies, opens configured views, creates
 // the lazycontroller renderer, builds a lazyroutes scope, calls the route drawer,
 // registers framework and application helpers with lazyview, initializes cache,
-// sessions, jobs, optional browser workers, PWA metadata, robots.txt, sitemap
-// endpoints, and optional control-plane handlers, then returns one http.Handler.
+// sessions, migrations, jobs, optional browser workers, PWA metadata,
+// robots.txt, sitemap endpoints, and optional control-plane handlers, then
+// returns one http.Handler.
+//
+// Migrations are configured through Config.Migrations. lazyapp itself does not
+// import database drivers; applications provide lazymigrate databases with the
+// concrete backend for each logical database. Set LAZYAPP_MIGRATE=up to run
+// pending migrations and exit, or LAZYAPP_MIGRATE=auto to run pending
+// migrations before jobs and normal app startup. When CONTROL_PLANE_ADDR is set
+// during migration mode, lazyapp serves a temporary control plane so /livez is
+// OK while /readyz reports that migrations are still running.
 //
 // Public files and generated assets are registered with lazyassets and mounted
 // as the final fallback after dynamic routes. View helpers from lazyroutes,

@@ -25,6 +25,7 @@ log.Fatal(app.ListenAndServe())
 
 - Opens views and initializes the renderer.
 - Calls the application dependency initializer.
+- Initializes optional migration databases after dependencies.
 - Initializes optional background jobs after dependencies, using the
   dependency-initialized app context.
 - Creates an asset registry.
@@ -52,6 +53,14 @@ or starts a second server when the address differs. Separate control-plane
 servers automatically include `/debug/pprof/` and the standard pprof subpaths.
 It also sets the server base context to `app.Context`, so request contexts
 include the dependencies initialized by `lazyapp.New`.
+
+When `Config.Migrations` is set, the app binary knows how to migrate itself.
+Set `LAZYAPP_MIGRATE=up` to run pending migrations and exit, or
+`LAZYAPP_MIGRATE=auto` to run pending migrations before jobs and normal
+startup. If no migrations are configured, both modes are successful no-ops.
+When `CONTROL_PLANE_ADDR` is also set, lazyapp serves a temporary control plane
+during migration so `/livez` returns OK and `/readyz` reports migration
+progress.
 
 When using your own `http.Server`, set `BaseContext` manually:
 

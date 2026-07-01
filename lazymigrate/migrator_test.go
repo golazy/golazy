@@ -2,6 +2,7 @@ package lazymigrate_test
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -96,6 +97,21 @@ func TestMigratorAppliesPlanThroughBackend(t *testing.T) {
 	}
 }
 
+func TestMigratorUpSetsUpBeforePlanning(t *testing.T) {
+	ctx := context.Background()
+	backend := &setupRequiredBackend{}
+	migrator := newTestMigrator(t, backend, source("20260301_app"))
+
+	plan, err := migrator.Up(ctx, 0)
+	if err != nil {
+		t.Fatalf("Up() error = %v", err)
+	}
+	assertSteps(t, plan, []string{"up:20260301_app"})
+	if !backend.ran {
+		t.Fatal("backend did not run migration")
+	}
+}
+
 func TestMigratorSchemaRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	migrator := newTestMigrator(t, fakemigrator.New(), source("20260301_app"))
@@ -149,4 +165,37 @@ func backendIDs(migrations []lazymigrate.BackendMigration) []string {
 		out = append(out, migration.ID)
 	}
 	return out
+}
+
+type setupRequiredBackend struct {
+	setup bool
+	ran   bool
+}
+
+func (b *setupRequiredBackend) Setup(context.Context) error {
+	b.setup = true
+	return nil
+}
+
+func (b *setupRequiredBackend) List(context.Context) ([]lazymigrate.BackendMigration, error) {
+	if !b.setup {
+		return nil, fmt.Errorf("setup required before list")
+	}
+	return nil, nil
+}
+
+func (b *setupRequiredBackend) Run(_ context.Context, step lazymigrate.Step) error {
+	if step.Direction != lazymigrate.DirectionUp {
+		return fmt.Errorf("direction = %q, want up", step.Direction)
+	}
+	b.ran = true
+	return nil
+}
+
+func (b *setupRequiredBackend) DumpSchema(context.Context) ([]byte, error) {
+	return nil, fmt.Errorf("unsupported")
+}
+
+func (b *setupRequiredBackend) LoadSchema(context.Context, []byte) error {
+	return fmt.Errorf("unsupported")
 }

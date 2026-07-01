@@ -22,14 +22,21 @@
 // as lazymigrate.Source values so an application can add them to the same
 // catalog as application migrations.
 //
+// DB and Databases describe the same source/backend relationship for lazyapp
+// integration. Each Databases entry is one logical database with its own
+// Backend, optional application migration files, and package Source values.
+// This keeps lazymigrate backend-agnostic while letting a conventional lazyapp
+// bundle the migrations needed by the application binary.
+//
 // A Migrator is the planner and executor. List reports applied source
 // migrations, pending source migrations, and missing backend migrations.
 // PlanUp, PlanDown, and PlanRedo return the Step values that would run without
-// touching the backend. Up, Down, and Redo build the plan and then call Apply.
-// Apply calls Backend.Setup once before running the plan and passes each Step
-// to Backend.Run in order. A migration recorded by the backend but missing
-// from the loaded sources blocks execution plans so down and redo operations do
-// not operate from incomplete source history.
+// setting up backend metadata. Up, Down, and Redo call Backend.Setup before
+// planning, then pass each Step to Backend.Run in order. Apply is for callers
+// that already have a Plan; it also calls Backend.Setup before running that
+// plan. A migration recorded by the backend but missing from the loaded sources
+// blocks execution plans so down and redo operations do not operate from
+// incomplete source history.
 //
 // Backend implementations connect this package to a real store. The
 // golazy.dev/pg/pgmigrate package implements Backend for PostgreSQL. It parses

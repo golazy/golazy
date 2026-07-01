@@ -24,6 +24,7 @@ import (
 	"golazy.dev/lazyjobs"
 	"golazy.dev/lazyjobs/inmemoryjobs"
 	"golazy.dev/lazymedia"
+	"golazy.dev/lazymigrate"
 	"golazy.dev/lazypwa"
 	"golazy.dev/lazyroutes"
 	"golazy.dev/lazyseo"
@@ -38,19 +39,9 @@ import (
 
 type Helpers []map[string]any
 
-// JobsConfig initializes lazyjobs with the dependency-initialized app context.
-type JobsConfig func(context.Context) (lazyjobs.Config, error)
-
 // WorkersConfig registers browser workers with the dependency-initialized app
 // context.
 type WorkersConfig func(context.Context, *lazyworkers.Registry) error
-
-// Jobs adapts a static lazyjobs.Config for Config.Jobs.
-func Jobs(config lazyjobs.Config) JobsConfig {
-	return func(context.Context) (lazyjobs.Config, error) {
-		return config, nil
-	}
-}
 
 type Config struct {
 	Name              string
@@ -69,6 +60,7 @@ type Config struct {
 	Robots            RobotsConfig
 	Sitemap           SitemapConfig
 	Sessions          lazysession.Config
+	Migrations        MigrationsConfig
 	Jobs              JobsConfig
 	Workers           WorkersConfig
 	PWA               lazypwa.Config
@@ -88,6 +80,7 @@ type App struct {
 	Media        *lazymedia.Media
 	Cache        *lazycache.Cache
 	Sessions     *lazysession.Manager
+	Migrations   lazymigrate.Databases
 	Jobs         *lazyjobs.JobRunner
 	Workers      *lazyworkers.Registry
 	PWA          *lazypwa.App
@@ -129,6 +122,23 @@ func New(config Config) *App {
 	telemetryConfig := lazytelemetry.MustLoadConfig()
 	telemetryRegistry := lazymetrics.NewRegistry()
 	runtime := newRuntimeState()
+	migrationMode, err := configuredMigrationMode()
+	if err != nil {
+		panic(err)
+	}
+	var migrationControl *migrationControlPlane
+	if migrationMode != migrationModeOff {
+		var err error
+		migrationControl, err = startMigrationControlPlane()
+		if err != nil {
+			panic(err)
+		}
+		defer func() {
+			if migrationControl != nil {
+				_ = migrationControl.Close()
+			}
+		}()
+	}
 	var controlPlane *lazycontrolplane.ControlPlane
 	if config.ControlPlane != nil {
 		controlPlane = config.ControlPlane.BuildControlPlane()
@@ -214,6 +224,30 @@ func New(config Config) *App {
 			panic(fmt.Errorf("initialize dependencies: %w", err))
 		}
 		ctx = dependencies.Context()
+	}
+
+	var migrations lazymigrate.Databases
+	if config.Migrations != nil {
+		configuredMigrations, err := config.Migrations(ctx)
+		if err != nil {
+			panic(fmt.Errorf("initialize migrations: %w", err))
+		}
+		migrations = configuredMigrations
+	}
+	if migrationMode != migrationModeOff {
+		if err := applyConfiguredMigrations(ctx, migrations); err != nil {
+			panic(fmt.Errorf("run migrations: %w", err))
+		}
+		if migrationControl != nil {
+			if err := migrationControl.Close(); err != nil {
+				panic(err)
+			}
+			migrationControl = nil
+		}
+		if migrationMode == migrationModeUp {
+			exitAfterMigrate(0)
+			panic("lazyapp: exit after migrations returned")
+		}
 	}
 
 	var jobs *lazyjobs.JobRunner
@@ -328,6 +362,7 @@ func New(config Config) *App {
 		Media:        media.Media,
 		Cache:        cache,
 		Sessions:     sessions,
+		Migrations:   migrations,
 		Jobs:         jobs,
 		Workers:      workers,
 		PWA:          pwa,

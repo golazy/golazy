@@ -12,6 +12,11 @@ type Repository interface {
 	Delete(context.Context, string, ...any) ([]any, error)
 }
 
+// Lister is implemented by repositories that can enumerate file records.
+type Lister interface {
+	List(context.Context, ListQuery, ...any) ([]StoredFile, []any, error)
+}
+
 func activeLocation(locations []Location) (Location, bool) {
 	for _, location := range locations {
 		if location.Role == RolePrimary && location.Status == StatusActive {

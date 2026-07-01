@@ -94,6 +94,33 @@ func (f *Files) Find(ctx context.Context, id string, options ...any) (StoredFile
 	return StoredFile{File: file, Location: location, Locations: locations}, options, nil
 }
 
+// List returns cataloged files when the repository supports enumeration.
+func (f *Files) List(ctx context.Context, query ListQuery, options ...any) ([]StoredFile, []any, error) {
+	if f == nil {
+		return nil, options, fmt.Errorf("lazyfiles: files service is nil")
+	}
+	if f.Repository == nil {
+		return nil, options, fmt.Errorf("lazyfiles: repository is nil")
+	}
+	lister, ok := f.Repository.(Lister)
+	if !ok {
+		return nil, options, fmt.Errorf("lazyfiles: repository cannot list files")
+	}
+	files, options, err := lister.List(ctx, query, options...)
+	if err != nil {
+		return nil, options, err
+	}
+	for index := range files {
+		if files[index].Location.Storage != "" {
+			continue
+		}
+		if location, ok := activeLocation(files[index].Locations); ok {
+			files[index].Location = location
+		}
+	}
+	return files, options, nil
+}
+
 // Open opens a file by catalog id.
 func (f *Files) Open(ctx context.Context, id string, options ...any) (lazystorage.File, File, []any, error) {
 	stored, options, err := f.Find(ctx, id, options...)

@@ -20,7 +20,12 @@ import (
 	"golazy.dev/lazycache"
 	"golazy.dev/lazycontroller"
 	"golazy.dev/lazydeps"
+	"golazy.dev/lazyfiles"
+	filesjsonl "golazy.dev/lazyfiles/jsonl"
+	"golazy.dev/lazymedia"
+	mediajsonl "golazy.dev/lazymedia/jsonl"
 	"golazy.dev/lazyroutes"
+	"golazy.dev/lazystorage"
 	"golazy.dev/lazytelemetry"
 )
 
@@ -107,6 +112,13 @@ func TestLazyDevControlPlaneAggregatesPackageHandlers(t *testing.T) {
 		lazycache.LazyDevCacheEventsPath,
 		lazycache.LazyDevCacheOnPath,
 		lazycache.LazyDevCacheOffPath,
+		lazymedia.LazyDevMediaPath,
+		lazymedia.LazyDevMediaDownloadPath,
+		lazymedia.LazyDevMediaStorageUploadPath,
+		lazymedia.LazyDevMediaStorageDeletePath,
+		lazymedia.LazyDevMediaFileUploadPath,
+		lazymedia.LazyDevMediaFileDeletePath,
+		lazymedia.LazyDevMediaVariantDeletePath,
 		lazytelemetry.LazyDevRequestMonitoringPath,
 		lazytelemetry.LazyDevRequestMonitoringOnPath,
 		lazytelemetry.LazyDevRequestMonitoringOffPath,
@@ -116,6 +128,70 @@ func TestLazyDevControlPlaneAggregatesPackageHandlers(t *testing.T) {
 		if !app.ControlPlane.HandlesPath(path) {
 			t.Fatalf("control plane does not handle %s", path)
 		}
+	}
+}
+
+func TestLazyDevControlPlaneServesMediaInspector(t *testing.T) {
+	dir := t.TempDir()
+	fileRepo, err := filesjsonl.New(filepath.Join(dir, "files.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	variantRepo, err := mediajsonl.New(filepath.Join(dir, "variants.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	files := &lazyfiles.Files{
+		Repository: fileRepo,
+		Storages: map[string]lazystorage.Storage{
+			"local": lazystorage.NewFilesystem(filepath.Join(dir, "objects"), lazystorage.WithBaseURL("https://cdn.example.test/files")),
+		},
+		DefaultStorage: "local",
+	}
+	file, _, err := files.Put(
+		context.Background(),
+		strings.NewReader("avatar"),
+		lazyfiles.Filename{Name: "avatar.png"},
+		lazyfiles.ObjectKey{Key: "uploads/avatar.png"},
+		lazystorage.ContentType{Value: "image/png"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := variantRepo.SaveVariant(context.Background(), lazymedia.Variant{
+		SourceFileID: file.ID,
+		VariantKey:   "thumb",
+		OutputFileID: file.ID,
+		Status:       lazymedia.StatusReady,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	app := New(Config{
+		Name:  "test",
+		Files: files,
+		Media: &lazymedia.Media{Repository: variantRepo},
+	})
+
+	response := httptest.NewRecorder()
+	app.ServeHTTP(response, httptest.NewRequest(http.MethodGet, lazymedia.LazyDevMediaPath+"?storage=local", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("media status = %d, want %d: %s", response.Code, http.StatusOK, response.Body.String())
+	}
+	var snapshot lazymedia.LazyDevSnapshot
+	if err := json.Unmarshal(response.Body.Bytes(), &snapshot); err != nil {
+		t.Fatalf("decode media response: %v\n%s", err, response.Body.String())
+	}
+	if len(snapshot.Storages) != 1 || snapshot.Storages[0].Name != "local" || !snapshot.Storages[0].Writable {
+		t.Fatalf("storages = %#v, want writable local", snapshot.Storages)
+	}
+	if len(snapshot.StorageObjects) != 1 || snapshot.StorageObjects[0].Key != "uploads/avatar.png" {
+		t.Fatalf("storage objects = %#v, want uploaded avatar", snapshot.StorageObjects)
+	}
+	if len(snapshot.Files) != 1 || snapshot.Files[0].ID != file.ID || len(snapshot.Files[0].Variants) != 1 {
+		t.Fatalf("files = %#v, want file with variant", snapshot.Files)
+	}
+	if snapshot.Files[0].Variants[0].VariantKey != "thumb" || snapshot.Files[0].Variants[0].OutputURL == "" {
+		t.Fatalf("variants = %#v, want thumb with output URL", snapshot.Files[0].Variants)
 	}
 }
 

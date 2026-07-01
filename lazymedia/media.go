@@ -45,6 +45,22 @@ func (m *Media) URL(ctx context.Context, request Request, options ...any) (strin
 	return m.Files.URL(ctx, file.ID, options...)
 }
 
+// ListVariants returns repository variants when the repository supports
+// enumeration.
+func (m *Media) ListVariants(ctx context.Context, query VariantListQuery, options ...any) ([]Variant, []any, error) {
+	if m == nil {
+		return nil, options, fmt.Errorf("lazymedia: media service is nil")
+	}
+	if m.Repository == nil {
+		return nil, options, fmt.Errorf("lazymedia: repository is nil")
+	}
+	lister, ok := m.Repository.(VariantLister)
+	if !ok {
+		return nil, options, fmt.Errorf("lazymedia: repository cannot list variants")
+	}
+	return lister.ListVariants(ctx, query, options...)
+}
+
 func (m *Media) generate(ctx context.Context, request Request, options ...any) (File, []any, error) {
 	body, sourceFile, options, err := m.Files.Open(ctx, request.SourceFileID, options...)
 	if err != nil {

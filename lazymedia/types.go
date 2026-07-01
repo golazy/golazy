@@ -39,6 +39,13 @@ type Request struct {
 	Spec         json.RawMessage
 }
 
+// VariantListQuery filters repository variant listings.
+type VariantListQuery struct {
+	SourceFileID string
+	VariantKey   string
+	Status       string
+}
+
 // VariantKey selects a named representation.
 type VariantKey struct {
 	Key string

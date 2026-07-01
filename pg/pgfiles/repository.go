@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -19,6 +20,7 @@ type Repository struct {
 }
 
 var _ lazyfiles.Repository = (*Repository)(nil)
+var _ lazyfiles.Lister = (*Repository)(nil)
 
 // New creates a PostgreSQL-backed lazyfiles repository.
 func New(pool *pgxpool.Pool) *Repository {
@@ -149,15 +151,66 @@ WHERE id = $1
 		return lazyfiles.File{}, nil, options, fmt.Errorf("pgfiles: find file %s: %w", query.ID, err)
 	}
 
+	locations, err := repo.listLocations(ctx, query.ID)
+	if err != nil {
+		return lazyfiles.File{}, nil, options, err
+	}
+	return file, locations, options, nil
+}
+
+func (repo *Repository) List(ctx context.Context, query lazyfiles.ListQuery, options ...any) ([]lazyfiles.StoredFile, []any, error) {
+	if err := repo.validate(); err != nil {
+		return nil, options, err
+	}
+	if err := ctxErr(ctx); err != nil {
+		return nil, options, err
+	}
+	rows, err := repo.pool.Query(ctx, `
+SELECT id, filename, content_type, size, checksum, metadata, created_at, updated_at, deleted_at
+FROM lazy_files
+WHERE ($1::boolean OR deleted_at IS NULL)
+ORDER BY updated_at DESC, id ASC`,
+		query.IncludeDeleted,
+	)
+	if err != nil {
+		return nil, options, fmt.Errorf("pgfiles: list files: %w", err)
+	}
+	defer rows.Close()
+
+	files := []lazyfiles.StoredFile{}
+	for rows.Next() {
+		file, err := scanFile(rows)
+		if err != nil {
+			return nil, options, fmt.Errorf("pgfiles: scan file: %w", err)
+		}
+		locations, err := repo.listLocations(ctx, file.ID)
+		if err != nil {
+			return nil, options, err
+		}
+		if !locationsMatch(query, locations) {
+			continue
+		}
+		files = append(files, lazyfiles.StoredFile{
+			File:      file,
+			Locations: locations,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, options, fmt.Errorf("pgfiles: read files: %w", err)
+	}
+	return files, options, nil
+}
+
+func (repo *Repository) listLocations(ctx context.Context, fileID string) ([]lazyfiles.Location, error) {
 	rows, err := repo.pool.Query(ctx, `
 SELECT file_id, storage, key, role, status, checksum
 FROM lazy_file_locations
 WHERE file_id = $1
 ORDER BY created_at ASC, storage ASC, key ASC`,
-		query.ID,
+		fileID,
 	)
 	if err != nil {
-		return lazyfiles.File{}, nil, options, fmt.Errorf("pgfiles: list locations %s: %w", query.ID, err)
+		return nil, fmt.Errorf("pgfiles: list locations %s: %w", fileID, err)
 	}
 	defer rows.Close()
 
@@ -172,14 +225,14 @@ ORDER BY created_at ASC, storage ASC, key ASC`,
 			&location.Status,
 			&location.Checksum,
 		); err != nil {
-			return lazyfiles.File{}, nil, options, fmt.Errorf("pgfiles: scan location %s: %w", query.ID, err)
+			return nil, fmt.Errorf("pgfiles: scan location %s: %w", fileID, err)
 		}
 		locations = append(locations, location)
 	}
 	if err := rows.Err(); err != nil {
-		return lazyfiles.File{}, nil, options, fmt.Errorf("pgfiles: read locations %s: %w", query.ID, err)
+		return nil, fmt.Errorf("pgfiles: read locations %s: %w", fileID, err)
 	}
-	return file, locations, options, nil
+	return locations, nil
 }
 
 func (repo *Repository) Delete(ctx context.Context, fileID string, options ...any) ([]any, error) {
@@ -281,6 +334,24 @@ func validateFileLocation(file lazyfiles.File, location lazyfiles.Location) erro
 		return fmt.Errorf("lazyfiles: storage key is required")
 	}
 	return nil
+}
+
+func locationsMatch(query lazyfiles.ListQuery, locations []lazyfiles.Location) bool {
+	storage := strings.TrimSpace(query.Storage)
+	prefix := strings.TrimSpace(query.KeyPrefix)
+	if storage == "" && prefix == "" {
+		return true
+	}
+	for _, location := range locations {
+		if storage != "" && location.Storage != storage {
+			continue
+		}
+		if prefix != "" && !strings.HasPrefix(location.Key, prefix) {
+			continue
+		}
+		return true
+	}
+	return false
 }
 
 func errNotExist(id string) error {

@@ -12,6 +12,15 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `golazy.dev/lazywebsocket`, an adapted Gorilla WebSocket implementation for
   framework and development tooling without adding an external module
   dependency.
+- `lazyapp.Config` can now expose named `lazystorage` backends,
+  `lazyfiles.Files`, and `lazymedia.Media` to lazydev. The new development
+  media control-plane endpoints list storage objects, file catalog rows, and
+  media variants, and support development upload, download, remove, and URL
+  actions.
+- `lazyfiles.Repository` implementations can opt into `lazyfiles.Lister`, and
+  `lazymedia.Repository` implementations can opt into
+  `lazymedia.VariantLister`; the JSONL and PostgreSQL repositories implement
+  both listing contracts.
 
 ## [0.1.18] - 2026-06-30
 

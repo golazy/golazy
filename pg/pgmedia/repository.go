@@ -18,6 +18,7 @@ type Repository struct {
 }
 
 var _ lazymedia.Repository = (*Repository)(nil)
+var _ lazymedia.VariantLister = (*Repository)(nil)
 
 // New creates a PostgreSQL-backed lazymedia repository.
 func New(pool *pgxpool.Pool) *Repository {
@@ -46,6 +47,43 @@ WHERE source_file_id = $1
 		return lazymedia.Variant{}, options, fmt.Errorf("pgmedia: find variant %s/%s: %w", sourceFileID, variantKey, err)
 	}
 	return variant, options, nil
+}
+
+func (repo *Repository) ListVariants(ctx context.Context, query lazymedia.VariantListQuery, options ...any) ([]lazymedia.Variant, []any, error) {
+	if err := repo.validate(); err != nil {
+		return nil, options, err
+	}
+	if err := ctxErr(ctx); err != nil {
+		return nil, options, err
+	}
+	rows, err := repo.pool.Query(ctx, `
+SELECT source_file_id, variant_key, spec, output_file_id, status, error, created_at, updated_at
+FROM lazy_media_variants
+WHERE ($1 = '' OR source_file_id = $1)
+  AND ($2 = '' OR variant_key = $2)
+  AND ($3 = '' OR status = $3)
+ORDER BY source_file_id ASC, variant_key ASC`,
+		query.SourceFileID,
+		query.VariantKey,
+		query.Status,
+	)
+	if err != nil {
+		return nil, options, fmt.Errorf("pgmedia: list variants: %w", err)
+	}
+	defer rows.Close()
+
+	variants := []lazymedia.Variant{}
+	for rows.Next() {
+		variant, err := scanVariant(rows)
+		if err != nil {
+			return nil, options, fmt.Errorf("pgmedia: scan variant: %w", err)
+		}
+		variants = append(variants, variant)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, options, fmt.Errorf("pgmedia: read variants: %w", err)
+	}
+	return variants, options, nil
 }
 
 func (repo *Repository) SaveVariant(ctx context.Context, variant lazymedia.Variant, options ...any) (lazymedia.Variant, []any, error) {

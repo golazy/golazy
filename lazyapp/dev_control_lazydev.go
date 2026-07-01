@@ -15,6 +15,7 @@ import (
 	"golazy.dev/lazycontrolplane"
 	"golazy.dev/lazydeps"
 	"golazy.dev/lazyjobs"
+	"golazy.dev/lazymedia"
 	"golazy.dev/lazypwa"
 	"golazy.dev/lazyroutes"
 	"golazy.dev/lazytelemetry"
@@ -28,7 +29,7 @@ func lazyDevContext(ctx context.Context) context.Context {
 	return lazycontroller.LazyDevContext(ctx)
 }
 
-func lazyDevControlPlane(controlPlane *lazycontrolplane.ControlPlane, renderer *lazycontroller.Renderer, router *lazyroutes.Scope, assets *lazyassets.Registry, cache *lazycache.Cache, dependencies *lazydeps.Scope, jobs *lazyjobs.JobRunner, workers *lazyworkers.Registry, pwa *lazypwa.App, runtime *runtimeState) *lazycontrolplane.ControlPlane {
+func lazyDevControlPlane(controlPlane *lazycontrolplane.ControlPlane, renderer *lazycontroller.Renderer, router *lazyroutes.Scope, assets *lazyassets.Registry, cache *lazycache.Cache, dependencies *lazydeps.Scope, jobs *lazyjobs.JobRunner, workers *lazyworkers.Registry, pwa *lazypwa.App, runtime *runtimeState, media mediaServices) *lazycontrolplane.ControlPlane {
 	if controlPlane == nil {
 		controlPlane = lazycontrolplane.New(lazycontrolplane.Config{})
 	}
@@ -48,6 +49,7 @@ func lazyDevControlPlane(controlPlane *lazycontrolplane.ControlPlane, renderer *
 	lazyjobs.RegisterLazyDevHandlers(controlPlane, jobs)
 	lazyworkers.RegisterLazyDevHandlers(controlPlane, workers)
 	lazypwa.RegisterLazyDevHandlers(controlPlane, pwa)
+	lazymedia.RegisterLazyDevHandlers(controlPlane, lazyDevMediaInspector(media))
 	lazytelemetry.RegisterLazyDevHandlers(controlPlane)
 	return controlPlane
 }

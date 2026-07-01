@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,6 +17,7 @@ import (
 )
 
 var _ lazymedia.Repository = (*JSONLRepository)(nil)
+var _ lazymedia.VariantLister = (*JSONLRepository)(nil)
 
 // JSONLRepository stores variant metadata in an append-only JSONL log.
 type JSONLRepository struct {
@@ -56,6 +59,29 @@ func (r *JSONLRepository) FindVariant(ctx context.Context, sourceFileID, variant
 	return variant, options, nil
 }
 
+func (r *JSONLRepository) ListVariants(ctx context.Context, query lazymedia.VariantListQuery, options ...any) ([]lazymedia.Variant, []any, error) {
+	if err := ctxErr(ctx); err != nil {
+		return nil, options, err
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	variants := make([]lazymedia.Variant, 0, len(r.variants))
+	for _, variant := range r.variants {
+		if !variantMatches(query, variant) {
+			continue
+		}
+		variants = append(variants, variant)
+	}
+	sort.Slice(variants, func(i, j int) bool {
+		if variants[i].SourceFileID != variants[j].SourceFileID {
+			return variants[i].SourceFileID < variants[j].SourceFileID
+		}
+		return variants[i].VariantKey < variants[j].VariantKey
+	})
+	return variants, options, nil
+}
+
 func (r *JSONLRepository) SaveVariant(ctx context.Context, variant lazymedia.Variant, options ...any) (lazymedia.Variant, []any, error) {
 	if err := ctxErr(ctx); err != nil {
 		return lazymedia.Variant{}, options, err
@@ -83,6 +109,19 @@ func (r *JSONLRepository) SaveVariant(ctx context.Context, variant lazymedia.Var
 	}
 	r.variants[variantID(variant.SourceFileID, variant.VariantKey)] = variant
 	return variant, options, nil
+}
+
+func variantMatches(query lazymedia.VariantListQuery, variant lazymedia.Variant) bool {
+	if query.SourceFileID != "" && variant.SourceFileID != query.SourceFileID {
+		return false
+	}
+	if query.VariantKey != "" && variant.VariantKey != query.VariantKey {
+		return false
+	}
+	if strings.TrimSpace(query.Status) != "" && variant.Status != query.Status {
+		return false
+	}
+	return true
 }
 
 func (r *JSONLRepository) DeleteVariant(ctx context.Context, sourceFileID, variantKey string, options ...any) ([]any, error) {

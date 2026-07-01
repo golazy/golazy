@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,6 +17,7 @@ import (
 )
 
 var _ lazyfiles.Repository = (*JSONLRepository)(nil)
+var _ lazyfiles.Lister = (*JSONLRepository)(nil)
 
 // JSONLRepository stores file metadata in an append-only JSONL log.
 type JSONLRepository struct {
@@ -97,6 +100,38 @@ func (r *JSONLRepository) Find(ctx context.Context, query lazyfiles.Query, optio
 	return file, locations, options, nil
 }
 
+func (r *JSONLRepository) List(ctx context.Context, query lazyfiles.ListQuery, options ...any) ([]lazyfiles.StoredFile, []any, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, options, err
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	files := make([]lazyfiles.StoredFile, 0, len(r.files))
+	for _, file := range r.files {
+		if !query.IncludeDeleted && !file.DeletedAt.IsZero() {
+			continue
+		}
+		locations := append([]lazyfiles.Location(nil), r.locations[file.ID]...)
+		if !locationsMatch(query, locations) {
+			continue
+		}
+		files = append(files, lazyfiles.StoredFile{
+			File:      file,
+			Locations: locations,
+		})
+	}
+	sort.Slice(files, func(i, j int) bool {
+		left := files[i].File.UpdatedAt
+		right := files[j].File.UpdatedAt
+		if !left.Equal(right) {
+			return left.After(right)
+		}
+		return files[i].File.ID < files[j].File.ID
+	})
+	return files, options, nil
+}
+
 func (r *JSONLRepository) Delete(ctx context.Context, fileID string, options ...any) ([]any, error) {
 	if err := ctx.Err(); err != nil {
 		return options, err
@@ -116,6 +151,24 @@ func (r *JSONLRepository) Delete(ctx context.Context, fileID string, options ...
 	file.UpdatedAt = now
 	r.files[fileID] = file
 	return options, nil
+}
+
+func locationsMatch(query lazyfiles.ListQuery, locations []lazyfiles.Location) bool {
+	storage := strings.TrimSpace(query.Storage)
+	prefix := strings.TrimSpace(query.KeyPrefix)
+	if storage == "" && prefix == "" {
+		return true
+	}
+	for _, location := range locations {
+		if storage != "" && location.Storage != storage {
+			continue
+		}
+		if prefix != "" && !strings.HasPrefix(location.Key, prefix) {
+			continue
+		}
+		return true
+	}
+	return false
 }
 
 func (r *JSONLRepository) replay() error {

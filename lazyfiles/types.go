@@ -40,6 +40,13 @@ type Query struct {
 	ID string
 }
 
+// ListQuery filters repository file listings.
+type ListQuery struct {
+	Storage        string
+	KeyPrefix      string
+	IncludeDeleted bool
+}
+
 // StoredFile combines a file record with its chosen location.
 type StoredFile struct {
 	File      File

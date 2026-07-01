@@ -19,6 +19,11 @@ type Repository interface {
 	DeleteVariant(context.Context, string, string, ...any) ([]any, error)
 }
 
+// VariantLister is implemented by repositories that can enumerate variants.
+type VariantLister interface {
+	ListVariants(context.Context, VariantListQuery, ...any) ([]Variant, []any, error)
+}
+
 // Processor generates a representation for a source file.
 type Processor interface {
 	Process(context.Context, Source, Request, ...any) (Result, []any, error)

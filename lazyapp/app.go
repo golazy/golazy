@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"net"
 	"net/http"
+	"sort"
 	"strings"
 
 	"golazy.dev/lazyassets"
@@ -18,13 +19,16 @@ import (
 	"golazy.dev/lazydeps"
 	"golazy.dev/lazydispatch"
 	"golazy.dev/lazydispatch/middlewares"
+	"golazy.dev/lazyfiles"
 	"golazy.dev/lazyforms"
 	"golazy.dev/lazyjobs"
 	"golazy.dev/lazyjobs/inmemoryjobs"
+	"golazy.dev/lazymedia"
 	"golazy.dev/lazypwa"
 	"golazy.dev/lazyroutes"
 	"golazy.dev/lazyseo"
 	"golazy.dev/lazysession"
+	"golazy.dev/lazystorage"
 	"golazy.dev/lazytelemetry"
 	"golazy.dev/lazytelemetry/lazymetrics"
 	"golazy.dev/lazyturbo"
@@ -58,6 +62,9 @@ type Config struct {
 	SEO               func(context.Context) []lazyseo.Option
 	Assets            []lazyassets.Source
 	AssetOptions      []lazyassets.Option
+	Storages          map[string]lazystorage.Storage
+	Files             *lazyfiles.Files
+	Media             *lazymedia.Media
 	Cache             lazycache.Options
 	Robots            RobotsConfig
 	Sitemap           SitemapConfig
@@ -76,6 +83,9 @@ type App struct {
 	Dispatcher   *lazydispatch.Dispatcher
 	Router       *lazyroutes.Scope
 	Assets       *lazyassets.Registry
+	Storages     map[string]lazystorage.Storage
+	Files        *lazyfiles.Files
+	Media        *lazymedia.Media
 	Cache        *lazycache.Cache
 	Sessions     *lazysession.Manager
 	Jobs         *lazyjobs.JobRunner
@@ -269,8 +279,9 @@ func New(config Config) *App {
 	for _, helpers := range config.Helpers {
 		renderer.AddHelpers(helpers)
 	}
+	media := newMediaServices(config)
 	controlPlane = jobsControlPlane(controlPlane, jobs)
-	controlPlane = lazyDevControlPlane(controlPlane, renderer, router, assets, cache, dependencies, jobs, workers, pwa, runtime)
+	controlPlane = lazyDevControlPlane(controlPlane, renderer, router, assets, cache, dependencies, jobs, workers, pwa, runtime, media)
 	controlPlane = telemetryControlPlane(controlPlane, telemetryConfig, telemetryRegistry, cache)
 	if err := renderer.Cache(); err != nil {
 		panic(fmt.Errorf("cache views: %w", err))
@@ -312,6 +323,9 @@ func New(config Config) *App {
 		Dispatcher:   dispatcher,
 		Router:       router,
 		Assets:       assets,
+		Storages:     media.Storages,
+		Files:        media.Files,
+		Media:        media.Media,
 		Cache:        cache,
 		Sessions:     sessions,
 		Jobs:         jobs,
@@ -321,6 +335,54 @@ func New(config Config) *App {
 		Dependencies: dependencies,
 		runtime:      runtime,
 	}
+}
+
+type mediaServices struct {
+	Storages       map[string]lazystorage.Storage
+	DefaultStorage string
+	Files          *lazyfiles.Files
+	Media          *lazymedia.Media
+}
+
+func newMediaServices(config Config) mediaServices {
+	storages := map[string]lazystorage.Storage{}
+	for name, storage := range config.Storages {
+		if name == "" || storage == nil {
+			continue
+		}
+		storages[name] = storage
+	}
+	if config.Files != nil {
+		for name, storage := range config.Files.Storages {
+			if name == "" || storage == nil {
+				continue
+			}
+			if _, exists := storages[name]; !exists {
+				storages[name] = storage
+			}
+		}
+	}
+	return mediaServices{
+		Storages:       storages,
+		DefaultStorage: defaultMediaStorage(config),
+		Files:          config.Files,
+		Media:          config.Media,
+	}
+}
+
+func defaultMediaStorage(config Config) string {
+	if config.Files != nil && config.Files.DefaultStorage != "" {
+		return config.Files.DefaultStorage
+	}
+	names := make([]string, 0, len(config.Storages))
+	for name := range config.Storages {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	if len(names) == 0 {
+		return ""
+	}
+	return names[0]
 }
 
 func appBuildVersion() string {

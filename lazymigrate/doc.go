@@ -5,7 +5,10 @@
 // migrations, compare them with the migration IDs a backend reports as already
 // applied, and build an up, down, or redo plan. The backend owns the concrete
 // migration language, the meaning of up and down sections, locking,
-// transactions, metadata tables, and schema load or dump support.
+// transactions, metadata tables, and schema load or dump support. Production
+// backend implementations must synchronize migration application across
+// processes so multiple app instances can start with migration mode enabled
+// without applying the same step twice or corrupting migration metadata.
 //
 // A Source returns migration files. FS reads direct children from a directory
 // in an fs.FS, skips nested directories and migrations.toml, rejects Go
@@ -41,10 +44,10 @@
 // Backend implementations connect this package to a real store. The
 // golazy.dev/pg/pgmigrate package implements Backend for PostgreSQL. It parses
 // SQL files with -- +lazy Up and -- +lazy Down sections, stores applied IDs in
-// lazy_migrations, runs each step in a transaction, and uses an advisory lock
-// while applying a migration. lazymigrate itself does not parse those sections;
-// it passes the file content through unchanged so other backends can use their
-// own format.
+// lazy_migrations, runs each step and metadata update in a transaction, and
+// uses an advisory lock while applying a migration. lazymigrate itself does not
+// parse those sections; it passes the file content through unchanged so other
+// backends can use their own format.
 //
 // The fakemigrator subpackage provides an in-memory Backend for tests,
 // examples, and early command wiring. It records planned steps and applied IDs

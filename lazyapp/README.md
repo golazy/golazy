@@ -62,7 +62,8 @@ When `CONTROL_PLANE_ADDR` is also set on a separate listener, lazyapp starts the
 real control plane before migrations so `/livez` returns OK and `/readyz`
 reports migration progress. In `auto` mode that listener stays active and later
 startup stages add their handlers to the same control plane. When the control
-plane shares the app listener, it is mounted when `ListenAndServe` starts.
+plane shares the app listener, migrations leave it alone and it is mounted when
+`ListenAndServe` starts after migrations finish.
 
 When using your own `http.Server`, set `BaseContext` manually:
 

@@ -172,6 +172,21 @@ func TestAppRejectsInvalidMigrateMode(t *testing.T) {
 	_ = New(Config{})
 }
 
+func TestMigrationControlPlaneSameAddressIsDeferred(t *testing.T) {
+	unsetenv(t, "ADDR", "PORT")
+	t.Setenv("CONTROL_PLANE_ADDR", "3000")
+	t.Setenv("LAZYAPP_MIGRATE", "auto")
+	reloadEnvironmentForTest(t)
+
+	app := New(Config{})
+	if !lazyDevTestBuild() && app.ControlPlane != nil {
+		t.Fatal("migration mode created a control plane for the shared app listener")
+	}
+	if app.earlyControl != nil {
+		t.Fatal("migration mode started an early control plane for the shared app listener")
+	}
+}
+
 func TestMigrationControlPlaneIsLiveButNotReady(t *testing.T) {
 	addr := freeLocalAddr(t)
 	t.Setenv("CONTROL_PLANE_ADDR", addr)

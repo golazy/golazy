@@ -109,6 +109,10 @@ func prepareMigrationControlPlane(mode migrationMode, controlPlane *lazycontrolp
 		return controlPlane, nil, nil, nil
 	}
 
+	if sameListenAddr(addr, listenAddr()) {
+		return controlPlane, nil, nil, nil
+	}
+
 	if controlPlane == nil {
 		controlPlane = lazycontrolplane.New(lazycontrolplane.Config{})
 	}
@@ -117,10 +121,6 @@ func prepareMigrationControlPlane(mode migrationMode, controlPlane *lazycontrolp
 		Name:  "migrations",
 		Check: readiness.Check,
 	})
-
-	if sameListenAddr(addr, listenAddr()) {
-		return controlPlane, readiness, nil, nil
-	}
 
 	controlPlane.EnablePprof()
 	listener, err := net.Listen("tcp", addr)

@@ -17,7 +17,9 @@
 // at a separate listener during migration mode, lazyapp starts the real control
 // plane early so /livez is OK while /readyz reports that migrations are still
 // running. In auto mode that listener stays active and later startup stages add
-// their handlers to the same control plane.
+// their handlers to the same control plane. When the control plane shares the
+// app listener, migrations leave it alone and ListenAndServe mounts it after
+// migrations finish.
 //
 // Public files and generated assets are registered with lazyassets and mounted
 // as the final fallback after dynamic routes. View helpers from lazyroutes,

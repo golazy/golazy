@@ -13,9 +13,11 @@
 // import database drivers; applications provide lazymigrate databases with the
 // concrete backend for each logical database. Set LAZYAPP_MIGRATE=up to run
 // pending migrations and exit, or LAZYAPP_MIGRATE=auto to run pending
-// migrations before jobs and normal app startup. When CONTROL_PLANE_ADDR is set
-// during migration mode, lazyapp serves a temporary control plane so /livez is
-// OK while /readyz reports that migrations are still running.
+// migrations before jobs and normal app startup. When CONTROL_PLANE_ADDR points
+// at a separate listener during migration mode, lazyapp starts the real control
+// plane early so /livez is OK while /readyz reports that migrations are still
+// running. In auto mode that listener stays active and later startup stages add
+// their handlers to the same control plane.
 //
 // Public files and generated assets are registered with lazyassets and mounted
 // as the final fallback after dynamic routes. View helpers from lazyroutes,

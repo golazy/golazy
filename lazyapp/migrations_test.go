@@ -178,24 +178,28 @@ func TestMigrationControlPlaneIsLiveButNotReady(t *testing.T) {
 	t.Setenv("LAZYAPP_MIGRATE", "auto")
 	reloadEnvironmentForTest(t)
 	backend := newBlockingMigrationBackend()
-	done := make(chan struct{})
+	apps := make(chan *App, 1)
 	errs := make(chan any, 1)
 
 	go func() {
 		defer func() {
 			if recovered := recover(); recovered != nil {
 				errs <- recovered
-				return
 			}
-			close(done)
 		}()
-		_ = New(Config{
+		apps <- New(Config{
 			Migrations: Migrations(lazymigrate.Databases{
 				"postgres": {
 					Backend: backend,
 					Sources: []lazymigrate.Source{migrationSource("202603010000_app")},
 				},
 			}),
+			Jobs: func(context.Context) (lazyjobs.Config, error) {
+				return lazyjobs.Config{
+					Backend:      inmemoryjobs.New(),
+					PollInterval: time.Hour,
+				}, nil
+			},
 		})
 	}()
 
@@ -211,12 +215,28 @@ func TestMigrationControlPlaneIsLiveButNotReady(t *testing.T) {
 	}
 
 	close(backend.releaseRun)
+	var app *App
 	select {
-	case <-done:
+	case app = <-apps:
 	case recovered := <-errs:
 		t.Fatalf("New panic = %v", recovered)
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for app startup")
+	}
+	t.Cleanup(func() {
+		if app != nil {
+			_ = app.closeEarlyControl()
+			_ = app.Jobs.Stop(context.Background())
+		}
+	})
+
+	readyBody, readyStatus = getBody(t, baseURL+"/readyz")
+	if readyStatus != http.StatusOK || readyBody != "ready\n" {
+		t.Fatalf("/readyz after migrations = %d %q, want ready", readyStatus, readyBody)
+	}
+	jobsBody, jobsStatus := getBody(t, baseURL+"/jobs")
+	if jobsStatus != http.StatusOK || !strings.Contains(jobsBody, `"running":true`) {
+		t.Fatalf("/jobs = %d %q, want running jobs snapshot", jobsStatus, jobsBody)
 	}
 }
 

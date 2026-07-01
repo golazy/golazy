@@ -58,9 +58,11 @@ When `Config.Migrations` is set, the app binary knows how to migrate itself.
 Set `LAZYAPP_MIGRATE=up` to run pending migrations and exit, or
 `LAZYAPP_MIGRATE=auto` to run pending migrations before jobs and normal
 startup. If no migrations are configured, both modes are successful no-ops.
-When `CONTROL_PLANE_ADDR` is also set, lazyapp serves a temporary control plane
-during migration so `/livez` returns OK and `/readyz` reports migration
-progress.
+When `CONTROL_PLANE_ADDR` is also set on a separate listener, lazyapp starts the
+real control plane before migrations so `/livez` returns OK and `/readyz`
+reports migration progress. In `auto` mode that listener stays active and later
+startup stages add their handlers to the same control plane. When the control
+plane shares the app listener, it is mounted when `ListenAndServe` starts.
 
 When using your own `http.Server`, set `BaseContext` manually:
 

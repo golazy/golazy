@@ -87,6 +87,7 @@ type App struct {
 	ControlPlane *lazycontrolplane.ControlPlane
 	Dependencies *lazydeps.Scope
 	runtime      *runtimeState
+	earlyControl *migrationControlPlane
 }
 
 type assetsMiddleware struct {
@@ -126,19 +127,6 @@ func New(config Config) *App {
 	if err != nil {
 		panic(err)
 	}
-	var migrationControl *migrationControlPlane
-	if migrationMode != migrationModeOff {
-		var err error
-		migrationControl, err = startMigrationControlPlane()
-		if err != nil {
-			panic(err)
-		}
-		defer func() {
-			if migrationControl != nil {
-				_ = migrationControl.Close()
-			}
-		}()
-	}
 	var controlPlane *lazycontrolplane.ControlPlane
 	if config.ControlPlane != nil {
 		controlPlane = config.ControlPlane.BuildControlPlane()
@@ -146,6 +134,16 @@ func New(config Config) *App {
 			panic("lazyapp: control plane builder returned nil")
 		}
 	}
+	controlPlane, migrationReadiness, migrationControl, err := prepareMigrationControlPlane(migrationMode, controlPlane)
+	if err != nil {
+		panic(err)
+	}
+	returned := false
+	defer func() {
+		if !returned && migrationControl != nil {
+			_ = migrationControl.Close()
+		}
+	}()
 	cacheOptions := config.Cache
 	if cacheOptions.Backend == nil {
 		backend, err := inmemorycache.New(inmemorycache.Options{})
@@ -238,13 +236,14 @@ func New(config Config) *App {
 		if err := applyConfiguredMigrations(ctx, migrations); err != nil {
 			panic(fmt.Errorf("run migrations: %w", err))
 		}
-		if migrationControl != nil {
-			if err := migrationControl.Close(); err != nil {
-				panic(err)
-			}
-			migrationControl = nil
-		}
+		migrationReadiness.Done()
 		if migrationMode == migrationModeUp {
+			if migrationControl != nil {
+				if err := migrationControl.Close(); err != nil {
+					panic(err)
+				}
+				migrationControl = nil
+			}
 			exitAfterMigrate(0)
 			panic("lazyapp: exit after migrations returned")
 		}
@@ -350,8 +349,11 @@ func New(config Config) *App {
 	if !assets.Empty() {
 		dispatcher.Use(assetsMiddleware{registry: assets})
 	}
+	if migrationControl != nil {
+		migrationControl.SetBaseContext(ctx)
+	}
 
-	return &App{
+	app := &App{
 		Name:         config.Name,
 		Context:      ctx,
 		Dispatcher:   dispatcher,
@@ -369,7 +371,10 @@ func New(config Config) *App {
 		ControlPlane: controlPlane,
 		Dependencies: dependencies,
 		runtime:      runtime,
+		earlyControl: migrationControl,
 	}
+	returned = true
+	return app
 }
 
 type mediaServices struct {
@@ -445,9 +450,36 @@ func (app *App) ListenAndServe() error {
 	if controlHandler == nil {
 		return listenAndServe(appServer)
 	}
+	if app.hasEarlyControlPlane(controlAddr) && !sameListenAddr(appAddr, controlAddr) {
+		return app.listenAndServeAppWithEarlyControl(appServer)
+	}
 
 	controlServer := app.newServer(controlAddr, controlHandler, false)
 	return listenAndServeBoth(appServer, controlServer)
+}
+
+func (app *App) hasEarlyControlPlane(controlAddr string) bool {
+	if app == nil || app.earlyControl == nil {
+		return false
+	}
+	return app.earlyControl.ActiveOn(controlAddr)
+}
+
+func (app *App) listenAndServeAppWithEarlyControl(appServer *http.Server) error {
+	err := listenAndServe(appServer)
+	if closeErr := app.closeEarlyControl(); err == nil {
+		err = closeErr
+	}
+	return err
+}
+
+func (app *App) closeEarlyControl() error {
+	if app == nil || app.earlyControl == nil {
+		return nil
+	}
+	control := app.earlyControl
+	app.earlyControl = nil
+	return control.Close()
 }
 
 func sameListenAddr(left, right string) bool {

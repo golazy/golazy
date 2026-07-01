@@ -12,7 +12,8 @@ Current packages:
 - `pgmedia`: PostgreSQL `lazymedia.Repository` plus embedded lazy media
   variant migrations.
 - `pgmigrate`: `lazymigrate.Backend` for PostgreSQL. Migrations use
-  `-- +lazy Up` and `-- +lazy Down` sections.
+  `-- +lazy Up` and `-- +lazy Down` sections, run under a PostgreSQL advisory
+  lock, and treat stale same-checksum concurrent steps as no-ops.
 - `pgjobs`: PostgreSQL `lazyjobs.Backend` plus embedded lazy job migrations.
 - `pgstorage`: PostgreSQL `lazystorage` backend for object reads, writes,
   deletes, and listing, including storage targets for `lazyassets.Upload`.

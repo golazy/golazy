@@ -76,6 +76,7 @@ func (backend *Backend) Run(ctx context.Context, step lazymigrate.Step) error {
 	if step.Migration.ID == "" {
 		return fmt.Errorf("pgmigrate: migration id is required")
 	}
+	migrationChecksum := checksum(step.Migration.Content)
 	parsed, err := parse(step.Migration.Content)
 	if err != nil {
 		return fmt.Errorf("pgmigrate: parse %s: %w", step.Migration.ID, err)
@@ -97,20 +98,28 @@ func (backend *Backend) Run(ctx context.Context, step lazymigrate.Step) error {
 
 	switch step.Direction {
 	case lazymigrate.DirectionUp:
-		if err := ensureNotApplied(ctx, tx, step.Migration.ID); err != nil {
+		shouldRun, err := shouldRunUp(ctx, tx, step.Migration.ID, migrationChecksum)
+		if err != nil {
 			return err
+		}
+		if !shouldRun {
+			return nil
 		}
 		if _, err := tx.Exec(ctx, sql); err != nil {
 			return fmt.Errorf("pgmigrate: run up %s: %w", step.Migration.ID, err)
 		}
 		if _, err := tx.Exec(ctx, `
 INSERT INTO lazy_migrations (id, checksum)
-VALUES ($1, $2)`, step.Migration.ID, checksum(step.Migration.Content)); err != nil {
+VALUES ($1, $2)`, step.Migration.ID, migrationChecksum); err != nil {
 			return fmt.Errorf("pgmigrate: record %s: %w", step.Migration.ID, err)
 		}
 	case lazymigrate.DirectionDown:
-		if err := ensureApplied(ctx, tx, step.Migration.ID); err != nil {
+		shouldRun, err := shouldRunDown(ctx, tx, step.Migration.ID, migrationChecksum)
+		if err != nil {
 			return err
+		}
+		if !shouldRun {
+			return nil
 		}
 		if _, err := tx.Exec(ctx, sql); err != nil {
 			return fmt.Errorf("pgmigrate: run down %s: %w", step.Migration.ID, err)
@@ -143,28 +152,48 @@ func (backend *Backend) validate() error {
 	return nil
 }
 
-func ensureNotApplied(ctx context.Context, tx pgx.Tx, id string) error {
-	var storedID string
-	err := tx.QueryRow(ctx, `SELECT id FROM lazy_migrations WHERE id = $1`, id).Scan(&storedID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil
-	}
+func shouldRunUp(ctx context.Context, tx pgx.Tx, id string, wantChecksum string) (bool, error) {
+	storedChecksum, applied, err := appliedChecksum(ctx, tx, id)
 	if err != nil {
-		return fmt.Errorf("pgmigrate: check %s: %w", id, err)
+		return false, err
 	}
-	return fmt.Errorf("pgmigrate: migration %s has already been applied", id)
+	if !applied {
+		return true, nil
+	}
+	if storedChecksum != wantChecksum {
+		return false, checksumMismatchError(id)
+	}
+	return false, nil
 }
 
-func ensureApplied(ctx context.Context, tx pgx.Tx, id string) error {
-	var storedID string
-	err := tx.QueryRow(ctx, `SELECT id FROM lazy_migrations WHERE id = $1`, id).Scan(&storedID)
+func shouldRunDown(ctx context.Context, tx pgx.Tx, id string, wantChecksum string) (bool, error) {
+	storedChecksum, applied, err := appliedChecksum(ctx, tx, id)
+	if err != nil {
+		return false, err
+	}
+	if !applied {
+		return false, nil
+	}
+	if storedChecksum != wantChecksum {
+		return false, checksumMismatchError(id)
+	}
+	return true, nil
+}
+
+func appliedChecksum(ctx context.Context, tx pgx.Tx, id string) (string, bool, error) {
+	var storedChecksum string
+	err := tx.QueryRow(ctx, `SELECT checksum FROM lazy_migrations WHERE id = $1`, id).Scan(&storedChecksum)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return fmt.Errorf("pgmigrate: migration %s has not been applied", id)
+		return "", false, nil
 	}
 	if err != nil {
-		return fmt.Errorf("pgmigrate: check %s: %w", id, err)
+		return "", false, fmt.Errorf("pgmigrate: check %s: %w", id, err)
 	}
-	return nil
+	return storedChecksum, true, nil
+}
+
+func checksumMismatchError(id string) error {
+	return fmt.Errorf("pgmigrate: migration %s has already been applied with a different checksum", id)
 }
 
 func checksum(content []byte) string {

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- `pgmigrate` now treats stale concurrent up/down steps for an already-applied
+  migration with the same checksum as successful no-ops, while still rejecting
+  the same migration ID when the stored checksum differs.
+
 ## [0.1.18] - 2026-06-30
 
 - Added `WithPool` and `FromContext` helpers for sharing an app-owned

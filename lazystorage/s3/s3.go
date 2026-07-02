@@ -10,6 +10,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/url"
 	"path"
@@ -138,6 +139,14 @@ func (s *Storage) Put(ctx context.Context, key string, body io.Reader, options .
 	contentType, remaining, _ := lazystorage.Take[lazystorage.ContentType](options)
 	cacheControl, remaining, _ := lazystorage.Take[lazystorage.CacheControl](remaining)
 	disposition, remaining, _ := lazystorage.Take[lazystorage.ContentDisposition](remaining)
+	_, remaining, ifAbsent := lazystorage.Take[lazystorage.IfAbsent](remaining)
+	ifETag, remaining, hasIfETag := lazystorage.Take[lazystorage.IfETag](remaining)
+	if ifAbsent && hasIfETag {
+		return lazystorage.Info{}, remaining, fmt.Errorf("lazystorage/s3: set either IfAbsent or IfETag, not both")
+	}
+	if hasIfETag && strings.TrimSpace(ifETag.Value) == "" {
+		return lazystorage.Info{}, remaining, fmt.Errorf("lazystorage/s3: IfETag value is required")
+	}
 
 	header := http.Header{}
 	if contentType.Value != "" {
@@ -148,6 +157,12 @@ func (s *Storage) Put(ctx context.Context, key string, body io.Reader, options .
 	}
 	if disposition.Value != "" {
 		header.Set("Content-Disposition", disposition.Value)
+	}
+	if ifAbsent {
+		header.Set("If-None-Match", "*")
+	}
+	if hasIfETag {
+		header.Set("If-Match", quoteETag(ifETag.Value))
 	}
 
 	req, err := s.newRequest(ctx, http.MethodPut, key, bytes.NewReader(data), header)
@@ -161,11 +176,15 @@ func (s *Storage) Put(ctx context.Context, key string, body io.Reader, options .
 	_ = resp.Body.Close()
 
 	hash := sha256.Sum256(data)
+	checksum := strings.Trim(resp.Header.Get("ETag"), `"`)
+	if checksum == "" {
+		checksum = "sha256:" + hex.EncodeToString(hash[:])
+	}
 	return lazystorage.Info{
 		Key:         key,
 		ContentType: contentType.Value,
 		Size:        int64(len(data)),
-		Checksum:    "sha256:" + hex.EncodeToString(hash[:]),
+		Checksum:    checksum,
 		ModifiedAt:  time.Now().UTC(),
 	}, remaining, nil
 }
@@ -330,6 +349,12 @@ func (s *Storage) do(req *http.Request, statuses ...int) (*http.Response, error)
 	}
 	defer resp.Body.Close()
 	data, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("lazystorage/s3: %s %s returned %s: %w", req.Method, req.URL.Path, resp.Status, fs.ErrNotExist)
+	}
+	if resp.StatusCode == http.StatusPreconditionFailed {
+		return nil, fmt.Errorf("lazystorage/s3: %s %s returned %s: %w", req.Method, req.URL.Path, resp.Status, lazystorage.ErrPreconditionFailed)
+	}
 	return nil, fmt.Errorf("lazystorage/s3: %s %s returned %s: %s", req.Method, req.URL.Path, resp.Status, strings.TrimSpace(string(data)))
 }
 
@@ -483,6 +508,14 @@ func copyHeader(dst, src http.Header) {
 			dst.Add(key, value)
 		}
 	}
+}
+
+func quoteETag(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "*" || strings.HasPrefix(value, `"`) || strings.HasPrefix(value, "W/") {
+		return value
+	}
+	return `"` + strings.Trim(value, `"`) + `"`
 }
 
 type objectFile struct {

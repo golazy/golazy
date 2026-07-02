@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"golazy.dev/lazyassets"
 	"golazy.dev/lazydeps"
 	"golazy.dev/lazyjobs"
 	"golazy.dev/lazyjobs/inmemoryjobs"
@@ -53,6 +54,38 @@ func TestAppInitializesMigrationsWithDependencyContext(t *testing.T) {
 	}
 	if runs := backend.Runs(); len(runs) != 0 {
 		t.Fatalf("runs = %d, want 0 without LAZYAPP_MIGRATE", len(runs))
+	}
+}
+
+func TestAppMigrationsReceiveAssetRegistryContext(t *testing.T) {
+	unsetenv(t, "LAZYAPP_MIGRATE", "CONTROL_PLANE_ADDR")
+	reloadEnvironmentForTest(t)
+	migrationsConfigured := false
+
+	app := New(Config{
+		Assets: []lazyassets.Source{
+			lazyassets.SourceFunc(func(registry *lazyassets.Registry) error {
+				return registry.Add("/generated.txt", []byte("ready"), lazyassets.ContentType("text/plain"))
+			}),
+		},
+		Migrations: func(ctx context.Context) (lazymigrate.Databases, error) {
+			registry, ok := lazyassets.FromContext(ctx)
+			if !ok {
+				return nil, fmt.Errorf("asset registry missing from migration context")
+			}
+			if _, err := registry.Path("/generated.txt"); err != nil {
+				return nil, err
+			}
+			migrationsConfigured = true
+			return nil, nil
+		},
+	})
+
+	if app.Assets == nil {
+		t.Fatal("app.Assets is nil")
+	}
+	if !migrationsConfigured {
+		t.Fatal("migrations were not configured")
 	}
 }
 

@@ -25,6 +25,15 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `lazymigrate.Databases` into the app binary. `LAZYAPP_MIGRATE=up` runs
   pending migrations and exits, while `LAZYAPP_MIGRATE=auto` runs them before
   jobs and normal app startup.
+- `golazy.dev/lazyassets/assetmigrate` can now expose registered app assets as
+  an opt-in `lazymigrate` backend for object-storage uploads keyed by build
+  version and asset manifest hash.
+- `lazystorage` backends can now support conditional writes with `IfAbsent`,
+  `IfETag`, and `ErrPreconditionFailed`; `lazystorage/s3` maps those to S3
+  precondition headers and errors.
+- `lazyapp.New` now places the app asset registry in context before dependency
+  and migration configuration, so migration backends can read it with
+  `lazyassets.FromContext`.
 
 ### Changed
 

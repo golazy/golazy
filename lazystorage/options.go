@@ -1,6 +1,13 @@
 package lazystorage
 
-import "time"
+import (
+	"errors"
+	"time"
+)
+
+// ErrPreconditionFailed reports that a conditional storage write did not match
+// the current object state.
+var ErrPreconditionFailed = errors.New("lazystorage: precondition failed")
 
 // ExpiresIn requests a URL or token that expires after Duration.
 type ExpiresIn struct {
@@ -30,6 +37,15 @@ type CacheControl struct {
 
 // ContentDisposition sets or requests a Content-Disposition policy.
 type ContentDisposition struct {
+	Value string
+}
+
+// IfAbsent requests that Put succeeds only when the object does not exist.
+type IfAbsent struct{}
+
+// IfETag requests that Put succeeds only when the current object ETag matches
+// Value.
+type IfETag struct {
 	Value string
 }
 

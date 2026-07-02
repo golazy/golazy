@@ -215,6 +215,7 @@ func New(config Config) *App {
 			panic(fmt.Errorf("register generated assets: %w", err))
 		}
 	}
+	ctx = lazyassets.WithRegistry(ctx, assets)
 
 	dependencies := lazydeps.New(ctx)
 	if config.Dependencies != nil {

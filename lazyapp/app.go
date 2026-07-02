@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"golazy.dev/lazyassets"
+	"golazy.dev/lazyauth"
 	"golazy.dev/lazybuildinfo"
 	"golazy.dev/lazycache"
 	"golazy.dev/lazycache/inmemorycache"
@@ -23,8 +24,10 @@ import (
 	"golazy.dev/lazyforms"
 	"golazy.dev/lazyjobs"
 	"golazy.dev/lazyjobs/inmemoryjobs"
+	"golazy.dev/lazymcp"
 	"golazy.dev/lazymedia"
 	"golazy.dev/lazymigrate"
+	"golazy.dev/lazyoauth"
 	"golazy.dev/lazypwa"
 	"golazy.dev/lazyroutes"
 	"golazy.dev/lazyseo"
@@ -62,6 +65,10 @@ type Config struct {
 	Sessions          lazysession.Config
 	Migrations        MigrationsConfig
 	Jobs              JobsConfig
+	Auth              AuthConfig
+	OAuth             OAuthConfig
+	MCP               MCPConfig
+	MCPOptions        lazymcp.Options
 	Workers           WorkersConfig
 	PWA               lazypwa.Config
 	ControlPlane      lazycontrolplane.Builder
@@ -82,6 +89,8 @@ type App struct {
 	Sessions     *lazysession.Manager
 	Migrations   lazymigrate.Databases
 	Jobs         *lazyjobs.JobRunner
+	OAuth        *lazyoauth.Server
+	MCP          *lazymcp.Scope
 	Workers      *lazyworkers.Registry
 	PWA          *lazypwa.App
 	ControlPlane *lazycontrolplane.ControlPlane
@@ -225,6 +234,30 @@ func New(config Config) *App {
 		ctx = dependencies.Context()
 	}
 
+	var configuredAuth lazyauth.Config
+	if config.Auth != nil {
+		auth, err := config.Auth(ctx)
+		if err != nil {
+			panic(fmt.Errorf("initialize auth: %w", err))
+		}
+		configuredAuth = auth
+	}
+
+	var oauthServer *lazyoauth.Server
+	if config.OAuth != nil {
+		oauthConfig, err := config.OAuth(ctx)
+		if err != nil {
+			panic(fmt.Errorf("initialize oauth: %w", err))
+		}
+		if oauthConfig.Auth.Authenticator == nil {
+			oauthConfig.Auth = configuredAuth
+		}
+		oauthServer, err = lazyoauth.New(oauthConfig)
+		if err != nil {
+			panic(fmt.Errorf("initialize oauth: %w", err))
+		}
+	}
+
 	var migrations lazymigrate.Databases
 	if config.Migrations != nil {
 		configuredMigrations, err := config.Migrations(ctx)
@@ -313,6 +346,17 @@ func New(config Config) *App {
 	for _, helpers := range config.Helpers {
 		renderer.AddHelpers(helpers)
 	}
+	var mcpScope *lazymcp.Scope
+	if config.MCP != nil {
+		options := config.MCPOptions
+		if options.Views == nil {
+			options.Views = mcpViews{views: renderer}
+		}
+		mcpScope = lazymcp.NewScope(options)
+		if err := config.MCP(ctx, mcpScope); err != nil {
+			panic(fmt.Errorf("initialize mcp: %w", err))
+		}
+	}
 	media := newMediaServices(config)
 	controlPlane = jobsControlPlane(controlPlane, jobs)
 	controlPlane = lazyDevControlPlane(controlPlane, renderer, router, assets, cache, dependencies, jobs, workers, pwa, runtime, media)
@@ -337,6 +381,9 @@ func New(config Config) *App {
 	}
 	if sessions != nil {
 		dispatcher.Use(sessions)
+	}
+	if mcpScope != nil && !mcpScope.Empty() {
+		dispatcher.Use(mcpMiddleware{oauth: oauthServer, mcp: mcpScope})
 	}
 	for _, middleware := range config.Middlewares {
 		dispatcher.Use(middleware)
@@ -367,6 +414,8 @@ func New(config Config) *App {
 		Sessions:     sessions,
 		Migrations:   migrations,
 		Jobs:         jobs,
+		OAuth:        oauthServer,
+		MCP:          mcpScope,
 		Workers:      workers,
 		PWA:          pwa,
 		ControlPlane: controlPlane,

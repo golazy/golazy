@@ -131,7 +131,7 @@ func (scope *Scope) listTools(ctx context.Context) any {
 				"inputSchema": inputSchema(spec.Fn),
 			}
 			if spec.UI.ResourceURI != "" {
-				tool["_meta"] = map[string]any{"ui.resourceUri": spec.UI.ResourceURI}
+				tool["_meta"] = map[string]any{"ui/resourceUri": spec.UI.ResourceURI}
 			}
 			tools = append(tools, tool)
 		}

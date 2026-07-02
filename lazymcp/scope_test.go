@@ -80,6 +80,10 @@ func TestScopeRegistersReflectedToolsAppsAndSkills(t *testing.T) {
 	if tool["name"] != "admin.user_count" {
 		t.Fatalf("tool name = %q", tool["name"])
 	}
+	meta := tool["_meta"].(map[string]any)
+	if meta["ui/resourceUri"] != "ui://admin/dashboard" {
+		t.Fatalf("tool ui resource = %q", meta["ui/resourceUri"])
+	}
 	if _, err := scope.readApp(ctx, "ui://admin/dashboard"); err != nil {
 		t.Fatal(err)
 	}

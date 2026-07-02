@@ -12,6 +12,8 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `golazy.dev/lazymcp` can register GoLazy MCP modules, serve MCP Streamable
   HTTP JSON-RPC at `/mcp`, expose reflected tools, resources, prompts, Skills
   over MCP resources, and MCP Apps `ui://` resources backed by app views.
+  UI-enabled tools advertise their app resource with the MCP Apps
+  `ui/resourceUri` metadata key.
 - `golazy.dev/lazyauth`, `golazy.dev/lazyoauth`, `golazy.dev/lazyjwt`, and
   `golazy.dev/lazylimit` add reusable authentication, OAuth, JWT, and generic
   rate-limit building blocks for MCP and non-MCP application surfaces.

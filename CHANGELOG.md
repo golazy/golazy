@@ -26,6 +26,13 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   pending migrations and exits, while `LAZYAPP_MIGRATE=auto` runs them before
   jobs and normal app startup.
 
+### Changed
+
+- `lazyroutes` now permanently redirects `GET` and `HEAD` requests from
+  trailing-slash route URLs to the same registered route without trailing
+  slashes, preserving query strings and leaving unknown paths, public assets,
+  and unsafe methods untouched.
+
 ## [0.1.18] - 2026-06-30
 
 ### Added

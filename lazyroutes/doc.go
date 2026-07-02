@@ -58,6 +58,11 @@
 // logical route path and the format is stored in context for
 // lazycontroller.FormatFromRequest.
 //
+// For readable routes, trailing slash requests are canonicalized before route
+// dispatch. GET and HEAD requests redirect permanently to the same route without
+// trailing slashes when that slashless path is registered; unknown paths,
+// public assets, and unsafe methods are left alone.
+//
 // The package can be used without lazyapp for small HTTP services, tests, or
 // custom application shells:
 //

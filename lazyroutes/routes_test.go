@@ -157,6 +157,95 @@ func TestScopeHandlesCollectionFormatSuffix(t *testing.T) {
 	}
 }
 
+func TestScopeRedirectsTrailingSlashForKnownGetRoute(t *testing.T) {
+	scope := New(context.Background())
+	called := false
+	scope.HandleFunc("GET", "/articles/{article_id}", func(w http.ResponseWriter, _ *http.Request) error {
+		called = true
+		w.WriteHeader(http.StatusOK)
+		return nil
+	})
+
+	response := httptest.NewRecorder()
+	scope.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/articles/42/?page=1", nil))
+	if response.Code != http.StatusMovedPermanently {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusMovedPermanently)
+	}
+	if got, want := response.Header().Get("Location"), "/articles/42?page=1"; got != want {
+		t.Fatalf("Location = %q, want %q", got, want)
+	}
+	if called {
+		t.Fatal("handler should not be called for redirect")
+	}
+}
+
+func TestScopeRedirectsTrailingSlashForKnownHeadRoute(t *testing.T) {
+	scope := New(context.Background())
+	scope.HandleFunc("GET", "/articles/{article_id}", func(w http.ResponseWriter, _ *http.Request) error {
+		w.WriteHeader(http.StatusOK)
+		return nil
+	})
+
+	response := httptest.NewRecorder()
+	scope.ServeHTTP(response, httptest.NewRequest(http.MethodHead, "/articles/42/", nil))
+	if response.Code != http.StatusMovedPermanently {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusMovedPermanently)
+	}
+	if got, want := response.Header().Get("Location"), "/articles/42"; got != want {
+		t.Fatalf("Location = %q, want %q", got, want)
+	}
+}
+
+func TestScopeRedirectsTrailingSlashAfterFormatSuffix(t *testing.T) {
+	scope := New(context.Background())
+	scope.HandleFunc("GET", "/articles/{article_id}", func(w http.ResponseWriter, _ *http.Request) error {
+		w.WriteHeader(http.StatusOK)
+		return nil
+	})
+
+	response := httptest.NewRecorder()
+	scope.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/articles/42.html/?page=1", nil))
+	if response.Code != http.StatusMovedPermanently {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusMovedPermanently)
+	}
+	if got, want := response.Header().Get("Location"), "/articles/42.html?page=1"; got != want {
+		t.Fatalf("Location = %q, want %q", got, want)
+	}
+}
+
+func TestScopeDoesNotRedirectTrailingSlashForUnknownOrWrongMethodRoute(t *testing.T) {
+	scope := New(context.Background())
+	scope.HandleFunc("GET", "/articles/{article_id}", func(w http.ResponseWriter, _ *http.Request) error {
+		w.WriteHeader(http.StatusOK)
+		return nil
+	})
+	scope.HandleFunc("POST", "/submissions", func(w http.ResponseWriter, _ *http.Request) error {
+		w.WriteHeader(http.StatusCreated)
+		return nil
+	})
+
+	for _, test := range []struct {
+		name   string
+		method string
+		path   string
+	}{
+		{name: "unknown path", method: http.MethodGet, path: "/missing/"},
+		{name: "wrong method", method: http.MethodGet, path: "/submissions/"},
+		{name: "unsafe method", method: http.MethodPost, path: "/submissions/"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			scope.ServeHTTP(response, httptest.NewRequest(test.method, test.path, nil))
+			if response.Code == http.StatusMovedPermanently {
+				t.Fatalf("status = %d, want no redirect", response.Code)
+			}
+			if got := response.Header().Get("Location"); got != "" {
+				t.Fatalf("Location = %q, want empty", got)
+			}
+		})
+	}
+}
+
 func TestScopeNamespacePrefixesPathNameAndRouteContext(t *testing.T) {
 	scope := New(context.Background())
 

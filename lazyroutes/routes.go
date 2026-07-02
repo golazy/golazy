@@ -113,6 +113,10 @@ func (s *Scope) HandlesPath(path string) bool {
 
 func (s *Scope) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	root := s.rootScope()
+	if target, ok := root.trailingSlashRedirectPath(r); ok {
+		http.Redirect(w, r, target, http.StatusMovedPermanently)
+		return
+	}
 	if strippedPath, format, ok := formatPath(r.URL.Path); ok && root.handlesPath(strippedPath) {
 		r = requestWithFormat(r, strippedPath, format)
 	}
@@ -127,6 +131,53 @@ func (s *Scope) handlesPath(path string) bool {
 		}
 	}
 	return false
+}
+
+func (s *Scope) handlesMethodPath(method string, path string) bool {
+	root := s.rootScope()
+	for _, route := range root.Routes {
+		if !routeMethodMatches(route.Method, method) {
+			continue
+		}
+		if routePathMatches(route.Path, path) {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Scope) recognizesMethodPath(method string, path string) bool {
+	if s.handlesMethodPath(method, path) {
+		return true
+	}
+	strippedPath, _, ok := formatPath(path)
+	return ok && s.handlesMethodPath(method, strippedPath)
+}
+
+func routeMethodMatches(routeMethod string, requestMethod string) bool {
+	routeMethod = strings.ToUpper(routeMethod)
+	requestMethod = strings.ToUpper(requestMethod)
+	return routeMethod == requestMethod || requestMethod == http.MethodHead && routeMethod == http.MethodGet
+}
+
+func (s *Scope) trailingSlashRedirectPath(r *http.Request) (string, bool) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		return "", false
+	}
+	if r.URL.Path == "/" || !strings.HasSuffix(r.URL.Path, "/") {
+		return "", false
+	}
+	target := strings.TrimRight(r.URL.Path, "/")
+	if target == "" {
+		return "", false
+	}
+	if !s.recognizesMethodPath(r.Method, target) {
+		return "", false
+	}
+	if r.URL.RawQuery != "" {
+		target += "?" + r.URL.RawQuery
+	}
+	return target, true
 }
 
 func formatPath(requestPath string) (string, lazycontroller.Format, bool) {

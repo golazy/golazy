@@ -2,7 +2,6 @@ package lazymigrate
 
 import (
 	"fmt"
-	"io/fs"
 	"sort"
 	"strings"
 )
@@ -10,23 +9,17 @@ import (
 // DB describes one logical database's migration backend and sources.
 type DB struct {
 	Backend Backend
-	Files   fs.FS
 	Sources []Source
 }
 
-// HasSources reports whether db has application files or package sources.
+// HasSources reports whether db has migration sources.
 func (db DB) HasSources() bool {
-	return db.Files != nil || len(db.Sources) > 0
+	return len(db.Sources) > 0
 }
 
-// SourcesFor returns the migration sources for database.
-func (db DB) SourcesFor(database string) []Source {
-	sources := make([]Source, 0, len(db.Sources)+1)
-	if db.Files != nil {
-		sources = append(sources, ForDatabase(db.Files, database))
-	}
-	sources = append(sources, db.Sources...)
-	return sources
+// SourcesFor returns a copy of db's migration sources.
+func (db DB) SourcesFor() []Source {
+	return append([]Source(nil), db.Sources...)
 }
 
 // Migrator returns a migrator for database.
@@ -37,7 +30,7 @@ func (db DB) Migrator(database string) (*Migrator, error) {
 	}
 	return New(Config{
 		Backend: db.Backend,
-		Sources: db.SourcesFor(database),
+		Sources: db.SourcesFor(),
 	})
 }
 

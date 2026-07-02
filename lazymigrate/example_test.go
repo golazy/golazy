@@ -12,7 +12,7 @@ import (
 func Example() {
 	ctx := context.Background()
 	files := fstest.MapFS{
-		"migrations/postgres/202606280001_create_documents.sql": {
+		"postgres/202606280001_create_documents.sql": {
 			Data: []byte("-- +lazy Up\nCREATE TABLE documents (id bigserial);\n-- +lazy Down\nDROP TABLE documents;\n"),
 		},
 	}
@@ -21,7 +21,7 @@ func Example() {
 	migrator, err := lazymigrate.New(lazymigrate.Config{
 		Backend: backend,
 		Sources: []lazymigrate.Source{
-			lazymigrate.ForDatabase(files, "postgres"),
+			lazymigrate.FromFS(files, "postgres"),
 		},
 	})
 	if err != nil {

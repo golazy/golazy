@@ -28,6 +28,9 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- `lazymigrate.DB` now uses one explicit `Sources` list for application and
+  package migrations. Use `lazymigrate.FromFS(files, "postgres")` to adapt an
+  embedded filesystem directory.
 - `lazyroutes` now permanently redirects `GET` and `HEAD` requests from
   trailing-slash route URLs to the same registered route without trailing
   slashes, preserving query strings and leaving unknown paths, public assets,

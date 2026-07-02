@@ -11,16 +11,18 @@ import (
 	"golazy.dev/lazymigrate/fakemigrator"
 )
 
-func TestDBMigratorCombinesFilesAndSources(t *testing.T) {
+func TestDBMigratorCombinesSources(t *testing.T) {
 	files := fstest.MapFS{
-		"migrations/postgres/202603010000_app.sql": {
+		"postgres/202603010000_app.sql": {
 			Data: []byte("app"),
 		},
 	}
 	db := lazymigrate.DB{
 		Backend: fakemigrator.New(),
-		Files:   files,
-		Sources: []lazymigrate.Source{source("202603020000_package")},
+		Sources: []lazymigrate.Source{
+			lazymigrate.FromFS(files, "postgres"),
+			source("202603020000_package"),
+		},
 	}
 
 	migrator, err := db.Migrator("postgres")

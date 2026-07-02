@@ -67,8 +67,14 @@ func (source FS) LoadMigrations(ctx context.Context) ([]Migration, error) {
 	return normalizeMigrations(migrations)
 }
 
+// FromFS returns a Source that loads direct migration files from dir in files.
+func FromFS(files fs.FS, dir string) FS {
+	return FS{Files: files, Dir: dir}
+}
+
+// ForDatabase returns a conventional app-root Source for migrations/database.
 func ForDatabase(files fs.FS, database string) FS {
-	return FS{Files: files, Dir: path.Join("migrations", database)}
+	return FromFS(files, path.Join("migrations", database))
 }
 
 func parseMigrationFile(migrationPath string, content []byte) (Migration, error) {

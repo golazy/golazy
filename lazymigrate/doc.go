@@ -10,14 +10,14 @@
 // processes so multiple app instances can start with migration mode enabled
 // without applying the same step twice or corrupting migration metadata.
 //
-// A Source returns migration files. FS reads direct children from a directory
-// in an fs.FS, skips nested directories and migrations.toml, rejects Go
-// migration files, and requires each filename to contain a sortable timestamp.
-// ForDatabase is the common layout helper for migrations/<database>, for
-// example migrations/postgres. File extensions are ignored for migration IDs:
-// 202606280001_create_documents.sql becomes ID
-// 202606280001_create_documents. Prefix and Timestamp are parsed only for
-// stable ordering; duplicate IDs across all loaded sources are rejected.
+// A Source returns migration files. FromFS adapts an fs.FS plus an explicit
+// directory, skips nested directories and migrations.toml, rejects Go migration
+// files, and requires each filename to contain a sortable timestamp. ForDatabase
+// is the conventional app-root helper for migrations/<database>, for example
+// migrations/postgres. File extensions are ignored for migration IDs:
+// 202606280001_create_documents.sql becomes ID 202606280001_create_documents.
+// Prefix and Timestamp are parsed only for stable ordering; duplicate IDs
+// across all loaded sources are rejected.
 //
 // Catalog is useful when an application combines its own migrations with
 // package-provided migrations. PostgreSQL service packages in golazy.dev/pg,
@@ -26,10 +26,9 @@
 // catalog as application migrations.
 //
 // DB and Databases describe the same source/backend relationship for lazyapp
-// integration. Each Databases entry is one logical database with its own
-// Backend, optional application migration files, and package Source values.
-// This keeps lazymigrate backend-agnostic while letting a conventional lazyapp
-// bundle the migrations needed by the application binary.
+// integration. Each Databases entry is one logical database with its own Backend
+// and Source values. This keeps lazymigrate backend-agnostic while letting a
+// conventional lazyapp bundle the migrations needed by the application binary.
 //
 // A Migrator is the planner and executor. List reports applied source
 // migrations, pending source migrations, and missing backend migrations.

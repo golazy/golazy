@@ -10,26 +10,26 @@ import (
 	"golazy.dev/lazymigrate"
 )
 
-func TestFSSourceLoadsAndSortsMigrations(t *testing.T) {
+func TestFromFSSourceLoadsAndSortsMigrations(t *testing.T) {
 	files := fstest.MapFS{
-		"migrations/postgres/migrations.toml": {
+		"postgres/migrations.toml": {
 			Data: []byte("[postgres]\n"),
 		},
-		"migrations/postgres/nested/202603030000_nested.sql": {
+		"postgres/nested/202603030000_nested.sql": {
 			Data: []byte("nested"),
 		},
-		"migrations/postgres/lazyjobs-20260302.sql": {
+		"postgres/lazyjobs-20260302.sql": {
 			Data: []byte("jobs"),
 		},
-		"migrations/postgres/202603010101_create_documents.sql": {
+		"postgres/202603010101_create_documents.sql": {
 			Data: []byte("documents"),
 		},
-		"migrations/postgres/lazyassets-20260302.sql": {
+		"postgres/lazyassets-20260302.sql": {
 			Data: []byte("assets"),
 		},
 	}
 
-	migrations, err := lazymigrate.ForDatabase(files, "postgres").LoadMigrations(context.Background())
+	migrations, err := lazymigrate.FromFS(files, "postgres").LoadMigrations(context.Background())
 	if err != nil {
 		t.Fatalf("LoadMigrations() error = %v", err)
 	}
@@ -45,8 +45,27 @@ func TestFSSourceLoadsAndSortsMigrations(t *testing.T) {
 	if migrations[1].Prefix != "lazyassets" || migrations[1].Timestamp != "20260302" {
 		t.Fatalf("parsed metadata = %#v", migrations[1])
 	}
-	if migrations[2].Path != "migrations/postgres/lazyjobs-20260302.sql" {
+	if migrations[2].Path != "postgres/lazyjobs-20260302.sql" {
 		t.Fatalf("path = %q", migrations[2].Path)
+	}
+}
+
+func TestForDatabaseReadsConventionalDirectory(t *testing.T) {
+	files := fstest.MapFS{
+		"migrations/postgres/202603010101_create_documents.sql": {
+			Data: []byte("documents"),
+		},
+	}
+
+	migrations, err := lazymigrate.ForDatabase(files, "postgres").LoadMigrations(context.Background())
+	if err != nil {
+		t.Fatalf("LoadMigrations() error = %v", err)
+	}
+	if got, want := ids(migrations), []string{"202603010101_create_documents"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("ids = %v, want %v", got, want)
+	}
+	if migrations[0].Path != "migrations/postgres/202603010101_create_documents.sql" {
+		t.Fatalf("path = %q", migrations[0].Path)
 	}
 }
 

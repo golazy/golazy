@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.19] - 2026-07-03
+
 - `pgmigrate` now treats stale concurrent up/down steps for an already-applied
   migration with the same checksum as successful no-ops, while still rejecting
   the same migration ID when the stored checksum differs.

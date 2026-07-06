@@ -52,7 +52,7 @@ func TestFromFSSourceLoadsAndSortsMigrations(t *testing.T) {
 
 func TestForDatabaseReadsConventionalDirectory(t *testing.T) {
 	files := fstest.MapFS{
-		"migrations/postgres/202603010101_create_documents.sql": {
+		"db/postgres/migrations/202603010101_create_documents.sql": {
 			Data: []byte("documents"),
 		},
 	}
@@ -64,16 +64,16 @@ func TestForDatabaseReadsConventionalDirectory(t *testing.T) {
 	if got, want := ids(migrations), []string{"202603010101_create_documents"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("ids = %v, want %v", got, want)
 	}
-	if migrations[0].Path != "migrations/postgres/202603010101_create_documents.sql" {
+	if migrations[0].Path != "db/postgres/migrations/202603010101_create_documents.sql" {
 		t.Fatalf("path = %q", migrations[0].Path)
 	}
 }
 
 func TestFSSourceRejectsDuplicateIDs(t *testing.T) {
 	files := fstest.MapFS{
-		"migrations/postgres/20260302.sql": {Data: []byte("sql")},
-		"migrations/postgres/20260302.txt": {Data: []byte("txt")},
-		"migrations/postgres/20260303.sql": {Data: []byte("other")},
+		"db/postgres/migrations/20260302.sql": {Data: []byte("sql")},
+		"db/postgres/migrations/20260302.txt": {Data: []byte("txt")},
+		"db/postgres/migrations/20260303.sql": {Data: []byte("other")},
 	}
 
 	_, err := lazymigrate.ForDatabase(files, "postgres").LoadMigrations(context.Background())
@@ -84,7 +84,7 @@ func TestFSSourceRejectsDuplicateIDs(t *testing.T) {
 
 func TestFSSourceRejectsMalformedFilenames(t *testing.T) {
 	files := fstest.MapFS{
-		"migrations/postgres/create_documents.sql": {Data: []byte("sql")},
+		"db/postgres/migrations/create_documents.sql": {Data: []byte("sql")},
 	}
 
 	_, err := lazymigrate.ForDatabase(files, "postgres").LoadMigrations(context.Background())

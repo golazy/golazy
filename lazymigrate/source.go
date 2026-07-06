@@ -72,9 +72,9 @@ func FromFS(files fs.FS, dir string) FS {
 	return FS{Files: files, Dir: dir}
 }
 
-// ForDatabase returns a conventional app-root Source for migrations/database.
+// ForDatabase returns a conventional app-root Source for db/database/migrations.
 func ForDatabase(files fs.FS, database string) FS {
-	return FromFS(files, path.Join("migrations", database))
+	return FromFS(files, path.Join("db", database, "migrations"))
 }
 
 func parseMigrationFile(migrationPath string, content []byte) (Migration, error) {

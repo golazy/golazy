@@ -13,8 +13,8 @@
 // A Source returns migration files. FromFS adapts an fs.FS plus an explicit
 // directory, skips nested directories and migrations.toml, rejects Go migration
 // files, and requires each filename to contain a sortable timestamp. ForDatabase
-// is the conventional app-root helper for migrations/<database>, for example
-// migrations/postgres. File extensions are ignored for migration IDs:
+// is the conventional app-root helper for db/<database>/migrations, for example
+// db/postgres/migrations. File extensions are ignored for migration IDs:
 // 202606280001_create_documents.sql becomes ID 202606280001_create_documents.
 // Prefix and Timestamp are parsed only for stable ordering; duplicate IDs
 // across all loaded sources are rejected.

@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Added `pgauth`, a PostgreSQL `lazyauth.Authenticator` with embedded user
+  table migrations and helper methods for creating password-backed users.
+
 ## [0.1.19] - 2026-07-03
 
 - `pgmigrate` now treats stale concurrent up/down steps for an already-applied

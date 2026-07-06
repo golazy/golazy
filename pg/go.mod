@@ -5,6 +5,7 @@ go 1.26.2
 require (
 	github.com/fergusstrange/embedded-postgres v1.33.0
 	github.com/jackc/pgx/v5 v5.9.2
+	golazy.dev v0.1.19
 )
 
 require (

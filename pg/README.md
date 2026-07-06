@@ -7,6 +7,8 @@ packages. The module keeps PostgreSQL driver dependencies out of the core
 Current packages:
 
 - `pg`: shared `pgxpool` connection and app-context helpers.
+- `pgauth`: PostgreSQL `lazyauth.Authenticator` plus embedded auth user
+  migrations.
 - `pgfiles`: PostgreSQL `lazyfiles.Repository` plus embedded lazy file
   catalog migrations.
 - `pgmedia`: PostgreSQL `lazymedia.Repository` plus embedded lazy media
@@ -31,4 +33,6 @@ PostgreSQL version.
 
 Applications that open a pool during GoLazy dependency initialization can add
 it to the app context with `pg.WithPool(ctx, pool)` and read it later with
-`pg.FromContext(ctx)`.
+`pg.FromContext(ctx)`. Package migrations such as `pgauth.Migrations()` should
+be registered beside app-owned migrations before the corresponding backend is
+used.

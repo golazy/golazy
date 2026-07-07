@@ -232,10 +232,11 @@ func TestLazyDevControlPlaneServesDependencies(t *testing.T) {
 	wantEdges := []lazydeps.Edge{
 		{From: "app", To: "db"},
 		{From: "app", To: "posts"},
+		{From: "app", To: "telemetry"},
 		{From: "posts", To: "db"},
 	}
-	if strings.Join(graph.Nodes, ",") != "app,db,posts" {
-		t.Fatalf("nodes = %#v, want app,db,posts", graph.Nodes)
+	if strings.Join(graph.Nodes, ",") != "app,db,posts,telemetry" {
+		t.Fatalf("nodes = %#v, want app,db,posts,telemetry", graph.Nodes)
 	}
 	if len(graph.Edges) != len(wantEdges) {
 		t.Fatalf("edges = %#v, want %#v", graph.Edges, wantEdges)

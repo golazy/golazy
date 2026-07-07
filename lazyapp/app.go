@@ -7,8 +7,12 @@ import (
 	"io/fs"
 	"net"
 	"net/http"
+	"os"
+	"os/signal"
 	"sort"
 	"strings"
+	"syscall"
+	"time"
 
 	"golazy.dev/lazyassets"
 	"golazy.dev/lazyauth"
@@ -33,14 +37,14 @@ import (
 	"golazy.dev/lazyseo"
 	"golazy.dev/lazysession"
 	"golazy.dev/lazystorage"
-	"golazy.dev/lazytelemetry"
-	"golazy.dev/lazytelemetry/lazymetrics"
 	"golazy.dev/lazyturbo"
 	_ "golazy.dev/lazyview/gotmpl"
 	"golazy.dev/lazyworkers"
 )
 
 type Helpers []map[string]any
+
+const appShutdownTimeout = 10 * time.Second
 
 // WorkersConfig registers browser workers with the dependency-initialized app
 // context.
@@ -129,8 +133,6 @@ func MustSub(fsys fs.FS, dir string) func() (fs.FS, error) {
 func New(config Config) *App {
 	ctx := context.Background()
 	ctx = lazycache.WithBuildVersion(ctx, appBuildVersion())
-	telemetryConfig := lazytelemetry.MustLoadConfig()
-	telemetryRegistry := lazymetrics.NewRegistry()
 	runtime := newRuntimeState()
 	migrationMode, err := configuredMigrationMode()
 	if err != nil {
@@ -227,6 +229,11 @@ func New(config Config) *App {
 	ctx = lazyassets.WithRegistry(ctx, assets)
 
 	dependencies := lazydeps.New(ctx)
+	telemetry, err := initializeTelemetry(dependencies)
+	if err != nil {
+		panic(fmt.Errorf("initialize telemetry: %w", err))
+	}
+	ctx = dependencies.Context()
 	if config.Dependencies != nil {
 		if err := config.Dependencies(dependencies); err != nil {
 			panic(fmt.Errorf("initialize dependencies: %w", err))
@@ -360,14 +367,14 @@ func New(config Config) *App {
 	media := newMediaServices(config)
 	controlPlane = jobsControlPlane(controlPlane, jobs)
 	controlPlane = lazyDevControlPlane(controlPlane, renderer, router, assets, cache, dependencies, jobs, workers, pwa, runtime, media)
-	controlPlane = telemetryControlPlane(controlPlane, telemetryConfig, telemetryRegistry, cache)
+	controlPlane = telemetryControlPlane(controlPlane, telemetry, cache)
 	if err := renderer.Cache(); err != nil {
 		panic(fmt.Errorf("cache views: %w", err))
 	}
 
 	dispatcher := lazydispatch.NewDispatcher()
-	if telemetryMiddlewareEnabled(telemetryConfig) {
-		dispatcher.Use(lazytelemetry.MiddlewareFromConfig(telemetryConfig, lazytelemetry.WithMetricsRegistry(telemetryRegistry)))
+	if telemetryMiddlewareEnabled(telemetry.Config()) {
+		dispatcher.Use(telemetry.Middleware())
 	}
 	dispatcher.Use(lazydispatch.RouteOnly(
 		router,
@@ -498,14 +505,14 @@ func (app *App) ListenAndServe() error {
 	appHandler, controlHandler := app.handlersForListen(appAddr, controlAddr, controlAddrSet)
 	appServer := app.newServer(appAddr, appHandler, true)
 	if controlHandler == nil {
-		return listenAndServe(appServer)
+		return app.listenAndShutdown(appServer)
 	}
 	if app.hasEarlyControlPlane(controlAddr) && !sameListenAddr(appAddr, controlAddr) {
 		return app.listenAndServeAppWithEarlyControl(appServer)
 	}
 
 	controlServer := app.newServer(controlAddr, controlHandler, false)
-	return listenAndServeBoth(appServer, controlServer)
+	return app.listenAndShutdown(appServer, controlServer)
 }
 
 func (app *App) hasEarlyControlPlane(controlAddr string) bool {
@@ -516,11 +523,31 @@ func (app *App) hasEarlyControlPlane(controlAddr string) bool {
 }
 
 func (app *App) listenAndServeAppWithEarlyControl(appServer *http.Server) error {
-	err := listenAndServe(appServer)
-	if closeErr := app.closeEarlyControl(); err == nil {
-		err = closeErr
+	err := listenAndServeServers(appServer)
+	if closeErr := app.closeEarlyControl(); closeErr != nil {
+		err = errors.Join(err, closeErr)
+	}
+	if shutdownErr := app.shutdownDependencies("listen-and-serve stopped"); shutdownErr != nil {
+		err = errors.Join(err, shutdownErr)
 	}
 	return err
+}
+
+func (app *App) listenAndShutdown(servers ...*http.Server) error {
+	err := listenAndServeServers(servers...)
+	if shutdownErr := app.shutdownDependencies("listen-and-serve stopped"); shutdownErr != nil {
+		err = errors.Join(err, shutdownErr)
+	}
+	return err
+}
+
+func (app *App) shutdownDependencies(reason string) error {
+	if app == nil || app.Dependencies == nil {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), appShutdownTimeout)
+	defer cancel()
+	return app.Dependencies.Shutdown(ctx, reason)
 }
 
 func (app *App) closeEarlyControl() error {
@@ -628,19 +655,58 @@ func listenAndServe(server *http.Server) error {
 }
 
 func listenAndServeBoth(appServer *http.Server, controlServer *http.Server) error {
-	errs := make(chan error, 2)
-	go func() {
-		errs <- listenAndServe(controlServer)
-	}()
-	go func() {
-		errs <- listenAndServe(appServer)
-	}()
+	return listenAndServeServers(appServer, controlServer)
+}
 
-	err := <-errs
-	_ = appServer.Close()
-	_ = controlServer.Close()
-	if secondErr := <-errs; err == nil {
-		err = secondErr
+func listenAndServeServers(servers ...*http.Server) error {
+	if len(servers) == 0 {
+		return nil
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	errs := make(chan error, len(servers))
+	for _, server := range servers {
+		go func(server *http.Server) {
+			errs <- listenAndServe(server)
+		}(server)
+	}
+
+	select {
+	case <-ctx.Done():
+		stop()
+		err := shutdownServers(servers...)
+		for range servers {
+			if serveErr := <-errs; serveErr != nil {
+				err = errors.Join(err, serveErr)
+			}
+		}
+		return err
+	case err := <-errs:
+		for _, server := range servers {
+			_ = server.Close()
+		}
+		for index := 1; index < len(servers); index++ {
+			if serveErr := <-errs; serveErr != nil {
+				err = errors.Join(err, serveErr)
+			}
+		}
+		return err
+	}
+}
+
+func shutdownServers(servers ...*http.Server) error {
+	ctx, cancel := context.WithTimeout(context.Background(), appShutdownTimeout)
+	defer cancel()
+
+	var err error
+	for _, server := range servers {
+		if server == nil {
+			continue
+		}
+		if shutdownErr := server.Shutdown(ctx); shutdownErr != nil && !errors.Is(shutdownErr, http.ErrServerClosed) {
+			err = errors.Join(err, shutdownErr)
+		}
 	}
 	return err
 }

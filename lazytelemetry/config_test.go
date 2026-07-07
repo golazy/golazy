@@ -182,6 +182,44 @@ func TestConfigPrometheusMetrics(t *testing.T) {
 	}
 }
 
+func TestConfigTraceExportEnabled(t *testing.T) {
+	tests := []struct {
+		name   string
+		config Config
+		want   bool
+	}{
+		{name: "empty", config: Config{}, want: false},
+		{name: "sdk disabled", config: Config{SDKDisabled: true, TracesExporter: []string{"otlp"}}, want: false},
+		{name: "service name only", config: Config{ServiceName: "sample"}, want: false},
+		{name: "traces exporter", config: Config{TracesExporter: []string{"otlp"}}, want: true},
+		{name: "console traces exporter", config: Config{TracesExporter: []string{"console"}}, want: true},
+		{name: "none traces exporter", config: Config{TracesExporter: []string{"none"}}, want: false},
+		{name: "none traces exporter overrides endpoint", config: Config{
+			TracesExporter: []string{"none"},
+			Exporter: ExporterConfig{OTLP: OTLPExporterConfig{
+				TracesEndpoint: "http://tempo:4318/v1/traces",
+			}},
+		}, want: false},
+		{name: "global otlp endpoint", config: Config{Exporter: ExporterConfig{OTLP: OTLPExporterConfig{
+			Endpoint: "http://collector:4318",
+		}}}, want: true},
+		{name: "traces otlp endpoint", config: Config{Exporter: ExporterConfig{OTLP: OTLPExporterConfig{
+			TracesEndpoint: "http://tempo:4318/v1/traces",
+		}}}, want: true},
+		{name: "logs otlp endpoint", config: Config{Exporter: ExporterConfig{OTLP: OTLPExporterConfig{
+			LogsEndpoint: "http://collector:4318/v1/logs",
+		}}}, want: false},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := test.config.traceExportEnabled(); got != test.want {
+				t.Fatalf("traceExportEnabled = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
 func stringSlicesEqual(left, right []string) bool {
 	if len(left) != len(right) {
 		return false

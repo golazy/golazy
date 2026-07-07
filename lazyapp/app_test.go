@@ -25,6 +25,7 @@ import (
 	"golazy.dev/lazyroutes"
 	"golazy.dev/lazyseo"
 	"golazy.dev/lazysession"
+	"golazy.dev/lazytelemetry"
 	_ "golazy.dev/lazyview/gotmpl"
 )
 
@@ -106,12 +107,50 @@ func TestAppInitializesJobsWithDependencyContext(t *testing.T) {
 	}
 }
 
+func TestAppRegistersTelemetryDependency(t *testing.T) {
+	t.Setenv("OTEL_SERVICE_NAME", "sample")
+
+	app := New(Config{Name: "test"})
+	telemetry, ok := lazytelemetry.FromContext(app.Context)
+	if !ok {
+		t.Fatal("telemetry missing from app context")
+	}
+	if telemetry.Config().ServiceName != "sample" {
+		t.Fatalf("telemetry service name = %q, want sample", telemetry.Config().ServiceName)
+	}
+	graph := app.Dependencies.Graph()
+	if !graphHasNode(graph, "telemetry") {
+		t.Fatalf("dependencies nodes = %#v, want telemetry", graph.Nodes)
+	}
+	if !graphHasEdge(graph, lazydeps.Edge{From: "app", To: "telemetry"}) {
+		t.Fatalf("dependencies edges = %#v, want app -> telemetry", graph.Edges)
+	}
+}
+
 func testPublicFS(t *testing.T, files map[string]string) func() (fs.FS, error) {
 	t.Helper()
 	configureLazyDevPublicForTest(t, files)
 	return func() (fs.FS, error) {
 		return testMapFS(files), nil
 	}
+}
+
+func graphHasNode(graph lazydeps.Graph, name string) bool {
+	for _, node := range graph.Nodes {
+		if node == name {
+			return true
+		}
+	}
+	return false
+}
+
+func graphHasEdge(graph lazydeps.Graph, edge lazydeps.Edge) bool {
+	for _, got := range graph.Edges {
+		if got == edge {
+			return true
+		}
+	}
+	return false
 }
 
 func testMapFS(files map[string]string) fstest.MapFS {

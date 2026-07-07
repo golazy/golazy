@@ -212,6 +212,15 @@ func hasEnabledExporter(exporters []string) bool {
 	return false
 }
 
+func hasConfiguredExporter(exporters []string) bool {
+	for _, exporter := range exporters {
+		if strings.TrimSpace(exporter) != "" {
+			return true
+		}
+	}
+	return false
+}
+
 // PrometheusMetrics reports whether the Prometheus metrics exporter is enabled.
 func (config Config) PrometheusMetrics() bool {
 	if config.SDKDisabled {
@@ -223,6 +232,16 @@ func (config Config) PrometheusMetrics() bool {
 		}
 	}
 	return false
+}
+
+func (config Config) traceExportEnabled() bool {
+	if config.SDKDisabled {
+		return false
+	}
+	if hasConfiguredExporter(config.TracesExporter) {
+		return hasEnabledExporter(config.TracesExporter)
+	}
+	return config.Exporter.OTLP.tracesConfigured()
 }
 
 func (config Config) captureRequestFiles() bool {
@@ -313,6 +332,28 @@ func (config OTLPExporterConfig) configured() bool {
 		config.LogsProtocol != "" ||
 		config.SpanInsecure ||
 		config.MetricInsecure
+}
+
+func (config OTLPExporterConfig) tracesConfigured() bool {
+	return config.Endpoint != "" ||
+		config.TracesEndpoint != "" ||
+		config.Insecure ||
+		config.TracesInsecure ||
+		config.Certificate != "" ||
+		config.TracesCertificate != "" ||
+		config.ClientKey != "" ||
+		config.TracesClientKey != "" ||
+		config.ClientCertificate != "" ||
+		config.TracesClientCertificate != "" ||
+		config.Headers != "" ||
+		config.TracesHeaders != "" ||
+		config.Compression != "" ||
+		config.TracesCompression != "" ||
+		config.Timeout != 0 ||
+		config.TracesTimeout != 0 ||
+		config.Protocol != "" ||
+		config.TracesProtocol != "" ||
+		config.SpanInsecure
 }
 
 func (config ZipkinExporterConfig) configured() bool {

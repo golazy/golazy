@@ -7,6 +7,21 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `lazyapp.New` now creates a `lazytelemetry.Telemetry` instance from standard
+  `OTEL_*` environment variables, registers it in the `lazydeps` lifecycle,
+  exposes it through app context, and initializes the OpenTelemetry trace SDK
+  through `go.opentelemetry.io/contrib/exporters/autoexport` when trace export
+  is configured. Tempo export uses the standard OTLP trace endpoint and does
+  not require a GoLazy-specific exporter.
+
+### Changed
+
+- `lazyapp.ListenAndServe` now shuts down dependency lifecycle services when
+  the HTTP server exits or receives SIGINT/SIGTERM, allowing telemetry
+  exporters and app services to flush before process exit.
+
 ## [0.1.19] - 2026-07-03
 
 ### Added

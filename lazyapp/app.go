@@ -120,6 +120,8 @@ func (middleware assetsMiddleware) Handler(next http.Handler) http.Handler {
 
 var afterDraw = func(*lazyroutes.Scope) {}
 
+const defaultCacheMaxSizeBytes int64 = 50 * 1024 * 1024
+
 func MustSub(fsys fs.FS, dir string) func() (fs.FS, error) {
 	sub, err := fs.Sub(fsys, dir)
 	if err != nil {
@@ -157,7 +159,7 @@ func New(config Config) *App {
 	}()
 	cacheOptions := config.Cache
 	if cacheOptions.Backend == nil {
-		backend, err := inmemorycache.New(inmemorycache.Options{})
+		backend, err := inmemorycache.New(inmemorycache.Options{MaxSizeBytes: defaultCacheMaxSizeBytes})
 		if err != nil {
 			panic(fmt.Errorf("initialize cache backend: %w", err))
 		}

@@ -332,6 +332,9 @@ func TestAppInitializesDefaultCache(t *testing.T) {
 	if !ok || cache != app.Cache {
 		t.Fatalf("context cache = %#v, %v; want app cache", cache, ok)
 	}
+	if got := app.Cache.Stats().MaxSizeBytes; got != defaultCacheMaxSizeBytes {
+		t.Fatalf("default cache MaxSizeBytes = %d, want %d", got, defaultCacheMaxSizeBytes)
+	}
 	if err := app.Cache.Set("Ada", "user", 1); err != nil {
 		t.Fatal(err)
 	}

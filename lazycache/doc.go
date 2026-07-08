@@ -16,11 +16,11 @@
 // without making every backend support that view.
 //
 // lazyapp is the usual integration point for a GoLazy app. When an application
-// does not configure another backend, lazyapp creates the default
-// lazycache/inmemorycache backend, wraps it with this package, stores the cache
-// on the application context with WithCache, and wires the view cache helpers
-// that read it back with FromContext. The cache package stays backend-agnostic;
-// the default backend choice belongs to lazyapp.
+// does not configure another backend, lazyapp creates a lazycache/inmemorycache
+// backend capped at 50 MiB, wraps it with this package, stores the cache on the
+// application context with WithCache, and wires the view cache helpers that
+// read it back with FromContext. The cache package stays backend-agnostic; the
+// default backend choice belongs to lazyapp.
 //
 // The in-memory backend is process-local and supports LRU eviction by entry
 // count, approximate cached content bytes, or both. Use

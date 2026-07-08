@@ -21,6 +21,8 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- `lazyapp.New` now caps its default in-memory cache backend at 50 MiB when an
+  application does not provide `lazyapp.Config.Cache.Backend`.
 - `lazyapp.ListenAndServe` now shuts down dependency lifecycle services when
   the HTTP server exits or receives SIGINT/SIGTERM, allowing telemetry
   exporters and app services to flush before process exit.

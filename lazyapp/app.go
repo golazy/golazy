@@ -159,7 +159,7 @@ func New(config Config) *App {
 	}()
 	cacheOptions := config.Cache
 	if cacheOptions.Backend == nil {
-		backend, err := inmemorycache.New(inmemorycache.Options{MaxSizeBytes: defaultCacheMaxSizeBytes})
+		backend, err := inmemorycache.New(inmemorycache.Options{MaxSizeBytes: defaultCacheMaxSizeBytesFromEnvironment()})
 		if err != nil {
 			panic(fmt.Errorf("initialize cache backend: %w", err))
 		}
@@ -747,4 +747,11 @@ func isSessionNameRune(r rune) bool {
 		('0' <= r && r <= '9') ||
 		('A' <= r && r <= 'Z') ||
 		('a' <= r && r <= 'z')
+}
+
+func defaultCacheMaxSizeBytesFromEnvironment() int64 {
+	if environment.LazyappCacheSize > 0 {
+		return int64(environment.LazyappCacheSize)
+	}
+	return defaultCacheMaxSizeBytes
 }

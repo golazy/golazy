@@ -15,7 +15,7 @@ import (
 
 	"golazy.dev/lazyassets"
 	"golazy.dev/lazycache"
-	"golazy.dev/lazyconfig"
+	"golazy.dev/lazycache/inmemorycache"
 	"golazy.dev/lazycontroller"
 	"golazy.dev/lazycontrolplane"
 	"golazy.dev/lazydeps"
@@ -344,6 +344,59 @@ func TestAppInitializesDefaultCache(t *testing.T) {
 	}
 	if value != "Ada" {
 		t.Fatalf("cache value = %q, want Ada", value)
+	}
+}
+
+func TestAppDefaultCacheSizeFromEnv(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+		want int64
+	}{
+		{name: "bytes", raw: "16", want: 16},
+		{name: "kilobytes", raw: "500Kb", want: 500 * 1024},
+		{name: "megabytes", raw: "50Mb", want: 50 * 1024 * 1024},
+		{name: "gigabytes", raw: "2Gb", want: 2 * 1024 * 1024 * 1024},
+		{name: "case insensitive", raw: "3mB", want: 3 * 1024 * 1024},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("LAZYAPP_CACHE_SIZE", tt.raw)
+			reloadEnvironmentForTest(t)
+
+			app := New(Config{})
+
+			if got := app.Cache.Stats().MaxSizeBytes; got != tt.want {
+				t.Fatalf("default cache MaxSizeBytes = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestAppDefaultCacheSizeEnvDoesNotReplaceConfiguredBackend(t *testing.T) {
+	t.Setenv("LAZYAPP_CACHE_SIZE", "50Mb")
+	reloadEnvironmentForTest(t)
+	backend, err := inmemorycache.New(inmemorycache.Options{MaxSizeBytes: 7})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	app := New(Config{
+		Cache: lazycache.Options{Backend: backend},
+	})
+
+	if got := app.Cache.Stats().MaxSizeBytes; got != 7 {
+		t.Fatalf("configured cache MaxSizeBytes = %d, want 7", got)
+	}
+}
+
+func TestParseCacheSizeBytesRejectsInvalidValues(t *testing.T) {
+	for _, raw := range []string{"0", "-1", "1Tb", "Mb"} {
+		t.Run(raw, func(t *testing.T) {
+			if _, err := parseCacheSizeBytes(raw); err == nil {
+				t.Fatalf("parseCacheSizeBytes(%q) err = nil, want error", raw)
+			}
+		})
 	}
 }
 
@@ -1044,12 +1097,7 @@ func unsetOTELForTest(t *testing.T) {
 func reloadEnvironmentForTest(t *testing.T) {
 	t.Helper()
 	oldEnvironment := environment
-	environment = lazyconfig.MustGetenv[struct {
-		Addr             string `default:"127.0.0.1:3000"`
-		Port             int    `default:"0"`
-		ControlPlaneAddr string
-		LazyappMigrate   string `var:"LAZYAPP_MIGRATE"`
-	}]()
+	environment = loadEnvironment()
 	t.Cleanup(func() {
 		environment = oldEnvironment
 	})

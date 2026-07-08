@@ -8,12 +8,19 @@ import (
 
 const defaultListenAddr = "127.0.0.1:3000"
 
-var environment = lazyconfig.MustGetenv[struct {
+type environmentConfig struct {
 	Addr             string `default:"127.0.0.1:3000"`
 	Port             int    `default:"0"`
 	ControlPlaneAddr string
-	LazyappMigrate   string `var:"LAZYAPP_MIGRATE"`
-}]()
+	LazyappMigrate   string         `var:"LAZYAPP_MIGRATE"`
+	LazyappCacheSize cacheSizeBytes `var:"LAZYAPP_CACHE_SIZE"`
+}
+
+var environment = loadEnvironment()
+
+func loadEnvironment() environmentConfig {
+	return lazyconfig.MustGetenv[environmentConfig]()
+}
 
 func listenAddr() string {
 	normalizedAddr := normalizeListenAddr(environment.Addr)

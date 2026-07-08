@@ -12,6 +12,9 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `golazy.dev/lazycache/inmemorycache` now supports
   `Options.MaxSizeBytes` for LRU eviction by approximate cached content bytes,
   and cache stats plus Prometheus metrics expose the configured byte ceiling.
+- `lazyapp.New` reads `LAZYAPP_CACHE_SIZE` when it creates the default
+  in-memory cache backend. Values may be bare bytes or use case-insensitive
+  `Kb`, `Mb`, or `Gb` units.
 - `lazyapp.New` now creates a `lazytelemetry.Telemetry` instance from standard
   `OTEL_*` environment variables, registers it in the `lazydeps` lifecycle,
   exposes it through app context, and initializes the OpenTelemetry trace SDK
@@ -22,7 +25,8 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - `lazyapp.New` now caps its default in-memory cache backend at 50 MiB when an
-  application does not provide `lazyapp.Config.Cache.Backend`.
+  application does not provide `lazyapp.Config.Cache.Backend` or
+  `LAZYAPP_CACHE_SIZE`.
 - Request metrics now populate the existing `route` label from the matched
   route pattern. `http_server_request_duration_seconds` also includes
   `controller` and `action` labels for matched controller routes, while

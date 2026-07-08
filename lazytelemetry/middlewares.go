@@ -69,7 +69,7 @@ func MiddlewareFromConfig(config Config, options ...MiddlewareOption) lazydispat
 		middleware.registry = lazymetrics.NewRegistry()
 	}
 	middleware.requestsTotal = middleware.registry.NewCounter("http_server_requests_total", "method", "route", "status_class")
-	middleware.requestDuration = middleware.registry.NewHistogram("http_server_request_duration_seconds", "method", "route", "status_class")
+	middleware.requestDuration = middleware.registry.NewHistogram("http_server_request_duration_seconds", "method", "route", "status_class", "controller", "action")
 	meter := otel.Meter("golazy.dev/lazytelemetry")
 	middleware.otelRequestsTotal, _ = meter.Int64Counter("http.server.requests",
 		otelmetric.WithUnit("{request}"),
@@ -118,9 +118,11 @@ func (middleware *middleware) Handler(next http.Handler) http.Handler {
 			slog.String("method", r.Method),
 			slog.String("path", r.URL.Path),
 		)
-		ctx = lazymetrics.WithLabels(ctx, lazymetrics.Labels{
-			"method": r.Method,
-			"route":  "unknown",
+		ctx = lazymetrics.WithRequestLabels(ctx, lazymetrics.Labels{
+			"method":     r.Method,
+			"route":      "unknown",
+			"controller": "unknown",
+			"action":     "unknown",
 		})
 		if traceContext, ok := lazytracing.ParseTraceparent(r.Header.Get("traceparent"), r.Header.Get("tracestate")); ok {
 			ctx = lazytracing.WithTraceContext(ctx, traceContext)
@@ -207,20 +209,26 @@ func (middleware *middleware) captureEnabled() bool {
 }
 
 func requestMetricAttributes(labels lazymetrics.Labels, status int) []attribute.KeyValue {
-	route := strings.TrimSpace(labels["route"])
-	if route == "" {
-		route = "unknown"
-	}
-	method := strings.TrimSpace(labels["method"])
-	if method == "" {
-		method = "UNKNOWN"
-	}
+	route := requestMetricLabel(labels, "route", "unknown")
+	method := requestMetricLabel(labels, "method", "UNKNOWN")
+	controller := requestMetricLabel(labels, "controller", "unknown")
+	action := requestMetricLabel(labels, "action", "unknown")
 	return []attribute.KeyValue{
 		attribute.String("http.request.method", method),
 		attribute.String("http.route", route),
+		attribute.String("controller", controller),
+		attribute.String("action", action),
 		attribute.Int("http.response.status_code", status),
 		attribute.String("http.response.status_class", statusClass(status)),
 	}
+}
+
+func requestMetricLabel(labels lazymetrics.Labels, name string, fallback string) string {
+	value := strings.TrimSpace(labels[name])
+	if value == "" {
+		return fallback
+	}
+	return value
 }
 
 func requestIDFromHeaders(header http.Header) string {

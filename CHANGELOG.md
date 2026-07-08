@@ -23,6 +23,10 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - `lazyapp.New` now caps its default in-memory cache backend at 50 MiB when an
   application does not provide `lazyapp.Config.Cache.Backend`.
+- Request metrics now populate the existing `route` label from the matched
+  route pattern. `http_server_request_duration_seconds` also includes
+  `controller` and `action` labels for matched controller routes, while
+  non-controller or unmatched requests use `unknown`.
 - `lazyapp.ListenAndServe` now shuts down dependency lifecycle services when
   the HTTP server exits or receives SIGINT/SIGTERM, allowing telemetry
   exporters and app services to flush before process exit.

@@ -80,6 +80,31 @@ func TestWithLabelsMergesContextLabels(t *testing.T) {
 	}
 }
 
+func TestWithRequestLabelsSharesDescendantUpdates(t *testing.T) {
+	ctx := WithRequestLabels(context.Background(), Labels{
+		"method": "GET",
+		"route":  "unknown",
+	})
+	child := WithLabels(ctx, Labels{
+		"route":      "/posts/{post_id}",
+		"controller": "posts",
+		"action":     "Show",
+	})
+
+	childLabels := LabelsFromContext(child)
+	if childLabels["route"] != "/posts/{post_id}" || childLabels["controller"] != "posts" || childLabels["action"] != "Show" {
+		t.Fatalf("child labels = %#v", childLabels)
+	}
+	parentLabels := LabelsFromContext(ctx)
+	if parentLabels["route"] != "/posts/{post_id}" || parentLabels["controller"] != "posts" || parentLabels["action"] != "Show" {
+		t.Fatalf("parent labels = %#v", parentLabels)
+	}
+	parentLabels["route"] = "/mutated"
+	if got := LabelsFromContext(ctx)["route"]; got != "/posts/{post_id}" {
+		t.Fatalf("context labels mutated to %q", got)
+	}
+}
+
 func findMetric(metrics []MetricSnapshot, name string, labels Labels) float64 {
 	for _, metric := range metrics {
 		if metric.Name == name && sameLabels(metric.Labels, labels) {

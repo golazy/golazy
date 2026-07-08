@@ -2,13 +2,28 @@ package lazyroutes
 
 import (
 	"context"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"testing"
 
 	"golazy.dev/lazycontroller"
+	"golazy.dev/lazytelemetry"
+	"golazy.dev/lazytelemetry/lazymetrics"
 )
+
+type routeMetricController struct{}
+
+func newRouteMetricController(context.Context) (*routeMetricController, error) {
+	return &routeMetricController{}, nil
+}
+
+func (c *routeMetricController) Show(w http.ResponseWriter, _ *http.Request) error {
+	w.WriteHeader(http.StatusAccepted)
+	return nil
+}
 
 func TestScopeRegistersRouteMetadataAndContext(t *testing.T) {
 	scope := New(context.Background())
@@ -41,6 +56,32 @@ func TestScopeRegistersRouteMetadataAndContext(t *testing.T) {
 	scope.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/articles/42", nil))
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+}
+
+func TestScopeAddsControllerActionMetricLabels(t *testing.T) {
+	registry := lazymetrics.NewRegistry()
+	scope := New(context.Background())
+	scope.Get("/articles/{post_id}", newRouteMetricController, (*routeMetricController).Show)
+	handler := lazytelemetry.Middleware(
+		lazytelemetry.WithMetricsRegistry(registry),
+		lazytelemetry.WithMiddlewareLogger(slog.New(slog.NewTextHandler(io.Discard, nil))),
+	).Handler(scope)
+
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/articles/42", nil))
+
+	if response.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusAccepted)
+	}
+	if got := routeMetricHistogramCount(registry.Snapshot().Histograms, "http_server_request_duration_seconds", lazymetrics.Labels{
+		"method":       "GET",
+		"route":        "/articles/{post_id}",
+		"status_class": "2xx",
+		"controller":   "route_metric",
+		"action":       "Show",
+	}); got != 1 {
+		t.Fatalf("duration histogram count = %d, want 1", got)
 	}
 }
 
@@ -349,4 +390,25 @@ func TestScopeHandlesPathIgnoresMethod(t *testing.T) {
 	if scope.HandlesPath("/posts/hello/comments") {
 		t.Fatalf("scope should not handle /posts/hello/comments")
 	}
+}
+
+func routeMetricHistogramCount(metrics []lazymetrics.HistogramSnapshot, name string, labels lazymetrics.Labels) int64 {
+	for _, metric := range metrics {
+		if metric.Name == name && sameRouteMetricLabels(metric.Labels, labels) {
+			return metric.Count
+		}
+	}
+	return 0
+}
+
+func sameRouteMetricLabels(left, right lazymetrics.Labels) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for name, value := range left {
+		if right[name] != value {
+			return false
+		}
+	}
+	return true
 }

@@ -15,6 +15,11 @@ type labelsContextKey struct{}
 // Labels stores low-cardinality metric labels.
 type Labels map[string]string
 
+type labelSet struct {
+	mu     sync.RWMutex
+	labels Labels
+}
+
 // Registry stores in-memory metrics.
 type Registry struct {
 	mu sync.Mutex
@@ -274,6 +279,10 @@ func (r *Registry) Snapshot() Snapshot {
 
 // WithLabels attaches metric labels to ctx.
 func WithLabels(ctx context.Context, labels Labels) context.Context {
+	if set, ok := ctx.Value(labelsContextKey{}).(*labelSet); ok {
+		set.merge(labels)
+		return ctx
+	}
 	if len(labels) == 0 {
 		return ctx
 	}
@@ -287,12 +296,54 @@ func WithLabels(ctx context.Context, labels Labels) context.Context {
 	return context.WithValue(ctx, labelsContextKey{}, merged)
 }
 
+// WithRequestLabels attaches request-scoped metric labels to ctx. Descendant
+// WithLabels calls merge into the same label set, which lets outer request
+// middleware record labels discovered later in routing.
+func WithRequestLabels(ctx context.Context, labels Labels) context.Context {
+	set, ok := ctx.Value(labelsContextKey{}).(*labelSet)
+	if !ok {
+		set = &labelSet{}
+		ctx = context.WithValue(ctx, labelsContextKey{}, set)
+	}
+	set.merge(labels)
+	return ctx
+}
+
 // LabelsFromContext returns metric labels attached to ctx.
 func LabelsFromContext(ctx context.Context) Labels {
+	if set, ok := ctx.Value(labelsContextKey{}).(*labelSet); ok {
+		return set.snapshot()
+	}
 	if labels, ok := ctx.Value(labelsContextKey{}).(Labels); ok {
 		return cloneLabels(labels)
 	}
 	return Labels{}
+}
+
+func (s *labelSet) merge(labels Labels) {
+	if s == nil || len(labels) == 0 {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.labels == nil {
+		s.labels = Labels{}
+	}
+	for name, value := range labels {
+		name = strings.TrimSpace(name)
+		if name != "" {
+			s.labels[name] = strings.TrimSpace(value)
+		}
+	}
+}
+
+func (s *labelSet) snapshot() Labels {
+	if s == nil {
+		return Labels{}
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return cloneLabels(s.labels)
 }
 
 func (r *Registry) ensure() {

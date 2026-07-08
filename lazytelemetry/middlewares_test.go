@@ -74,6 +74,8 @@ func TestMiddlewareAddsRequestIDLoggerSpanAndMetrics(t *testing.T) {
 		"method":       "POST",
 		"route":        "unknown",
 		"status_class": "2xx",
+		"controller":   "unknown",
+		"action":       "unknown",
 	}); got != 1 {
 		t.Fatalf("duration histogram count = %d, want 1", got)
 	}

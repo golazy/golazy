@@ -11,6 +11,7 @@ import (
 
 	"golazy.dev/lazycontroller"
 	"golazy.dev/lazytelemetry"
+	"golazy.dev/lazytelemetry/lazymetrics"
 )
 
 // Scope is the routing DSL entrypoint used by application routes.
@@ -205,6 +206,7 @@ func requestWithFormat(r *http.Request, path string, format lazycontroller.Forma
 func routeContextMiddleware(handler http.Handler, route Route) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), routeContextKey{}, routeContextFromRequest(route, r))
+		ctx = lazytelemetry.WithMetricLabels(ctx, routeMetricLabels(route))
 		span := lazytelemetry.SpanFromContext(ctx)
 		if span == nil {
 			handler.ServeHTTP(w, r.WithContext(ctx))
@@ -228,6 +230,22 @@ func routeContextMiddleware(handler http.Handler, route Route) http.Handler {
 		r = r.WithContext(ctx)
 		handler.ServeHTTP(w, r)
 	})
+}
+
+func routeMetricLabels(route Route) lazymetrics.Labels {
+	return lazymetrics.Labels{
+		"route":      routeMetricLabel(route.Path),
+		"controller": routeMetricLabel(route.Controller),
+		"action":     routeMetricLabel(route.Action),
+	}
+}
+
+func routeMetricLabel(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "unknown"
+	}
+	return value
 }
 
 func normalizePath(path string) string {

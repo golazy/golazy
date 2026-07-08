@@ -9,6 +9,9 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `golazy.dev/lazycache/inmemorycache` now supports
+  `Options.MaxSizeBytes` for LRU eviction by approximate cached content bytes,
+  and cache stats plus Prometheus metrics expose the configured byte ceiling.
 - `lazyapp.New` now creates a `lazytelemetry.Telemetry` instance from standard
   `OTEL_*` environment variables, registers it in the `lazydeps` lifecycle,
   exposes it through app context, and initializes the OpenTelemetry trace SDK

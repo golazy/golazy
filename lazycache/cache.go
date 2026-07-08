@@ -16,13 +16,14 @@ var ErrMiss = errors.New("lazycache: miss")
 
 // Stats is the common cache statistics shape returned by every backend.
 type Stats struct {
-	Entries    int    `json:"entries"`
-	MaxEntries int    `json:"max_entries"`
-	SizeBytes  int64  `json:"size_bytes"`
-	Hits       uint64 `json:"hits"`
-	Misses     uint64 `json:"misses"`
-	Sets       uint64 `json:"sets"`
-	Evictions  uint64 `json:"evictions"`
+	Entries      int    `json:"entries"`
+	MaxEntries   int    `json:"max_entries"`
+	SizeBytes    int64  `json:"size_bytes"`
+	MaxSizeBytes int64  `json:"max_size_bytes"`
+	Hits         uint64 `json:"hits"`
+	Misses       uint64 `json:"misses"`
+	Sets         uint64 `json:"sets"`
+	Evictions    uint64 `json:"evictions"`
 }
 
 // Backend is the storage boundary used by Cache.

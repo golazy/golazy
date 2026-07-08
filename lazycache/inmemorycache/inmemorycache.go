@@ -15,14 +15,15 @@ import (
 type Algorithm string
 
 const (
-	// LRU evicts the least recently used entry when MaxEntries is reached.
+	// LRU evicts the least recently used entry when a configured limit is reached.
 	LRU Algorithm = "lru"
 )
 
 // Options configures an in-memory cache backend.
 type Options struct {
-	Algorithm  Algorithm
-	MaxEntries int
+	Algorithm    Algorithm
+	MaxEntries   int
+	MaxSizeBytes int64
 }
 
 type entry struct {
@@ -39,12 +40,13 @@ type entry struct {
 }
 
 type Cache struct {
-	mu         sync.Mutex
-	algorithm  Algorithm
-	maxEntries int
-	items      map[string]*list.Element
-	order      *list.List
-	stats      lazycache.Stats
+	mu           sync.Mutex
+	algorithm    Algorithm
+	maxEntries   int
+	maxSizeBytes int64
+	items        map[string]*list.Element
+	order        *list.List
+	stats        lazycache.Stats
 }
 
 // New creates an in-memory lazycache backend.
@@ -59,11 +61,15 @@ func New(options Options) (lazycache.Backend, error) {
 	if options.MaxEntries < 0 {
 		return nil, fmt.Errorf("inmemorycache: max entries must not be negative")
 	}
+	if options.MaxSizeBytes < 0 {
+		return nil, fmt.Errorf("inmemorycache: max size bytes must not be negative")
+	}
 	return &Cache{
-		algorithm:  algorithm,
-		maxEntries: options.MaxEntries,
-		items:      map[string]*list.Element{},
-		order:      list.New(),
+		algorithm:    algorithm,
+		maxEntries:   options.MaxEntries,
+		maxSizeBytes: options.MaxSizeBytes,
+		items:        map[string]*list.Element{},
+		order:        list.New(),
 	}, nil
 }
 
@@ -95,6 +101,7 @@ func (c *Cache) Set(key string, value any) error {
 	content, contentType, sizeBytes := inspectValue(value)
 	if element, ok := c.items[key]; ok {
 		item := element.Value.(entry)
+		c.stats.SizeBytes -= item.sizeBytes
 		item.value = value
 		item.sizeBytes = sizeBytes
 		item.content = content
@@ -104,6 +111,8 @@ func (c *Cache) Set(key string, value any) error {
 		element.Value = item
 		c.order.MoveToFront(element)
 		c.stats.Sets++
+		c.stats.SizeBytes += sizeBytes
+		c.enforceLimits()
 		return nil
 	}
 
@@ -120,8 +129,9 @@ func (c *Cache) Set(key string, value any) error {
 	})
 	c.items[key] = element
 	c.stats.Sets++
+	c.stats.SizeBytes += sizeBytes
 	c.stats.Entries = len(c.items)
-	c.enforceMaxEntries()
+	c.enforceLimits()
 	return nil
 }
 
@@ -133,7 +143,7 @@ func (c *Cache) Stats() lazycache.Stats {
 	stats := c.stats
 	stats.Entries = len(c.items)
 	stats.MaxEntries = c.maxEntries
-	stats.SizeBytes = c.sizeBytes()
+	stats.MaxSizeBytes = c.maxSizeBytes
 	return stats
 }
 
@@ -183,29 +193,31 @@ func (c *Cache) Entry(key string) (lazycache.EntryDetail, error) {
 	}, nil
 }
 
-func (c *Cache) enforceMaxEntries() {
-	if c.maxEntries == 0 {
-		return
-	}
-	for len(c.items) > c.maxEntries {
-		element := c.order.Back()
-		if element == nil {
+func (c *Cache) enforceLimits() {
+	for c.maxEntries > 0 && len(c.items) > c.maxEntries {
+		if !c.evictOldest() {
 			return
 		}
-		item := element.Value.(entry)
-		delete(c.items, item.key)
-		c.order.Remove(element)
-		c.stats.Evictions++
-		c.stats.Entries = len(c.items)
+	}
+	for c.maxSizeBytes > 0 && c.stats.SizeBytes > c.maxSizeBytes {
+		if !c.evictOldest() {
+			return
+		}
 	}
 }
 
-func (c *Cache) sizeBytes() int64 {
-	var total int64
-	for _, element := range c.items {
-		total += element.Value.(entry).sizeBytes
+func (c *Cache) evictOldest() bool {
+	element := c.order.Back()
+	if element == nil {
+		return false
 	}
-	return total
+	item := element.Value.(entry)
+	delete(c.items, item.key)
+	c.order.Remove(element)
+	c.stats.SizeBytes -= item.sizeBytes
+	c.stats.Evictions++
+	c.stats.Entries = len(c.items)
+	return true
 }
 
 func (e entry) info() lazycache.EntryInfo {

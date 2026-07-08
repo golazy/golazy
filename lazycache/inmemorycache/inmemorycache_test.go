@@ -17,6 +17,9 @@ func TestNewRejectsUnsupportedAlgorithm(t *testing.T) {
 	if _, err := New(Options{MaxEntries: -1}); err == nil {
 		t.Fatal("New succeeded, want max entries error")
 	}
+	if _, err := New(Options{MaxSizeBytes: -1}); err == nil {
+		t.Fatal("New succeeded, want max size bytes error")
+	}
 }
 
 func TestLRUEvictsLeastRecentlyUsed(t *testing.T) {
@@ -49,6 +52,57 @@ func TestLRUEvictsLeastRecentlyUsed(t *testing.T) {
 	stats := backend.Stats()
 	if stats.Entries != 2 || stats.MaxEntries != 2 || stats.Evictions != 1 {
 		t.Fatalf("Stats = %#v, want entries=2 max=2 evictions=1", stats)
+	}
+}
+
+func TestLRUEvictsLeastRecentlyUsedByMaxSize(t *testing.T) {
+	backend, err := New(Options{MaxSizeBytes: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := backend.Set("a", "aaaa"); err != nil {
+		t.Fatal(err)
+	}
+	if err := backend.Set("b", "bbbb"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := backend.Get("a"); err != nil {
+		t.Fatal(err)
+	}
+	if err := backend.Set("c", "cccc"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := backend.Get("b"); !errors.Is(err, lazycache.ErrMiss) {
+		t.Fatalf("Get b error = %v, want ErrMiss", err)
+	}
+	if value, err := backend.Get("a"); err != nil || value != "aaaa" {
+		t.Fatalf("Get a = %v, %v; want aaaa, nil", value, err)
+	}
+	if value, err := backend.Get("c"); err != nil || value != "cccc" {
+		t.Fatalf("Get c = %v, %v; want cccc, nil", value, err)
+	}
+	stats := backend.Stats()
+	if stats.Entries != 2 || stats.SizeBytes != 8 || stats.MaxSizeBytes != 10 || stats.Evictions != 1 {
+		t.Fatalf("Stats = %#v, want entries=2 size=8 max_size=10 evictions=1", stats)
+	}
+}
+
+func TestOversizedEntryIsNotRetained(t *testing.T) {
+	backend, err := New(Options{MaxSizeBytes: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := backend.Set("large", "large"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := backend.Get("large"); !errors.Is(err, lazycache.ErrMiss) {
+		t.Fatalf("Get large error = %v, want ErrMiss", err)
+	}
+	stats := backend.Stats()
+	if stats.Entries != 0 || stats.SizeBytes != 0 || stats.MaxSizeBytes != 3 || stats.Evictions != 1 {
+		t.Fatalf("Stats = %#v, want empty cache under max size", stats)
 	}
 }
 

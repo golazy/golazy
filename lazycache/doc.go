@@ -22,6 +22,11 @@
 // that read it back with FromContext. The cache package stays backend-agnostic;
 // the default backend choice belongs to lazyapp.
 //
+// The in-memory backend is process-local and supports LRU eviction by entry
+// count, approximate cached content bytes, or both. Use
+// inmemorycache.Options.MaxSizeBytes when production deployments need a hard
+// ceiling on retained cached bodies.
+//
 // When built with the lazydev tag, RegisterLazyDevHandlers exposes cache state
 // on the development control plane. lazyapp calls it as part of its control
 // plane setup, so normal applications do not need to register those endpoints

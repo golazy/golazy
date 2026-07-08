@@ -28,6 +28,8 @@ func WritePrometheus(w io.Writer, cache *Cache) error {
 		{name: "golazy_cache_enabled", typ: "gauge", value: enabled},
 		{name: "golazy_cache_entries", typ: "gauge", value: stats.Entries},
 		{name: "golazy_cache_max_entries", typ: "gauge", value: stats.MaxEntries},
+		{name: "golazy_cache_size_bytes", typ: "gauge", value: stats.SizeBytes},
+		{name: "golazy_cache_max_size_bytes", typ: "gauge", value: stats.MaxSizeBytes},
 		{name: "golazy_cache_hits_total", typ: "counter", value: stats.Hits},
 		{name: "golazy_cache_misses_total", typ: "counter", value: stats.Misses},
 		{name: "golazy_cache_sets_total", typ: "counter", value: stats.Sets},

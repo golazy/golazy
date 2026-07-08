@@ -83,6 +83,15 @@ func TestScopeAddsControllerActionMetricLabels(t *testing.T) {
 	}); got != 1 {
 		t.Fatalf("duration histogram count = %d, want 1", got)
 	}
+	if got := routeMetricCounterValue(registry.Snapshot().Counters, "http_server_requests_total", lazymetrics.Labels{
+		"method":       "GET",
+		"route":        "/articles/{post_id}",
+		"status_class": "2xx",
+		"controller":   "route_metric",
+		"action":       "Show",
+	}); got != 1 {
+		t.Fatalf("request counter = %v, want 1", got)
+	}
 }
 
 func TestScopeStoresUserFacingRootRoute(t *testing.T) {
@@ -396,6 +405,15 @@ func routeMetricHistogramCount(metrics []lazymetrics.HistogramSnapshot, name str
 	for _, metric := range metrics {
 		if metric.Name == name && sameRouteMetricLabels(metric.Labels, labels) {
 			return metric.Count
+		}
+	}
+	return 0
+}
+
+func routeMetricCounterValue(metrics []lazymetrics.MetricSnapshot, name string, labels lazymetrics.Labels) float64 {
+	for _, metric := range metrics {
+		if metric.Name == name && sameRouteMetricLabels(metric.Labels, labels) {
+			return metric.Value
 		}
 	}
 	return 0

@@ -1226,7 +1226,7 @@ func TestAppMountsPrometheusMetricsFromOTELEnv(t *testing.T) {
 	body := response.Body.String()
 	for _, want := range []string{
 		"# TYPE http_server_requests_total counter\n",
-		`http_server_requests_total{method="GET",route="/",status_class="2xx"} 1` + "\n",
+		`http_server_requests_total{action="unknown",controller="unknown",method="GET",route="/",status_class="2xx"} 1` + "\n",
 		"# TYPE http_server_request_duration_seconds histogram\n",
 		`http_server_request_duration_seconds_bucket{action="unknown",controller="unknown",le="+Inf",method="GET",route="/",status_class="2xx"} 1` + "\n",
 		"golazy_cache_enabled 1\n",

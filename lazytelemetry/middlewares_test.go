@@ -67,6 +67,8 @@ func TestMiddlewareAddsRequestIDLoggerSpanAndMetrics(t *testing.T) {
 		"method":       "POST",
 		"route":        "unknown",
 		"status_class": "2xx",
+		"controller":   "unknown",
+		"action":       "unknown",
 	}); got != 1 {
 		t.Fatalf("request counter = %v, want 1", got)
 	}

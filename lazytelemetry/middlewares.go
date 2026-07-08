@@ -68,7 +68,7 @@ func MiddlewareFromConfig(config Config, options ...MiddlewareOption) lazydispat
 	if middleware.registry == nil {
 		middleware.registry = lazymetrics.NewRegistry()
 	}
-	middleware.requestsTotal = middleware.registry.NewCounter("http_server_requests_total", "method", "route", "status_class")
+	middleware.requestsTotal = middleware.registry.NewCounter("http_server_requests_total", "method", "route", "status_class", "controller", "action")
 	middleware.requestDuration = middleware.registry.NewHistogram("http_server_request_duration_seconds", "method", "route", "status_class", "controller", "action")
 	meter := otel.Meter("golazy.dev/lazytelemetry")
 	middleware.otelRequestsTotal, _ = meter.Int64Counter("http.server.requests",

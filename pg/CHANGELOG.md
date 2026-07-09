@@ -4,6 +4,8 @@
 
 - Added `pgauth`, a PostgreSQL `lazyauth.Authenticator` with embedded user
   table migrations and helper methods for creating password-backed users.
+- `pgjobs` now persists fixed-interval schedules, records job `schedule_key`,
+  and enforces `lazyjobs.Config.QueueLimits` atomically while claiming jobs.
 
 ## [0.1.19] - 2026-07-03
 

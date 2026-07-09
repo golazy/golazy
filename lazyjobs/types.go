@@ -36,6 +36,7 @@ type Record struct {
 	ID          int64           `json:"id"`
 	Kind        string          `json:"kind"`
 	Queue       string          `json:"queue"`
+	ScheduleKey string          `json:"schedule_key,omitempty"`
 	Payload     json.RawMessage `json:"-"`
 	State       State           `json:"state"`
 	Attempt     int             `json:"attempt"`
@@ -54,17 +55,35 @@ type Definition struct {
 }
 
 type Stats struct {
-	Total   int            `json:"total"`
-	ByState map[State]int  `json:"by_state"`
-	ByKind  map[string]int `json:"by_kind"`
-	ByQueue map[string]int `json:"by_queue"`
+	Total        int                      `json:"total"`
+	ByState      map[State]int            `json:"by_state"`
+	ByKind       map[string]int           `json:"by_kind"`
+	ByQueue      map[string]int           `json:"by_queue"`
+	ByQueueState map[string]map[State]int `json:"by_queue_state,omitempty"`
+}
+
+type QueueLimitState struct {
+	Queue      string `json:"queue"`
+	MaxRunning int    `json:"max_running"`
+	Running    int    `json:"running"`
+	Available  int    `json:"available"`
+}
+
+type ScheduleDefinition struct {
+	Key       string    `json:"key"`
+	Kind      string    `json:"kind"`
+	Queue     string    `json:"queue"`
+	Interval  string    `json:"interval"`
+	NextRunAt time.Time `json:"next_run_at"`
 }
 
 type Snapshot struct {
-	Running     bool         `json:"running"`
-	Definitions []Definition `json:"definitions"`
-	Stats       Stats        `json:"stats"`
-	Recent      []Record     `json:"recent"`
+	Running     bool                 `json:"running"`
+	Definitions []Definition         `json:"definitions"`
+	Schedules   []ScheduleDefinition `json:"schedules,omitempty"`
+	QueueLimits []QueueLimitState    `json:"queue_limits,omitempty"`
+	Stats       Stats                `json:"stats"`
+	Recent      []Record             `json:"recent"`
 }
 
 func normalizeQueue(queue string) string {

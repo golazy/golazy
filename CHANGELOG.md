@@ -21,6 +21,9 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   through `go.opentelemetry.io/contrib/exporters/autoexport` when trace export
   is configured. Tempo export uses the standard OTLP trace endpoint and does
   not require a GoLazy-specific exporter.
+- `golazy.dev/lazyjobs` now supports enqueue options, fixed-interval
+  schedules, queue-level concurrency limits, and schedule metadata on job
+  records and control-plane snapshots.
 
 ### Changed
 
@@ -35,6 +38,8 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `lazyapp.ListenAndServe` now shuts down dependency lifecycle services when
   the HTTP server exits or receives SIGINT/SIGTERM, allowing telemetry
   exporters and app services to flush before process exit.
+- `lazyjobs.Backend.Claim` receives queue-limit metadata so durable backends can
+  enforce per-queue concurrency atomically across app instances.
 
 ## [0.1.19] - 2026-07-03
 

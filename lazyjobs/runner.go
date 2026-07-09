@@ -18,16 +18,20 @@ type Config struct {
 	Workers      int
 	PollInterval time.Duration
 	Queues       []string
+	QueueLimits  map[string]int
 }
 
 type JobRunner struct {
 	backend      Backend
+	scheduler    SchedulerBackend
 	pollInterval time.Duration
 	workers      int
 	queues       []string
+	queueLimits  map[string]int
 
 	mu          sync.RWMutex
 	definitions map[string]definition
+	schedules   map[string]registeredSchedule
 	started     bool
 	cancel      context.CancelFunc
 	done        chan struct{}
@@ -36,6 +40,15 @@ type JobRunner struct {
 type definition struct {
 	meta Definition
 	typ  reflect.Type
+}
+
+type registeredSchedule struct {
+	key       string
+	kind      string
+	queue     string
+	payload   json.RawMessage
+	interval  time.Duration
+	nextRunAt time.Time
 }
 
 func New(config Config) (*JobRunner, error) {
@@ -57,7 +70,9 @@ func New(config Config) (*JobRunner, error) {
 		pollInterval: pollInterval,
 		workers:      workers,
 		queues:       queues,
+		queueLimits:  normalizeQueueLimits(config.QueueLimits),
 		definitions:  map[string]definition{},
+		schedules:    map[string]registeredSchedule{},
 		done:         closedDone(),
 	}
 	if config.Define != nil {
@@ -65,6 +80,16 @@ func New(config Config) (*JobRunner, error) {
 	}
 	if !configuredQueues {
 		runner.queues = runner.definitionQueues()
+	}
+	if len(runner.schedules) > 0 {
+		scheduler, ok := config.Backend.(SchedulerBackend)
+		if !ok {
+			return nil, fmt.Errorf("lazyjobs: schedules require backend implementing lazyjobs.SchedulerBackend")
+		}
+		runner.scheduler = scheduler
+		if err := runner.registerSchedules(context.Background()); err != nil {
+			return nil, err
+		}
 	}
 	return runner, nil
 }
@@ -108,18 +133,76 @@ func (r *JobRunner) MustRegister(prototype Job) {
 	}
 }
 
+func (r *JobRunner) Schedule(schedule Schedule) error {
+	if r == nil {
+		return fmt.Errorf("lazyjobs: nil runner")
+	}
+	if schedule.Key == "" {
+		return fmt.Errorf("lazyjobs: schedule key is required")
+	}
+	if schedule.Interval <= 0 {
+		return fmt.Errorf("lazyjobs: schedule %q interval must be positive", schedule.Key)
+	}
+	if schedule.Job == nil {
+		return fmt.Errorf("lazyjobs: schedule %q job is required", schedule.Key)
+	}
+	kind := schedule.Job.Kind()
+	if kind == "" {
+		return fmt.Errorf("lazyjobs: schedule %q job kind is required", schedule.Key)
+	}
+	if _, ok := r.definition(kind); !ok {
+		return fmt.Errorf("lazyjobs: schedule %q job kind %q is not registered", schedule.Key, kind)
+	}
+	queue := schedule.Queue
+	if queue == "" {
+		queue = queueFor(schedule.Job)
+	} else {
+		queue = normalizeQueue(queue)
+	}
+	payload, err := json.Marshal(schedule.Job)
+	if err != nil {
+		return fmt.Errorf("lazyjobs: marshal schedule %q: %w", schedule.Key, err)
+	}
+	nextRunAt := schedule.FirstRunAt
+	if nextRunAt.IsZero() {
+		nextRunAt = time.Now().UTC()
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, exists := r.schedules[schedule.Key]; exists {
+		return fmt.Errorf("lazyjobs: schedule %q is already registered", schedule.Key)
+	}
+	r.schedules[schedule.Key] = registeredSchedule{
+		key:       schedule.Key,
+		kind:      kind,
+		queue:     queue,
+		payload:   append(json.RawMessage(nil), payload...),
+		interval:  schedule.Interval,
+		nextRunAt: nextRunAt.UTC(),
+	}
+	return nil
+}
+
+func (r *JobRunner) MustSchedule(schedule Schedule) {
+	if err := r.Schedule(schedule); err != nil {
+		panic(err)
+	}
+}
+
 func (r *JobRunner) Enqueue(ctx context.Context, job Job) (Record, error) {
-	return r.EnqueueAt(ctx, job, time.Now().UTC())
+	return r.EnqueueWith(ctx, job)
 }
 
 func (r *JobRunner) EnqueueIn(ctx context.Context, job Job, delay time.Duration) (Record, error) {
-	if delay < 0 {
-		delay = 0
-	}
-	return r.EnqueueAt(ctx, job, time.Now().UTC().Add(delay))
+	return r.EnqueueWith(ctx, job, RunIn(delay))
 }
 
 func (r *JobRunner) EnqueueAt(ctx context.Context, job Job, runAt time.Time) (Record, error) {
+	return r.EnqueueWith(ctx, job, RunAt(runAt))
+}
+
+func (r *JobRunner) EnqueueWith(ctx context.Context, job Job, options ...EnqueueOption) (Record, error) {
 	if r == nil || r.backend == nil {
 		return Record{}, fmt.Errorf("lazyjobs: runner is not initialized")
 	}
@@ -133,16 +216,28 @@ func (r *JobRunner) EnqueueAt(ctx context.Context, job Job, runAt time.Time) (Re
 	if _, ok := r.definition(kind); !ok {
 		return Record{}, fmt.Errorf("lazyjobs: job kind %q is not registered", kind)
 	}
+	enqueueOptions := enqueueOptions{}
+	for _, option := range options {
+		if option != nil {
+			option.applyEnqueueOption(&enqueueOptions)
+		}
+	}
 	payload, err := json.Marshal(job)
 	if err != nil {
 		return Record{}, fmt.Errorf("lazyjobs: marshal %s: %w", kind, err)
 	}
+	runAt := enqueueOptions.runAt
 	if runAt.IsZero() {
 		runAt = time.Now().UTC()
 	}
+	queue := enqueueOptions.queue
+	if queue == "" {
+		queue = queueFor(job)
+	}
 	return r.backend.Insert(ctx, InsertParams{
 		Kind:        kind,
-		Queue:       queueFor(job),
+		Queue:       queue,
+		ScheduleKey: enqueueOptions.scheduleKey,
 		Payload:     payload,
 		MaxAttempts: maxAttemptsFor(job),
 		RunAt:       runAt.UTC(),
@@ -166,6 +261,7 @@ func (r *JobRunner) Start(ctx context.Context) {
 	r.cancel = cancel
 	r.done = make(chan struct{})
 	workers := r.workers
+	runScheduler := r.scheduler != nil && len(r.schedules) > 0
 	r.mu.Unlock()
 
 	var wg sync.WaitGroup
@@ -174,6 +270,13 @@ func (r *JobRunner) Start(ctx context.Context) {
 		go func() {
 			defer wg.Done()
 			r.runWorker(runCtx)
+		}()
+	}
+	if runScheduler {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			r.runScheduler(runCtx)
 		}()
 	}
 	go func() {
@@ -224,9 +327,15 @@ func (r *JobRunner) Snapshot(ctx context.Context) (Snapshot, error) {
 		return Snapshot{}, err
 	}
 	definitions := r.Definitions()
+	schedules, err := r.ScheduleDefinitions(ctx)
+	if err != nil {
+		return Snapshot{}, err
+	}
 	return Snapshot{
 		Running:     r.Running(),
 		Definitions: definitions,
+		Schedules:   schedules,
+		QueueLimits: r.QueueLimitStates(stats),
 		Stats:       stats,
 		Recent:      recent,
 	}, nil
@@ -248,6 +357,66 @@ func (r *JobRunner) Definitions() []Definition {
 	return definitions
 }
 
+func (r *JobRunner) ScheduleDefinitions(ctx context.Context) ([]ScheduleDefinition, error) {
+	if r == nil {
+		return nil, nil
+	}
+	r.mu.RLock()
+	hasSchedules := len(r.schedules) > 0
+	r.mu.RUnlock()
+	if !hasSchedules {
+		return nil, nil
+	}
+	if r.scheduler == nil {
+		return nil, nil
+	}
+	records, err := r.scheduler.ListSchedules(ctx)
+	if err != nil {
+		return nil, err
+	}
+	definitions := make([]ScheduleDefinition, 0, len(records))
+	for _, record := range records {
+		definitions = append(definitions, ScheduleDefinition{
+			Key:       record.Key,
+			Kind:      record.Kind,
+			Queue:     record.Queue,
+			Interval:  record.Interval.String(),
+			NextRunAt: record.NextRunAt,
+		})
+	}
+	sort.Slice(definitions, func(i, j int) bool {
+		return definitions[i].Key < definitions[j].Key
+	})
+	return definitions, nil
+}
+
+func (r *JobRunner) QueueLimitStates(stats Stats) []QueueLimitState {
+	if r == nil || len(r.queueLimits) == 0 {
+		return nil
+	}
+	states := make([]QueueLimitState, 0, len(r.queueLimits))
+	for queue, maxRunning := range r.queueLimits {
+		running := 0
+		if stats.ByQueueState != nil && stats.ByQueueState[queue] != nil {
+			running = stats.ByQueueState[queue][StateRunning]
+		}
+		available := maxRunning - running
+		if available < 0 {
+			available = 0
+		}
+		states = append(states, QueueLimitState{
+			Queue:      queue,
+			MaxRunning: maxRunning,
+			Running:    running,
+			Available:  available,
+		})
+	}
+	sort.Slice(states, func(i, j int) bool {
+		return states[i].Queue < states[j].Queue
+	})
+	return states
+}
+
 func (r *JobRunner) Running() bool {
 	if r == nil {
 		return false
@@ -266,7 +435,7 @@ func (r *JobRunner) runWorker(ctx context.Context) {
 			return
 		case <-timer.C:
 		}
-		claimed, ok, err := r.backend.Claim(ctx, ClaimParams{Queues: r.queues, Now: time.Now().UTC()})
+		claimed, ok, err := r.backend.Claim(ctx, ClaimParams{Queues: r.queues, QueueLimits: r.queueLimits, Now: time.Now().UTC()})
 		if err == nil && ok {
 			r.work(ctx, claimed)
 			timer.Reset(0)
@@ -299,6 +468,96 @@ func (r *JobRunner) work(ctx context.Context, record Record) {
 	})
 }
 
+func (r *JobRunner) registerSchedules(ctx context.Context) error {
+	r.mu.RLock()
+	schedules := make([]registeredSchedule, 0, len(r.schedules))
+	for _, schedule := range r.schedules {
+		schedules = append(schedules, schedule)
+	}
+	r.mu.RUnlock()
+	sort.Slice(schedules, func(i, j int) bool {
+		return schedules[i].key < schedules[j].key
+	})
+	for _, schedule := range schedules {
+		if _, err := r.scheduler.RegisterSchedule(ctx, ScheduleParams{
+			Key:       schedule.key,
+			Kind:      schedule.kind,
+			Queue:     schedule.queue,
+			Payload:   append(json.RawMessage(nil), schedule.payload...),
+			Interval:  schedule.interval,
+			NextRunAt: schedule.nextRunAt,
+		}); err != nil {
+			return fmt.Errorf("lazyjobs: register schedule %q: %w", schedule.key, err)
+		}
+	}
+	return nil
+}
+
+func (r *JobRunner) runScheduler(ctx context.Context) {
+	timer := time.NewTimer(0)
+	defer timer.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-timer.C:
+		}
+		claimed, ok, err := r.scheduler.ClaimSchedule(ctx, ClaimScheduleParams{Now: time.Now().UTC()})
+		if err == nil && ok {
+			r.scheduleClaimed(ctx, claimed)
+			timer.Reset(0)
+			continue
+		}
+		timer.Reset(r.pollInterval)
+	}
+}
+
+func (r *JobRunner) scheduleClaimed(ctx context.Context, schedule ScheduleRecord) {
+	now := time.Now().UTC()
+	nextRunAt := nextScheduledRun(schedule.NextRunAt, schedule.Interval, now)
+	active, err := r.scheduler.HasActiveScheduledJob(ctx, ActiveScheduledJobParams{ScheduleKey: schedule.Key})
+	if err == nil && !active {
+		_, err = r.backend.Insert(ctx, InsertParams{
+			Kind:        schedule.Kind,
+			Queue:       schedule.Queue,
+			ScheduleKey: schedule.Key,
+			Payload:     append(json.RawMessage(nil), schedule.Payload...),
+			MaxAttempts: maxAttemptsForScheduled(r, schedule.Kind),
+			RunAt:       now,
+		})
+	}
+	if err != nil {
+		nextRunAt = now.Add(r.pollInterval)
+	}
+	_ = r.scheduler.AdvanceSchedule(ctx, AdvanceScheduleParams{Key: schedule.Key, NextRunAt: nextRunAt})
+}
+
+func maxAttemptsForScheduled(r *JobRunner, kind string) int {
+	def, ok := r.definition(kind)
+	if !ok {
+		return normalizeAttempts(0)
+	}
+	job := reflect.New(def.typ.Elem()).Interface()
+	if typed, ok := job.(Job); ok {
+		return maxAttemptsFor(typed)
+	}
+	return normalizeAttempts(0)
+}
+
+func nextScheduledRun(previous time.Time, interval time.Duration, now time.Time) time.Time {
+	if interval <= 0 {
+		return now
+	}
+	if previous.IsZero() {
+		return now.Add(interval)
+	}
+	next := previous.Add(interval)
+	for !next.After(now) {
+		next = next.Add(interval)
+	}
+	return next.UTC()
+}
+
 func (r *JobRunner) decode(record Record) (Job, error) {
 	def, ok := r.definition(record.Kind)
 	if !ok {
@@ -325,12 +584,18 @@ func (r *JobRunner) definition(kind string) (definition, bool) {
 func (r *JobRunner) definitionQueues() []string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	if len(r.definitions) == 0 {
+	if len(r.definitions) == 0 && len(r.schedules) == 0 && len(r.queueLimits) == 0 {
 		return []string{DefaultQueue}
 	}
-	queues := make(map[string]bool, len(r.definitions))
+	queues := make(map[string]bool, len(r.definitions)+len(r.schedules)+len(r.queueLimits))
 	for _, def := range r.definitions {
 		queues[def.meta.Queue] = true
+	}
+	for _, schedule := range r.schedules {
+		queues[schedule.queue] = true
+	}
+	for queue := range r.queueLimits {
+		queues[queue] = true
 	}
 	out := make([]string, 0, len(queues))
 	for queue := range queues {
@@ -363,6 +628,23 @@ func normalizeQueues(queues []string) []string {
 	out := append([]string(nil), queues...)
 	for index, queue := range out {
 		out[index] = normalizeQueue(queue)
+	}
+	return out
+}
+
+func normalizeQueueLimits(limits map[string]int) map[string]int {
+	if len(limits) == 0 {
+		return nil
+	}
+	out := make(map[string]int, len(limits))
+	for queue, limit := range limits {
+		if limit <= 0 {
+			continue
+		}
+		out[normalizeQueue(queue)] = limit
+	}
+	if len(out) == 0 {
+		return nil
 	}
 	return out
 }

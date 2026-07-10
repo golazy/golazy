@@ -32,6 +32,11 @@
 // fs.FS, put it in context with WithRenderer, construct Base with NewBase, and
 // bind each request with BindRequest before rendering. See ExampleBase_Render
 // for the smallest standalone HTTP rendering setup.
+// After binding, Request and ResponseWriter expose the current request and
+// writer for actions that need to read request state or write a manual
+// response. Application base controllers should embed Base and use those
+// accessors instead of copying request-local pointers in their own BindRequest
+// implementation.
 //
 // # Rendering conventions
 //

@@ -206,6 +206,10 @@ func (b *Base) Request() *http.Request {
 	return b.request
 }
 
+func (b *Base) ResponseWriter() http.ResponseWriter {
+	return b.writer
+}
+
 func (b *Base) Cache() *lazycache.Cache {
 	if b == nil {
 		return nil

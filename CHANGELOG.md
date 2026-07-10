@@ -24,6 +24,8 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `golazy.dev/lazyjobs` now supports enqueue options, fixed-interval
   schedules, queue-level concurrency limits, and schedule metadata on job
   records and control-plane snapshots.
+- `lazycontroller.Base.ResponseWriter()` exposes the response writer bound to
+  the current controller request, matching the existing `Request()` accessor.
 
 ### Changed
 

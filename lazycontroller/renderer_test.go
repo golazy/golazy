@@ -616,6 +616,29 @@ func TestBaseExposesRequest(t *testing.T) {
 	}
 }
 
+func TestBaseExposesResponseWriter(t *testing.T) {
+	views := fstest.MapFS{
+		"layouts/app.html.tpl": {Data: []byte(`{{.content}}`)},
+	}
+	renderer, err := NewRenderer(views)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/posts", nil)
+	ctx := WithRenderer(context.Background(), renderer)
+	base, err := NewBase(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := base.BindRequest(response, request, lazyview.Route{Controller: "posts"}); err != nil {
+		t.Fatal(err)
+	}
+	if base.ResponseWriter() != response {
+		t.Fatalf("base ResponseWriter = %T, want %T", base.ResponseWriter(), response)
+	}
+}
+
 func TestReturnFileWritesPublicFileWithStatus(t *testing.T) {
 	renderer, err := NewRenderer(fstest.MapFS{
 		"layouts/app.html.tpl": {Data: []byte(`{{.content}}`)},

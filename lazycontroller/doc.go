@@ -8,9 +8,10 @@
 // lazyroutes and lazyview. lazyapp creates the lazyview renderer, stores it in
 // the application context with WithRenderer, asks lazyroutes to create or reuse
 // a controller for each matched route, calls BindRequest with the matched
-// lazyview.Route, runs BeforeAction when the controller implements it, and
-// reports returned action errors through ErrorHandler. Controllers normally
-// embed Base:
+// lazyview.Route, lets lazyroutes run a BeforeAction method when present, and
+// reports returned action errors through ErrorHandler. BeforeAction can use the
+// same generated arguments as actions when it is called through lazyroutes.
+// Controllers normally embed Base:
 //
 //	type PostsController struct {
 //		lazycontroller.Base

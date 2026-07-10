@@ -91,6 +91,19 @@ func Compile(controllerType reflect.Type, action reflect.Value, opts Options) (*
 	return plan, nil
 }
 
+// CompileMethod compiles a named controller method when the method exists.
+func CompileMethod(controllerType reflect.Type, name string, opts Options) (*Plan, bool, error) {
+	method, ok := controllerType.MethodByName(name)
+	if !ok {
+		return nil, false, nil
+	}
+	plan, err := Compile(controllerType, method.Func, opts)
+	if err != nil {
+		return nil, true, err
+	}
+	return plan, true, nil
+}
+
 func (p *Plan) Call(controller reflect.Value, w http.ResponseWriter, r *http.Request) error {
 	if p.standard {
 		return callErrorOutput(p.action.Call([]reflect.Value{

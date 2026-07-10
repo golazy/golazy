@@ -57,15 +57,21 @@ func (c controllerConstructor) bind(ctx context.Context, routePath string, actio
 	if err != nil {
 		panic(fmt.Errorf("lazyroutes: bind controller action: %w", err))
 	}
+	beforePlan, hasBeforeAction, err := actioncall.CompileMethod(c.controllerType, "BeforeAction", actioncall.Options{RoutePath: routePath})
+	if err != nil {
+		panic(fmt.Errorf("lazyroutes: bind controller before action: %w", err))
+	}
 	prototype, err := c.construct(ctx)
 	if err != nil {
 		panic(fmt.Errorf("lazyroutes: initialize controller: %w", err))
 	}
 
 	binding := &controllerBinding{
-		ctx:        ctx,
-		actionPlan: actionPlan,
-		prototype:  prototype,
+		ctx:             ctx,
+		actionPlan:      actionPlan,
+		beforePlan:      beforePlan,
+		hasBeforeAction: hasBeforeAction,
+		prototype:       prototype,
 	}
 	binding.pool = sync.Pool{
 		New: func() any {
@@ -89,10 +95,12 @@ func (c controllerConstructor) construct(ctx context.Context) (reflect.Value, er
 }
 
 type controllerBinding struct {
-	ctx        context.Context
-	actionPlan *actioncall.Plan
-	prototype  reflect.Value
-	pool       sync.Pool
+	ctx             context.Context
+	actionPlan      *actioncall.Plan
+	beforePlan      *actioncall.Plan
+	hasBeforeAction bool
+	prototype       reflect.Value
+	pool            sync.Pool
 }
 
 func (b *controllerBinding) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -144,8 +152,8 @@ func (b *controllerBinding) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		lazycontroller.ReportController(r, controller)
-		if before, ok := controller.(lazycontroller.BeforeAction); ok {
-			if err := before.BeforeAction(); err != nil {
+		if b.hasBeforeAction {
+			if err := b.beforePlan.Call(controllerValue, w, r); err != nil {
 				if controllerSpan != nil {
 					controllerSpan.RecordError(err)
 				}

@@ -153,16 +153,24 @@ func (c *PostsController) Index(_ http.ResponseWriter, _ *http.Request) error {
 }
 ```
 
-Actions can also receive generated arguments while still returning `error`:
+Actions and `BeforeAction` hooks can also receive generated arguments while
+still returning `error`:
 
 ```go
 func (c *PostsController) Show(postID int) error
 func (c *PostsController) Create(input PostInput) error
 func (c *PostsController) GenPostInput(r *http.Request) (PostInput, error)
+
+type User string
+func (c *BaseController) GenUser(r *http.Request) (*User, error)
+func (c *BaseController) BeforeAction(user *User) error
 ```
 
-If a controller needs request-time setup, implement `BeforeAction` on the
-controller or an embedded app base controller.
+If a controller needs shared request-time setup, implement `BeforeAction` on
+the controller or an embedded app base controller. Protected controller groups
+should let a typed generator return the user or an auth error, then let
+`HandleError` decide whether that error becomes a redirect, a status, or an
+error view.
 
 Actions that return without writing a response render the matching
 controller/action view automatically.

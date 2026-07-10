@@ -25,11 +25,12 @@
 //
 //	func (c *PostsController) Show(http.ResponseWriter, *http.Request) error
 //
-// Actions can also ask for request-derived inputs. The action planner resolves
-// http.ResponseWriter, *http.Request, context.Context, route parameters
-// converted to strings, ints, or slices, and values returned by controller
-// methods named GenX. Generator methods may depend on other generated values,
-// and their errors are handled through lazycontroller's error path.
+// Actions and BeforeAction hooks can also ask for request-derived inputs. The
+// action planner resolves http.ResponseWriter, *http.Request, context.Context,
+// route parameters converted to strings, ints, or slices, and values returned
+// by controller methods named GenX. Generator methods may depend on other
+// generated values, and their errors are handled through lazycontroller's
+// error path.
 //
 // Resources registers conventional REST routes for controller methods named
 // Index, New, Create, Show, Edit, Update, and Delete when those methods exist.

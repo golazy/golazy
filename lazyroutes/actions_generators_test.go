@@ -99,6 +99,76 @@ func TestControllerGeneratorErrorUsesControllerErrorHandler(t *testing.T) {
 	}
 }
 
+type beforeActionUser string
+
+type beforeActionBase struct {
+	user beforeActionUser
+}
+
+func (c *beforeActionBase) GenUser(r *http.Request) (*beforeActionUser, error) {
+	user := beforeActionUser(r.Header.Get("X-User"))
+	if user == "" {
+		return nil, errors.New("user is required")
+	}
+	return &user, nil
+}
+
+func (c *beforeActionBase) BeforeAction(user *beforeActionUser) error {
+	c.user = *user
+	return nil
+}
+
+func (c *beforeActionBase) HandleError(w http.ResponseWriter, _ *http.Request, err error) error {
+	w.WriteHeader(http.StatusUnprocessableEntity)
+	_, writeErr := fmt.Fprint(w, err.Error())
+	return writeErr
+}
+
+type beforeActionGeneratorController struct {
+	beforeActionBase
+}
+
+func newBeforeActionGeneratorController(context.Context) (*beforeActionGeneratorController, error) {
+	return &beforeActionGeneratorController{}, nil
+}
+
+func (c *beforeActionGeneratorController) Show(w http.ResponseWriter) error {
+	_, err := fmt.Fprintf(w, "before:%s", c.user)
+	return err
+}
+
+func TestControllerBeforeActionUsesGenerator(t *testing.T) {
+	scope := New(context.Background())
+	scope.Get("/admin", newBeforeActionGeneratorController, (*beforeActionGeneratorController).Show)
+
+	request := httptest.NewRequest(http.MethodGet, "/admin", nil)
+	request.Header.Set("X-User", "admin@example.com")
+	response := httptest.NewRecorder()
+	scope.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+	if got, want := response.Body.String(), "before:admin@example.com"; got != want {
+		t.Fatalf("body = %q, want %q", got, want)
+	}
+}
+
+func TestControllerBeforeActionGeneratorErrorUsesControllerErrorHandler(t *testing.T) {
+	scope := New(context.Background())
+	scope.Get("/admin", newBeforeActionGeneratorController, (*beforeActionGeneratorController).Show)
+
+	response := httptest.NewRecorder()
+	scope.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/admin", nil))
+
+	if response.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusUnprocessableEntity)
+	}
+	if got, want := response.Body.String(), "user is required"; got != want {
+		t.Fatalf("body = %q, want %q", got, want)
+	}
+}
+
 type currentUser struct {
 	Name string
 }

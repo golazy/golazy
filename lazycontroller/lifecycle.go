@@ -17,6 +17,10 @@ type RequestResetter interface {
 }
 
 // BeforeAction runs after request binding and before the routed action.
+//
+// lazyroutes also recognizes controller methods named BeforeAction with
+// generated arguments, such as BeforeAction(user *User) error. This interface
+// remains useful for code that wants to type-check the no-argument form.
 type BeforeAction interface {
 	BeforeAction() error
 }

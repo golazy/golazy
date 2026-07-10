@@ -26,6 +26,9 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   records and control-plane snapshots.
 - `lazycontroller.Base.ResponseWriter()` exposes the response writer bound to
   the current controller request, matching the existing `Request()` accessor.
+- `lazyroutes` now supports generated arguments on controller `BeforeAction`
+  methods, so base controllers can use `GenX` methods for shared auth setup
+  before the routed action runs.
 
 ### Changed
 

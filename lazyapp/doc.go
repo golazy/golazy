@@ -5,9 +5,14 @@
 // application context, initializes dependencies, opens configured views, creates
 // the lazycontroller renderer, builds a lazyroutes scope, calls the route drawer,
 // registers framework and application helpers with lazyview, initializes cache,
-// sessions, migrations, jobs, optional browser workers, PWA metadata,
+// sessions, default lazyauth, migrations, jobs, optional browser workers, PWA metadata,
 // robots.txt, sitemap endpoints, and optional control-plane handlers, then
 // returns one http.Handler.
+//
+// Every app gets a lazyauth config in App.Auth and application context. Without
+// Config.Auth, lazyapp uses an in-memory backend with zero users. Set
+// LAZYAUTH_DEFAULT_PASS to create a bootstrap admin user, and set
+// LAZYAUTH_DEFAULT_USER to change that username.
 //
 // Migrations are configured through Config.Migrations. lazyapp itself does not
 // import database drivers; applications provide lazymigrate databases with the

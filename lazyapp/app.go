@@ -16,6 +16,7 @@ import (
 
 	"golazy.dev/lazyassets"
 	"golazy.dev/lazyauth"
+	"golazy.dev/lazyauth/memoryauth"
 	"golazy.dev/lazybuildinfo"
 	"golazy.dev/lazycache"
 	"golazy.dev/lazycache/inmemorycache"
@@ -93,6 +94,7 @@ type App struct {
 	Sessions     *lazysession.Manager
 	Migrations   lazymigrate.Databases
 	Jobs         *lazyjobs.JobRunner
+	Auth         lazyauth.Config
 	OAuth        *lazyoauth.Server
 	MCP          *lazymcp.Scope
 	Workers      *lazyworkers.Registry
@@ -206,6 +208,8 @@ func New(config Config) *App {
 		ctx = lazycontroller.WithDetailErrors(ctx)
 	}
 	ctx = lazyDevContext(ctx)
+	configuredAuth := lazyauth.Config{Authenticator: memoryauth.FromEnvironment()}
+	ctx = lazyauth.WithConfig(ctx, configuredAuth)
 
 	assetOptions := append([]lazyassets.Option{}, config.AssetOptions...)
 	assetOptions = append(assetOptions, lazyDevAssetOptions()...)
@@ -242,14 +246,17 @@ func New(config Config) *App {
 		}
 		ctx = dependencies.Context()
 	}
+	ctx = lazyauth.WithConfig(ctx, configuredAuth)
+	dependencies.SetContext(ctx)
 
-	var configuredAuth lazyauth.Config
 	if config.Auth != nil {
 		auth, err := config.Auth(ctx)
 		if err != nil {
 			panic(fmt.Errorf("initialize auth: %w", err))
 		}
 		configuredAuth = auth
+		ctx = lazyauth.WithConfig(ctx, configuredAuth)
+		dependencies.SetContext(ctx)
 	}
 
 	var oauthServer *lazyoauth.Server
@@ -423,6 +430,7 @@ func New(config Config) *App {
 		Sessions:     sessions,
 		Migrations:   migrations,
 		Jobs:         jobs,
+		Auth:         configuredAuth,
 		OAuth:        oauthServer,
 		MCP:          mcpScope,
 		Workers:      workers,

@@ -12,6 +12,7 @@ var (
 )
 
 type contextKey struct{}
+type configContextKey struct{}
 
 // User is the authenticated identity returned by an Authenticator.
 type User struct {
@@ -64,4 +65,15 @@ func WithUser(ctx context.Context, user User) context.Context {
 func FromContext(ctx context.Context) (User, bool) {
 	user, ok := ctx.Value(contextKey{}).(User)
 	return user, ok && user.ID != ""
+}
+
+// WithConfig stores the configured app authentication backend in ctx.
+func WithConfig(ctx context.Context, config Config) context.Context {
+	return context.WithValue(ctx, configContextKey{}, config)
+}
+
+// ConfigFromContext returns the app authentication backend stored in ctx.
+func ConfigFromContext(ctx context.Context) (Config, bool) {
+	config, ok := ctx.Value(configContextKey{}).(Config)
+	return config, ok
 }

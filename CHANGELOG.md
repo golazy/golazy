@@ -29,6 +29,11 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `lazyroutes` now supports generated arguments on controller `BeforeAction`
   methods, so base controllers can use `GenX` methods for shared auth setup
   before the routed action runs.
+- `golazy.dev/lazyauth/memoryauth` adds an in-memory password backend.
+  `lazyapp.New` now includes `lazyauth` by default through `App.Auth` and app
+  context. The default backend has zero users unless `LAZYAUTH_DEFAULT_PASS`
+  creates a bootstrap `admin` user; `LAZYAUTH_DEFAULT_USER` overrides that
+  username.
 
 ### Changed
 

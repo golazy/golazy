@@ -30,6 +30,9 @@ log.Fatal(app.ListenAndServe())
   dependency-initialized app context.
 - Creates an asset registry.
 - Registers public and generated assets.
+- Initializes app auth. Without `Config.Auth`, the default is an in-memory
+  `lazyauth` backend with zero users. Set `LAZYAUTH_DEFAULT_PASS` to create a
+  bootstrap `admin` user, and `LAZYAUTH_DEFAULT_USER` to use another username.
 - Creates the root `lazyroutes.Scope`.
 - Calls the route drawer.
 - Evaluates SEO defaults with the dependency-initialized context.
@@ -53,6 +56,10 @@ or starts a second server when the address differs. Separate control-plane
 servers automatically include `/debug/pprof/` and the standard pprof subpaths.
 It also sets the server base context to `app.Context`, so request contexts
 include the dependencies initialized by `lazyapp.New`.
+
+`App.Auth` and `lazyauth.ConfigFromContext(app.Context)` expose the configured
+authentication backend. Applications can still provide `Config.Auth` when they
+need file, PostgreSQL, SSO, or app-specific credentials.
 
 When `Config.Migrations` is set, the app binary knows how to migrate itself.
 Set `LAZYAPP_MIGRATE=up` to run pending migrations and exit, or

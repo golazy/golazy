@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"golazy.dev/lazyassets"
+	"golazy.dev/lazyauth"
 	"golazy.dev/lazycache"
 	"golazy.dev/lazycache/inmemorycache"
 	"golazy.dev/lazycontroller"
@@ -124,6 +125,88 @@ func TestAppRegistersTelemetryDependency(t *testing.T) {
 	}
 	if !graphHasEdge(graph, lazydeps.Edge{From: "app", To: "telemetry"}) {
 		t.Fatalf("dependencies edges = %#v, want app -> telemetry", graph.Edges)
+	}
+}
+
+func TestAppIncludesDefaultAuthWithZeroUsers(t *testing.T) {
+	unsetenv(t, "LAZYAUTH_DEFAULT_PASS", "LAZYAUTH_DEFAULT_USER")
+
+	app := New(Config{Name: "test"})
+	if app.Auth.Authenticator == nil {
+		t.Fatal("app auth authenticator is nil")
+	}
+	auth, ok := lazyauth.ConfigFromContext(app.Context)
+	if !ok || auth.Authenticator == nil {
+		t.Fatal("app context is missing auth config")
+	}
+	_, err := lazyauth.Authenticate(context.Background(), auth, lazyauth.Credential{
+		Kind:       "password",
+		Identifier: "admin",
+		Secret:     "secret",
+	})
+	if !errors.Is(err, lazyauth.ErrInvalidCredentials) {
+		t.Fatalf("Authenticate error = %v, want ErrInvalidCredentials", err)
+	}
+}
+
+func TestAppDefaultAuthCreatesEnvironmentUser(t *testing.T) {
+	t.Setenv("LAZYAUTH_DEFAULT_PASS", "secret")
+	t.Setenv("LAZYAUTH_DEFAULT_USER", "ops")
+
+	app := New(Config{Name: "test"})
+	user, err := lazyauth.Authenticate(context.Background(), app.Auth, lazyauth.Credential{
+		Kind:       "password",
+		Identifier: "ops",
+		Secret:     "secret",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if user.ID != "ops" || user.Data["admin"] != true {
+		t.Fatalf("user = %#v, want ops bootstrap admin", user)
+	}
+}
+
+type appTestAuth struct{}
+
+func (appTestAuth) Authenticate(_ context.Context, credential lazyauth.Credential) (lazyauth.User, error) {
+	if credential.Identifier != "custom" || credential.Secret != "secret" {
+		return lazyauth.User{}, lazyauth.ErrInvalidCredentials
+	}
+	return lazyauth.User{ID: "custom"}, nil
+}
+
+func TestAppAuthOverrideReceivesDefaultAuthContext(t *testing.T) {
+	t.Setenv("LAZYAUTH_DEFAULT_PASS", "default-secret")
+	defaultWasAvailable := false
+
+	app := New(Config{
+		Name: "test",
+		Auth: func(ctx context.Context) (lazyauth.Config, error) {
+			auth, ok := lazyauth.ConfigFromContext(ctx)
+			if !ok || auth.Authenticator == nil {
+				return lazyauth.Config{}, fmt.Errorf("default auth missing from context")
+			}
+			defaultWasAvailable = true
+			return lazyauth.Config{Authenticator: appTestAuth{}}, nil
+		},
+	})
+	if !defaultWasAvailable {
+		t.Fatal("auth override did not observe default auth")
+	}
+	if _, err := lazyauth.Authenticate(context.Background(), app.Auth, lazyauth.Credential{
+		Kind:       "password",
+		Identifier: "admin",
+		Secret:     "default-secret",
+	}); !errors.Is(err, lazyauth.ErrInvalidCredentials) {
+		t.Fatalf("default auth still authenticated after override: %v", err)
+	}
+	if _, err := lazyauth.Authenticate(context.Background(), app.Auth, lazyauth.Credential{
+		Kind:       "password",
+		Identifier: "custom",
+		Secret:     "secret",
+	}); err != nil {
+		t.Fatal(err)
 	}
 }
 

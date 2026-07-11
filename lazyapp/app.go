@@ -25,6 +25,7 @@ import (
 	"golazy.dev/lazydeps"
 	"golazy.dev/lazydispatch"
 	"golazy.dev/lazydispatch/middlewares"
+	"golazy.dev/lazyerrors"
 	"golazy.dev/lazyfiles"
 	"golazy.dev/lazyforms"
 	"golazy.dev/lazyjobs"
@@ -356,6 +357,7 @@ func New(config Config) *App {
 		renderer.AddHelpers(pwa.Helpers())
 	}
 	renderer.AddHelpers(lazyforms.Helpers(router))
+	renderer.AddHelpers(lazyerrors.Helpers())
 	renderer.AddHelpers(lazyseo.Helpers(seo...))
 	renderer.AddHelpers(lazyturbo.Helpers())
 	renderer.AddHelpers(cacheHelpers())

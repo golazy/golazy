@@ -31,6 +31,9 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `Param`, and explicit session and flash helpers for controller code.
 - `lazysession` now exposes read-only session access plus explicit dirty
   marking so controller session reads do not force a `Set-Cookie` response.
+- `golazy.dev/lazyerrors` now provides form validation from `validate` struct
+  tags, typed validation error leaves, `Validate() error` extension points, and
+  template helpers for field errors.
 - `lazyroutes` now supports generated arguments on controller `BeforeAction`
   methods, so base controllers can use `GenX` methods for shared auth setup
   before the routed action runs.

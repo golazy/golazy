@@ -51,7 +51,7 @@ golazy.dev/lazycontroller          Request-local controllers and render state
 golazy.dev/lazycookie              Signed and encrypted secure cookies
 golazy.dev/lazydispatch            HTTP dispatch and middleware
 golazy.dev/lazydoc                 Package documentation extraction and search
-golazy.dev/lazyerrors              Caller-prefixed application errors with typed backtraces
+golazy.dev/lazyerrors              Caller-prefixed errors, typed backtraces, and validation errors
 golazy.dev/lazyfiles               Logical file catalog and fallback file URLs
 golazy.dev/lazyforms               Form helpers aligned with schema decoding
 golazy.dev/lazymailer              Mailer rendering and delivery interfaces

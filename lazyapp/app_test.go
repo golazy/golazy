@@ -577,6 +577,28 @@ func TestAppRegistersSEOHelpers(t *testing.T) {
 	}
 }
 
+func TestAppRegistersValidationErrorHelpers(t *testing.T) {
+	app := New(Config{
+		Views: testViewFS(t, map[string]string{
+			"pages/show.html.tpl":          `{{range field_errors_for .post_errors "title"}}{{.}}{{end}}`,
+			"layouts/app.html.tpl":         `{{.content}}`,
+			"layouts/turbo_frame.html.tpl": `{{.content}}`,
+		}),
+		Drawer: func(router *lazyroutes.Scope) {
+			router.Get("/", newValidationHelperController, (*validationHelperController).Show)
+		},
+	})
+
+	response := httptest.NewRecorder()
+	app.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+	if got, want := response.Body.String(), "title: must be present"; got != want {
+		t.Fatalf("body = %q, want %q", got, want)
+	}
+}
+
 func TestAppInitializesDependenciesBeforeSEO(t *testing.T) {
 	type contextKey struct{}
 
@@ -640,6 +662,27 @@ func (testPageMetadata) Title() string {
 
 func (testPageMetadata) Description() string {
 	return "Page description"
+}
+
+type validationHelperController struct {
+	lazycontroller.Base
+}
+
+type validationHelperForm struct {
+	Title string `validate:"presence"`
+}
+
+func newValidationHelperController(ctx context.Context) (*validationHelperController, error) {
+	base, err := lazycontroller.NewBase(ctx, "pages")
+	if err != nil {
+		return nil, err
+	}
+	return &validationHelperController{Base: base}, nil
+}
+
+func (c *validationHelperController) Show() error {
+	c.Set("post_errors", lazyerrors.Validator(validationHelperForm{}))
+	return nil
 }
 
 func TestAppRegistersGeneratedAssetSources(t *testing.T) {

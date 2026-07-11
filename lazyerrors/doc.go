@@ -49,4 +49,13 @@
 // library, preserves normal wrapping semantics, and can be used in services,
 // CLIs, workers, or tests that want errors with caller context and an inspectable
 // stack without adopting the rest of the framework.
+//
+// Validator adds a small validation-error convention for form structs. It reads
+// validate tags such as `validate:"presence;min:3;max:10"`, returns ordinary
+// errors joined with errors.Join, and uses ValidationError leaves whose wrapped
+// causes are typed errors such as PresenceErr, MinSizeErr, and MaxSizeErr. A
+// form may also implement Validate() error for custom validations; Validator
+// joins that returned error with the tag-derived failures. ErrorsFor and
+// FieldErrorsFor extract validation leaves by field, and lazyapp registers
+// matching `errors_for` and `field_errors_for` template helpers.
 package lazyerrors

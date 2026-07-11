@@ -7,6 +7,8 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.20] - 2026-07-12
+
 ### Added
 
 - `golazy.dev/lazycache/inmemorycache` now supports
@@ -630,7 +632,8 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Route construction with embedded public-file fallback.
 - Method-not-allowed handling for application routes.
 
-[Unreleased]: https://github.com/golazy/golazy/compare/v0.1.19...HEAD
+[Unreleased]: https://github.com/golazy/golazy/compare/v0.1.20...HEAD
+[0.1.20]: https://github.com/golazy/golazy/compare/v0.1.19...v0.1.20
 [0.1.19]: https://github.com/golazy/golazy/compare/v0.1.18...v0.1.19
 [0.1.18]: https://github.com/golazy/golazy/compare/v0.1.17...v0.1.18
 [0.1.17]: https://github.com/golazy/golazy/compare/v0.1.16...v0.1.17

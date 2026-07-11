@@ -7,6 +7,26 @@ import (
 	"strings"
 )
 
+type redirectOptions struct {
+	status []int
+}
+
+// RedirectOption customizes route redirect helpers.
+type RedirectOption interface {
+	applyRedirectOption(*redirectOptions)
+}
+
+type redirectStatusOption int
+
+func (option redirectStatusOption) applyRedirectOption(options *redirectOptions) {
+	options.status = append(options.status, int(option))
+}
+
+// RedirectStatus sets the status used by RedirectToRoute.
+func RedirectStatus(code int) RedirectOption {
+	return redirectStatusOption(code)
+}
+
 // Redirect sends an HTTP redirect and marks the controller response as written.
 // It defaults to 302 Found. Pass a single 3xx status such as
 // http.StatusMovedPermanently or http.StatusSeeOther to override it.
@@ -29,6 +49,34 @@ func (b *Base) Redirect(location string, status ...int) error {
 // wording in action code.
 func (b *Base) RedirectTo(location string, status ...int) error {
 	return b.Redirect(location, status...)
+}
+
+// RedirectToRoute redirects to a named route built with PathFor.
+func (b *Base) RedirectToRoute(name string, values ...any) error {
+	routeValues, options := splitRedirectValues(values)
+	path, err := b.PathFor(name, routeValues...)
+	if err != nil {
+		return err
+	}
+	return b.RedirectTo(path, options.status...)
+}
+
+// PermanentRedirectTo redirects permanently to location with 301 Moved Permanently.
+func (b *Base) PermanentRedirectTo(location string) error {
+	return b.RedirectTo(location, http.StatusMovedPermanently)
+}
+
+// PermanentRedirectToRoute permanently redirects to a named route built with PathFor.
+func (b *Base) PermanentRedirectToRoute(name string, values ...any) error {
+	routeValues, options := splitRedirectValues(values)
+	if len(options.status) > 0 {
+		return fmt.Errorf("permanent route redirects do not accept RedirectStatus")
+	}
+	path, err := b.PathFor(name, routeValues...)
+	if err != nil {
+		return err
+	}
+	return b.PermanentRedirectTo(path)
 }
 
 // RedirectBackOrTo redirects to the same-host Referer header when present,
@@ -91,6 +139,19 @@ func redirectStatus(status ...int) (int, error) {
 	default:
 		return 0, fmt.Errorf("redirect accepts at most one status")
 	}
+}
+
+func splitRedirectValues(values []any) ([]any, redirectOptions) {
+	var options redirectOptions
+	routeValues := make([]any, 0, len(values))
+	for _, value := range values {
+		if option, ok := value.(RedirectOption); ok {
+			option.applyRedirectOption(&options)
+			continue
+		}
+		routeValues = append(routeValues, value)
+	}
+	return routeValues, options
 }
 
 func validateRedirectLocation(location string) error {

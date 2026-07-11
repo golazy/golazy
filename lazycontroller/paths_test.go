@@ -76,6 +76,19 @@ func TestPathForErrorsWithoutConfiguredHelper(t *testing.T) {
 	}
 }
 
+func TestParamReadsRequestPathValue(t *testing.T) {
+	base, response := newPathForTestBase(t, false)
+	request := httptest.NewRequest(http.MethodGet, "https://example.com/posts/hello", nil)
+	request.SetPathValue("post_id", "hello")
+	if err := base.BindRequest(response, request, lazyview.Route{Controller: "posts"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if got, want := base.Param("post_id"), "hello"; got != want {
+		t.Fatalf("Param = %q, want %q", got, want)
+	}
+}
+
 func newPathForTestBase(t *testing.T, withPathFor bool) (Base, *httptest.ResponseRecorder) {
 	t.Helper()
 	renderer, err := NewRenderer(fstest.MapFS{

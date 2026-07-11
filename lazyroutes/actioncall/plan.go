@@ -25,6 +25,16 @@ type Plan struct {
 	statePool  *sync.Pool
 }
 
+// GeneratorCache stores generated argument values for one controller request.
+type GeneratorCache struct {
+	values map[reflect.Type]reflect.Value
+}
+
+// NewGeneratorCache creates an empty request-local generator cache.
+func NewGeneratorCache() *GeneratorCache {
+	return &GeneratorCache{values: map[reflect.Type]reflect.Value{}}
+}
+
 type generatorPlan struct {
 	method   reflect.Value
 	name     string
@@ -41,7 +51,8 @@ type requestState struct {
 	controller reflect.Value
 	w          http.ResponseWriter
 	r          *http.Request
-	cache      map[reflect.Type]reflect.Value
+	cache      *GeneratorCache
+	ownCache   bool
 	resolving  map[reflect.Type]bool
 	inputs     [][]reflect.Value
 }
@@ -105,6 +116,11 @@ func CompileMethod(controllerType reflect.Type, name string, opts Options) (*Pla
 }
 
 func (p *Plan) Call(controller reflect.Value, w http.ResponseWriter, r *http.Request) error {
+	return p.CallWithCache(controller, w, r, nil)
+}
+
+// CallWithCache calls the plan with a shared request-local generator cache.
+func (p *Plan) CallWithCache(controller reflect.Value, w http.ResponseWriter, r *http.Request, cache *GeneratorCache) error {
 	if p.standard {
 		return callErrorOutput(p.action.Call([]reflect.Value{
 			controller,
@@ -113,7 +129,7 @@ func (p *Plan) Call(controller reflect.Value, w http.ResponseWriter, r *http.Req
 		}))
 	}
 
-	state := p.requestState(controller, w, r)
+	state := p.requestState(controller, w, r, cache)
 	defer p.releaseRequestState(state)
 
 	inputs := state.takeInputs(len(p.args) + 1)
@@ -129,21 +145,25 @@ func (p *Plan) Call(controller reflect.Value, w http.ResponseWriter, r *http.Req
 	return callErrorOutput(p.action.Call(inputs))
 }
 
-func (p *Plan) requestState(controller reflect.Value, w http.ResponseWriter, r *http.Request) *requestState {
+func (p *Plan) requestState(controller reflect.Value, w http.ResponseWriter, r *http.Request, cache *GeneratorCache) *requestState {
 	var state *requestState
 	if p.statePool != nil {
 		state, _ = p.statePool.Get().(*requestState)
 	}
 	if state == nil {
-		state = &requestState{
-			cache:     map[reflect.Type]reflect.Value{},
-			resolving: map[reflect.Type]bool{},
-		}
+		state = &requestState{resolving: map[reflect.Type]bool{}}
+	}
+	if cache == nil {
+		cache = NewGeneratorCache()
+		state.ownCache = true
+	} else {
+		state.ownCache = false
 	}
 	state.plan = p
 	state.controller = controller
 	state.w = w
 	state.r = r
+	state.cache = cache
 	return state
 }
 
@@ -162,9 +182,13 @@ func (s *requestState) reset() {
 	s.controller = reflect.Value{}
 	s.w = nil
 	s.r = nil
-	for t := range s.cache {
-		delete(s.cache, t)
+	if s.ownCache && s.cache != nil {
+		for t := range s.cache.values {
+			delete(s.cache.values, t)
+		}
 	}
+	s.cache = nil
+	s.ownCache = false
 	for t := range s.resolving {
 		delete(s.resolving, t)
 	}
@@ -334,7 +358,14 @@ type generatorResolver struct {
 }
 
 func (r generatorResolver) resolve(state *requestState) (reflect.Value, error) {
-	if value, ok := state.cache[r.t]; ok {
+	if state.cache == nil {
+		state.cache = NewGeneratorCache()
+		state.ownCache = true
+	}
+	if state.cache.values == nil {
+		state.cache.values = map[reflect.Type]reflect.Value{}
+	}
+	if value, ok := state.cache.values[r.t]; ok {
 		return value, nil
 	}
 	if state.resolving[r.t] {
@@ -365,7 +396,7 @@ func (r generatorResolver) resolve(state *requestState) (reflect.Value, error) {
 		}
 	}
 	value := outputs[0]
-	state.cache[r.t] = value
+	state.cache.values[r.t] = value
 	return value, nil
 }
 

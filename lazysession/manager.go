@@ -106,6 +106,22 @@ func (m *Manager) Get(r *http.Request) (*Session, error) {
 	return m.store.Get(r, m.name)
 }
 
+// Read returns the manager's default session for r without marking it for save.
+func (m *Manager) Read(r *http.Request) (*Session, error) {
+	if m == nil {
+		return nil, fmt.Errorf("lazysession: manager is nil")
+	}
+	return GetRegistry(r).Read(m.store, m.name)
+}
+
+// MarkDirty marks session as changed so the manager middleware saves it.
+func (m *Manager) MarkDirty(r *http.Request, session *Session) error {
+	if m == nil {
+		return fmt.Errorf("lazysession: manager is nil")
+	}
+	return GetRegistry(r).MarkDirty(m.store, m.name, session)
+}
+
 // Handler installs m into the request context and saves registered sessions
 // before the response is sent.
 func (m *Manager) Handler(next http.Handler) http.Handler {
@@ -180,4 +196,22 @@ func Get(r *http.Request) (*Session, error) {
 		return nil, fmt.Errorf("lazysession: manager is missing from request context")
 	}
 	return manager.Get(r)
+}
+
+// Read returns the configured application session without marking it for save.
+func Read(r *http.Request) (*Session, error) {
+	manager, ok := ManagerFromContext(r.Context())
+	if !ok {
+		return nil, fmt.Errorf("lazysession: manager is missing from request context")
+	}
+	return manager.Read(r)
+}
+
+// MarkDirty marks session as changed so it is saved before the response is sent.
+func MarkDirty(r *http.Request, session *Session) error {
+	manager, ok := ManagerFromContext(r.Context())
+	if !ok {
+		return fmt.Errorf("lazysession: manager is missing from request context")
+	}
+	return manager.MarkDirty(r, session)
 }

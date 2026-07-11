@@ -113,6 +113,7 @@ func (b *controllerBinding) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	var controller any
 	var controllerValue reflect.Value
+	generatorCache := actioncall.NewGeneratorCache()
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			handleControllerError(b.ctx, w, r, controller, lazycontroller.PanicError(recovered))
@@ -153,7 +154,7 @@ func (b *controllerBinding) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		lazycontroller.ReportController(r, controller)
 		if b.hasBeforeAction {
-			if err := b.beforePlan.Call(controllerValue, w, r); err != nil {
+			if err := b.beforePlan.CallWithCache(controllerValue, w, r, generatorCache); err != nil {
 				if controllerSpan != nil {
 					controllerSpan.RecordError(err)
 				}
@@ -169,7 +170,7 @@ func (b *controllerBinding) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	actionRequest, actionSpan := requestRouteRegion(r, "controller.action", route)
 	actionErr := callWithActionRegion(actionSpan, func() error {
-		return b.actionPlan.Call(controllerValue, w, actionRequest)
+		return b.actionPlan.CallWithCache(controllerValue, w, actionRequest, generatorCache)
 	})
 	if actionErr != nil {
 		handleControllerError(b.ctx, w, r, controller, actionErr)

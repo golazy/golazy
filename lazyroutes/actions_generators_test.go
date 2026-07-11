@@ -169,6 +169,50 @@ func TestControllerBeforeActionGeneratorErrorUsesControllerErrorHandler(t *testi
 	}
 }
 
+type sharedGeneratorUser string
+
+type sharedGeneratorController struct {
+	userCalls int
+	before    string
+}
+
+func newSharedGeneratorController(context.Context) (*sharedGeneratorController, error) {
+	return &sharedGeneratorController{}, nil
+}
+
+func (c *sharedGeneratorController) GenSharedGeneratorUser(r *http.Request) (*sharedGeneratorUser, error) {
+	c.userCalls++
+	user := sharedGeneratorUser(r.Header.Get("X-User"))
+	return &user, nil
+}
+
+func (c *sharedGeneratorController) BeforeAction(user *sharedGeneratorUser) error {
+	c.before = string(*user)
+	return nil
+}
+
+func (c *sharedGeneratorController) Show(w http.ResponseWriter, user *sharedGeneratorUser) error {
+	_, err := fmt.Fprintf(w, "before:%s action:%s calls:%d", c.before, *user, c.userCalls)
+	return err
+}
+
+func TestControllerBeforeActionAndActionShareGeneratorCache(t *testing.T) {
+	scope := New(context.Background())
+	scope.Get("/admin", newSharedGeneratorController, (*sharedGeneratorController).Show)
+
+	request := httptest.NewRequest(http.MethodGet, "/admin", nil)
+	request.Header.Set("X-User", "admin@example.com")
+	response := httptest.NewRecorder()
+	scope.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+	if got, want := response.Body.String(), "before:admin@example.com action:admin@example.com calls:1"; got != want {
+		t.Fatalf("body = %q, want %q", got, want)
+	}
+}
+
 type currentUser struct {
 	Name string
 }

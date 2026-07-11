@@ -26,6 +26,11 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   records and control-plane snapshots.
 - `lazycontroller.Base.ResponseWriter()` exposes the response writer bound to
   the current controller request, matching the existing `Request()` accessor.
+- `lazycontroller.Base` now provides `RedirectToRoute`,
+  `PermanentRedirectTo`, `PermanentRedirectToRoute`, `RedirectStatus`,
+  `Param`, and explicit session and flash helpers for controller code.
+- `lazysession` now exposes read-only session access plus explicit dirty
+  marking so controller session reads do not force a `Set-Cookie` response.
 - `lazyroutes` now supports generated arguments on controller `BeforeAction`
   methods, so base controllers can use `GenX` methods for shared auth setup
   before the routed action runs.
@@ -54,6 +59,8 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   exporters and app services to flush before process exit.
 - `lazyjobs.Backend.Claim` receives queue-limit metadata so durable backends can
   enforce per-queue concurrency atomically across app instances.
+- Generated controller arguments are cached across `BeforeAction` and the
+  routed action for the same request.
 
 ## [0.1.19] - 2026-07-03
 

@@ -95,8 +95,9 @@ func (s *Session) Store() Store {
 
 // sessionInfo stores a session tracked by the registry.
 type sessionInfo struct {
-	s *Session
-	e error
+	s     *Session
+	e     error
+	dirty bool
 }
 
 // contextKey is the type used to store the registry in the context.
@@ -130,24 +131,54 @@ type Registry struct {
 //
 // It returns a new session if there are no sessions registered for the name.
 func (s *Registry) Get(store Store, name string) (session *Session, err error) {
+	return s.get(store, name, true)
+}
+
+// Read returns the session for name without marking it for save.
+func (s *Registry) Read(store Store, name string) (session *Session, err error) {
+	return s.get(store, name, false)
+}
+
+func (s *Registry) get(store Store, name string, dirty bool) (session *Session, err error) {
 	if !isCookieNameValid(name) {
 		return nil, fmt.Errorf("sessions: invalid character in cookie name: %s", name)
 	}
 	if info, ok := s.sessions[name]; ok {
+		if dirty && !info.dirty {
+			info.dirty = true
+			s.sessions[name] = info
+		}
 		session, err = info.s, info.e
 	} else {
 		session, err = store.New(s.request, name)
 		session.name = name
-		s.sessions[name] = sessionInfo{s: session, e: err}
+		s.sessions[name] = sessionInfo{s: session, e: err, dirty: dirty}
 	}
 	session.store = store
 	return
+}
+
+// MarkDirty registers session for saving at the end of the current request.
+func (s *Registry) MarkDirty(store Store, name string, session *Session) error {
+	if !isCookieNameValid(name) {
+		return fmt.Errorf("sessions: invalid character in cookie name: %s", name)
+	}
+	if session == nil {
+		return fmt.Errorf("sessions: session is nil")
+	}
+	session.store = store
+	session.name = name
+	s.sessions[name] = sessionInfo{s: session, dirty: true}
+	return nil
 }
 
 // Save saves all sessions registered for the current request.
 func (s *Registry) Save(w http.ResponseWriter) error {
 	var errMulti MultiError
 	for name, info := range s.sessions {
+		if !info.dirty {
+			continue
+		}
 		session := info.s
 		if session.store == nil {
 			errMulti = append(errMulti, fmt.Errorf(

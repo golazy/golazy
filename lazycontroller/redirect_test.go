@@ -2,6 +2,7 @@ package lazycontroller
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -46,6 +47,59 @@ func TestRedirectAcceptsSeeOther(t *testing.T) {
 	}
 	if got, want := response.Header().Get("Location"), "/posts"; got != want {
 		t.Fatalf("Location = %q, want %q", got, want)
+	}
+}
+
+func TestRedirectToRouteBuildsPathAndStatus(t *testing.T) {
+	base, response := newRouteRedirectTestBase(t)
+	request := httptest.NewRequest(http.MethodPost, "https://example.com/posts", nil)
+	if err := base.BindRequest(response, request, lazyview.Route{Controller: "posts"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := base.RedirectToRoute("post", "hello", URLParams{"page": 2}, RedirectStatus(http.StatusSeeOther)); err != nil {
+		t.Fatal(err)
+	}
+
+	if response.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusSeeOther)
+	}
+	if got, want := response.Header().Get("Location"), "/post/hello?page=2"; got != want {
+		t.Fatalf("Location = %q, want %q", got, want)
+	}
+}
+
+func TestPermanentRedirectHelpersUseMovedPermanently(t *testing.T) {
+	base, response := newRouteRedirectTestBase(t)
+	request := httptest.NewRequest(http.MethodGet, "https://example.com/posts", nil)
+	if err := base.BindRequest(response, request, lazyview.Route{Controller: "posts"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := base.PermanentRedirectToRoute("post", "hello"); err != nil {
+		t.Fatal(err)
+	}
+
+	if response.Code != http.StatusMovedPermanently {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusMovedPermanently)
+	}
+	if got, want := response.Header().Get("Location"), "/post/hello"; got != want {
+		t.Fatalf("Location = %q, want %q", got, want)
+	}
+}
+
+func TestPermanentRedirectToRouteRejectsRedirectStatus(t *testing.T) {
+	base, response := newRouteRedirectTestBase(t)
+	request := httptest.NewRequest(http.MethodGet, "https://example.com/posts", nil)
+	if err := base.BindRequest(response, request, lazyview.Route{Controller: "posts"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := base.PermanentRedirectToRoute("post", "hello", RedirectStatus(http.StatusTemporaryRedirect)); err == nil {
+		t.Fatal("expected permanent route redirect status error")
+	}
+	if location := response.Header().Get("Location"); location != "" {
+		t.Fatalf("Location = %q, want empty", location)
 	}
 }
 
@@ -154,6 +208,29 @@ func newRedirectTestBase(t *testing.T) (Base, *httptest.ResponseRecorder) {
 		t.Fatal(err)
 	}
 	ctx := WithRenderer(context.Background(), renderer)
+	base, err := NewBase(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return base, httptest.NewRecorder()
+}
+
+func newRouteRedirectTestBase(t *testing.T) (Base, *httptest.ResponseRecorder) {
+	t.Helper()
+	renderer, err := NewRenderer(fstest.MapFS{
+		"layouts/app.html.tpl": {Data: []byte(`{{.content}}`)},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := WithRenderer(context.Background(), renderer)
+	ctx = WithPathFor(ctx, func(name string, values ...any) (string, error) {
+		path := "/" + name
+		for _, value := range values {
+			path += "/" + fmt.Sprint(value)
+		}
+		return path, nil
+	})
 	base, err := NewBase(ctx)
 	if err != nil {
 		t.Fatal(err)

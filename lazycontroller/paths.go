@@ -46,6 +46,14 @@ func (b *Base) MustPathFor(name string, values ...any) string {
 	return path
 }
 
+// Param returns the named route parameter from the current request.
+func (b *Base) Param(name string) string {
+	if b == nil || b.request == nil {
+		return ""
+	}
+	return b.request.PathValue(name)
+}
+
 func pathForFromContext(ctx context.Context) (PathForFunc, bool) {
 	if ctx == nil {
 		return nil, false

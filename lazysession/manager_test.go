@@ -142,6 +142,63 @@ func TestManagerAcceptsCustomStore(t *testing.T) {
 	}
 }
 
+func TestManagerReadDoesNotSaveDefaultSession(t *testing.T) {
+	store := &recordingStore{}
+	manager, err := NewManager(Config{
+		Name:  "custom_session",
+		Store: store,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	handler := manager.Handler(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		session, err := Read(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		session.Values["read"] = true
+	}))
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
+
+	if store.newCount != 1 {
+		t.Fatalf("New calls = %d, want 1", store.newCount)
+	}
+	if store.saveCount != 0 {
+		t.Fatalf("Save calls = %d, want 0", store.saveCount)
+	}
+}
+
+func TestManagerMarkDirtySavesReadSession(t *testing.T) {
+	store := &recordingStore{}
+	manager, err := NewManager(Config{
+		Name:  "custom_session",
+		Store: store,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	handler := manager.Handler(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		session, err := Read(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		session.Values["write"] = true
+		if err := MarkDirty(r, session); err != nil {
+			t.Fatal(err)
+		}
+	}))
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
+
+	if store.newCount != 1 {
+		t.Fatalf("New calls = %d, want 1", store.newCount)
+	}
+	if store.saveCount != 1 {
+		t.Fatalf("Save calls = %d, want 1", store.saveCount)
+	}
+}
+
 func TestNewManagerAcceptsSingleKey(t *testing.T) {
 	manager, err := NewManager(Config{
 		Key: "sample-cookie-01",

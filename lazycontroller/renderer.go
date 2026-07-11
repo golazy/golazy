@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"golazy.dev/lazycache"
+	"golazy.dev/lazysession"
 	"golazy.dev/lazyturbo"
 	"golazy.dev/lazyview"
 )
@@ -43,23 +44,26 @@ func RendererFromContext(ctx context.Context) (*Renderer, bool) {
 }
 
 type Base struct {
-	appCtx     context.Context
-	ctx        context.Context
-	request    *http.Request
-	writer     http.ResponseWriter
-	renderer   *Renderer
-	route      lazyview.Route
-	viewPath   string
-	controller string
-	layout     string
-	useLayout  bool
-	status     int
-	data       map[string]any
-	helpers    map[string]any
-	frameOpts  []lazyturbo.FrameOption
-	format     Format
-	variants   []string
-	cacheKey   cacheKeySpec
+	appCtx       context.Context
+	ctx          context.Context
+	request      *http.Request
+	writer       http.ResponseWriter
+	renderer     *Renderer
+	route        lazyview.Route
+	viewPath     string
+	controller   string
+	layout       string
+	useLayout    bool
+	status       int
+	data         map[string]any
+	helpers      map[string]any
+	frameOpts    []lazyturbo.FrameOption
+	format       Format
+	variants     []string
+	cacheKey     cacheKeySpec
+	session      *lazysession.Session
+	sessionSet   bool
+	sessionDirty bool
 }
 
 type cacheKeySpec struct {
@@ -134,6 +138,9 @@ func (b *Base) BindRequest(w http.ResponseWriter, r *http.Request, route lazyvie
 	b.frameOpts = nil
 	b.variants = nil
 	b.cacheKey = cacheKeySpec{}
+	b.session = nil
+	b.sessionSet = false
+	b.sessionDirty = false
 	return nil
 }
 
@@ -155,6 +162,9 @@ func (b *Base) ResetRequest() {
 	b.frameOpts = nil
 	b.variants = nil
 	b.cacheKey = cacheKeySpec{}
+	b.session = nil
+	b.sessionSet = false
+	b.sessionDirty = false
 }
 
 type appContext struct {

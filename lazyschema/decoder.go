@@ -104,7 +104,7 @@ func (d *Decoder) MaxDepth(size int) {
 }
 
 // RegisterConverter registers a converter function for a custom type.
-func (d *Decoder) RegisterConverter(value interface{}, converterFunc Converter) {
+func (d *Decoder) RegisterConverter(value any, converterFunc Converter) {
 	d.cache.registerConverter(value, converterFunc)
 }
 
@@ -116,9 +116,9 @@ func (d *Decoder) RegisterConverter(value interface{}, converterFunc Converter) 
 // Keys are "paths" in dotted notation to the struct fields and nested structs.
 //
 // See the package documentation for a full explanation of the mechanics.
-func (d *Decoder) Decode(dst interface{}, src map[string][]string) error {
+func (d *Decoder) Decode(dst any, src map[string][]string) error {
 	v := reflect.ValueOf(dst)
-	if v.Kind() != reflect.Ptr || v.Elem().Kind() != reflect.Struct {
+	if v.Kind() != reflect.Pointer || v.Elem().Kind() != reflect.Struct {
 		return errors.New("lazyschema: interface must be a pointer to struct")
 	}
 	v = v.Elem()
@@ -193,7 +193,7 @@ func (d *Decoder) setDefaults(t reflect.Type, v reflect.Value) MultiError {
 	if v.Type().Kind() == reflect.Struct {
 		for i := 0; i < v.NumField(); i++ {
 			field := v.Field(i)
-			if field.Type().Kind() == reflect.Ptr && field.IsNil() && v.Type().Field(i).Anonymous {
+			if field.Type().Kind() == reflect.Pointer && field.IsNil() && v.Type().Field(i).Anonymous {
 				field.Set(reflect.New(field.Type().Elem()))
 			}
 		}
@@ -233,7 +233,7 @@ func (d *Decoder) setDefaults(t reflect.Type, v reflect.Value) MultiError {
 					defaultSlice = reflect.Append(defaultSlice, convertedVal)
 				}
 				vCurrent.Set(defaultSlice)
-			} else if f.typ.Kind() == reflect.Ptr {
+			} else if f.typ.Kind() == reflect.Pointer {
 				t1 := f.typ.Elem()
 
 				if t1.Kind() == reflect.Struct || t1.Kind() == reflect.Slice {
@@ -257,7 +257,7 @@ func (d *Decoder) setDefaults(t reflect.Type, v reflect.Value) MultiError {
 }
 
 func isPointerToStruct(v reflect.Value) bool {
-	return !v.IsZero() && v.Type().Kind() == reflect.Ptr && v.Elem().Type().Kind() == reflect.Struct
+	return !v.IsZero() && v.Type().Kind() == reflect.Pointer && v.Elem().Type().Kind() == reflect.Struct
 }
 
 // checkRequired checks whether required fields are empty
@@ -365,7 +365,7 @@ func isEmpty(t reflect.Type, value []string) bool {
 func (d *Decoder) decode(v reflect.Value, path string, parts []pathPart, values []string) error {
 	// Get the field walking the struct fields by index.
 	for _, name := range parts[0].path {
-		if v.Type().Kind() == reflect.Ptr {
+		if v.Type().Kind() == reflect.Pointer {
 			if v.IsNil() {
 				v.Set(reflect.New(v.Type().Elem()))
 			}
@@ -376,7 +376,7 @@ func (d *Decoder) decode(v reflect.Value, path string, parts []pathPart, values 
 		if v.Type().Kind() == reflect.Struct {
 			for i := 0; i < v.NumField(); i++ {
 				field := v.Field(i)
-				if field.Type().Kind() == reflect.Ptr && field.IsNil() && v.Type().Field(i).Anonymous {
+				if field.Type().Kind() == reflect.Pointer && field.IsNil() && v.Type().Field(i).Anonymous {
 					field.Set(reflect.New(field.Type().Elem()))
 				}
 			}
@@ -391,7 +391,7 @@ func (d *Decoder) decode(v reflect.Value, path string, parts []pathPart, values 
 
 	// Dereference if needed.
 	t := v.Type()
-	if t.Kind() == reflect.Ptr {
+	if t.Kind() == reflect.Pointer {
 		t = t.Elem()
 		if v.IsNil() {
 			v.Set(reflect.New(t))
@@ -423,7 +423,7 @@ func (d *Decoder) decode(v reflect.Value, path string, parts []pathPart, values 
 	if conv == nil && t.Kind() == reflect.Slice && m.IsSliceElement {
 		var items []reflect.Value
 		elemT := t.Elem()
-		isPtrElem := elemT.Kind() == reflect.Ptr
+		isPtrElem := elemT.Kind() == reflect.Pointer
 		if isPtrElem {
 			elemT = elemT.Elem()
 		}
@@ -447,7 +447,7 @@ func (d *Decoder) decode(v reflect.Value, path string, parts []pathPart, values 
 			} else if m.IsValid {
 				u := reflect.New(elemT)
 				if m.IsSliceElementPtr {
-					u = reflect.New(reflect.PtrTo(elemT).Elem())
+					u = reflect.New(reflect.PointerTo(elemT).Elem())
 				}
 				if err := u.Interface().(encoding.TextUnmarshaler).UnmarshalText([]byte(value)); err != nil {
 					return ConversionError{
@@ -459,7 +459,7 @@ func (d *Decoder) decode(v reflect.Value, path string, parts []pathPart, values 
 				}
 				if m.IsSliceElementPtr {
 					items = append(items, u.Elem().Addr())
-				} else if u.Kind() == reflect.Ptr {
+				} else if u.Kind() == reflect.Pointer {
 					items = append(items, u.Elem())
 				} else {
 					items = append(items, u)
@@ -476,8 +476,8 @@ func (d *Decoder) decode(v reflect.Value, path string, parts []pathPart, values 
 				items = append(items, item)
 			} else {
 				if strings.Contains(value, ",") {
-					values := strings.Split(value, ",")
-					for _, value := range values {
+					values := strings.SplitSeq(value, ",")
+					for value := range values {
 						if value == "" {
 							if d.zeroEmpty {
 								items = append(items, reflect.Zero(elemT))
@@ -589,7 +589,7 @@ func isTextUnmarshaler(v reflect.Value) unmarshaler {
 
 	// if v is []T or *[]T create new T
 	t := v.Type()
-	if t.Kind() == reflect.Ptr {
+	if t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 	if t.Kind() == reflect.Slice {
@@ -600,8 +600,8 @@ func isTextUnmarshaler(v reflect.Value) unmarshaler {
 		// If t is a pointer slice, check if its elements implement
 		// encoding.TextUnmarshaler
 		m.IsSliceElement = true
-		if t = t.Elem(); t.Kind() == reflect.Ptr {
-			t = reflect.PtrTo(t.Elem())
+		if t = t.Elem(); t.Kind() == reflect.Pointer {
+			t = reflect.PointerTo(t.Elem())
 			v = reflect.Zero(t)
 			m.IsSliceElementPtr = true
 			m.Unmarshaler, m.IsValid = v.Interface().(encoding.TextUnmarshaler)

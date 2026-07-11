@@ -3,6 +3,7 @@ package lazyapp
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"strings"
 
 	"golazy.dev/lazycache"
@@ -201,9 +202,7 @@ func copyVariables(source map[string]any) map[string]any {
 		return map[string]any{}
 	}
 	out := make(map[string]any, len(source))
-	for name, value := range source {
-		out[name] = value
-	}
+	maps.Copy(out, source)
 	return out
 }
 

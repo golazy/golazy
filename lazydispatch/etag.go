@@ -3,6 +3,7 @@ package lazydispatch
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"maps"
 	"net/http"
 	"strings"
 )
@@ -56,9 +57,7 @@ func ApplyETag(w *BufferedResponseWriter, r *http.Request) {
 
 	headers := cloneNotModifiedHeaders(w.Header())
 	w.Reset()
-	for key, values := range headers {
-		w.Header()[key] = values
-	}
+	maps.Copy(w.Header(), headers)
 	w.WriteHeader(http.StatusNotModified)
 }
 

@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -52,12 +54,7 @@ func (claims Claims) StringSlice(name string) []string {
 
 // HasScope reports whether claims include scope.
 func (claims Claims) HasScope(scope string) bool {
-	for _, candidate := range claims.Scope {
-		if candidate == scope {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(claims.Scope, scope)
 }
 
 // WithClaims stores validated claims in ctx.
@@ -161,9 +158,7 @@ func Verify(token string, config ValidatorConfig) (Claims, error) {
 
 func claimsPayload(claims Claims) map[string]any {
 	payload := map[string]any{}
-	for key, value := range claims.Extra {
-		payload[key] = value
-	}
+	maps.Copy(payload, claims.Extra)
 	if claims.Issuer != "" {
 		payload["iss"] = claims.Issuer
 	}
@@ -279,10 +274,8 @@ func validationKey(kid string, keys map[string][]byte) ([]byte, bool) {
 
 func audienceMatches(tokenAudiences []string, allowed []string) bool {
 	for _, tokenAudience := range tokenAudiences {
-		for _, audience := range allowed {
-			if tokenAudience == audience {
-				return true
-			}
+		if slices.Contains(allowed, tokenAudience) {
+			return true
 		}
 	}
 	return false

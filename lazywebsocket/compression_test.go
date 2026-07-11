@@ -19,10 +19,7 @@ func TestTruncWriter(t *testing.T) {
 		w := &truncWriter{w: nopCloser{&b}}
 		p := []byte(data)
 		for len(p) > 0 {
-			m := len(p)
-			if m > n {
-				m = n
-			}
+			m := min(len(p), n)
 			w.Write(p[:m])
 			p = p[m:]
 		}
@@ -34,7 +31,7 @@ func TestTruncWriter(t *testing.T) {
 
 func textMessages(num int) [][]byte {
 	messages := make([][]byte, num)
-	for i := 0; i < num; i++ {
+	for i := range num {
 		msg := fmt.Sprintf("planet: %d, country: %d, city: %d, street: %d", i, i, i, i)
 		messages[i] = []byte(msg)
 	}

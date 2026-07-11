@@ -72,7 +72,7 @@ func TestDefaultGeneratedArgumentsResolvePathVariables(t *testing.T) {
 	}
 
 	action := reflect.ValueOf((*defaultArgumentController).Capture)
-	controllerType := reflect.TypeOf((*defaultArgumentController)(nil))
+	controllerType := reflect.TypeFor[*defaultArgumentController]()
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -135,7 +135,7 @@ func (c *generatorArgumentController) Show(arg generatedArgument) error {
 
 func TestCustomGeneratedTypesCanUseDefaultArguments(t *testing.T) {
 	plan, err := Compile(
-		reflect.TypeOf((*generatorArgumentController)(nil)),
+		reflect.TypeFor[*generatorArgumentController](),
 		reflect.ValueOf((*generatorArgumentController).Show),
 		Options{RoutePath: "/posts/{post_id}"},
 	)
@@ -161,7 +161,7 @@ func TestCustomGeneratedTypesCanUseDefaultArguments(t *testing.T) {
 
 func TestGeneratorCacheIsRequestLocal(t *testing.T) {
 	plan, err := Compile(
-		reflect.TypeOf((*generatorArgumentController)(nil)),
+		reflect.TypeFor[*generatorArgumentController](),
 		reflect.ValueOf((*generatorArgumentController).Show),
 		Options{RoutePath: "/posts/{post_id}"},
 	)

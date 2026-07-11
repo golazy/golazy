@@ -36,7 +36,7 @@ func TestFlashes(t *testing.T) {
 	var ok bool
 	var cookies []string
 	var session *Session
-	var flashes []interface{}
+	var flashes []any
 
 	store := NewCookieStore([]byte("secret-key"))
 

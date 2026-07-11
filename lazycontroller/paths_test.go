@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -89,11 +90,12 @@ func newPathForTestBase(t *testing.T, withPathFor bool) (Base, *httptest.Respons
 			if name == "error" {
 				return "", errors.New("boom")
 			}
-			path := "/" + name
+			var path strings.Builder
+			path.WriteString("/" + name)
 			for _, value := range values {
-				path += "/" + value.(string)
+				path.WriteString("/" + value.(string))
 			}
-			return path, nil
+			return path.String(), nil
 		})
 	}
 	base, err := NewBase(ctx)

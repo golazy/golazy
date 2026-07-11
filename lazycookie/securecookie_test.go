@@ -19,7 +19,7 @@ import (
 var _ Error = cookieError{}
 var _ Error = MultiError{}
 
-var testCookies = []interface{}{
+var testCookies = []any{
 	map[string]string{"foo": "bar"},
 	map[string]string{"baz": "ding"},
 }
@@ -30,12 +30,12 @@ func TestSecureCookie(t *testing.T) {
 	// TODO test too old / too new timestamps
 	s1 := New([]byte("12345"), []byte("1234567890123456"))
 	s2 := New([]byte("54321"), []byte("6543210987654321"))
-	value := map[string]interface{}{
+	value := map[string]any{
 		"foo": "bar",
 		"baz": 128,
 	}
 
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		// Running this multiple times to check if any special character
 		// breaks encoding/decoding.
 		encoded, err1 := s1.Encode("sid", value)
@@ -43,7 +43,7 @@ func TestSecureCookie(t *testing.T) {
 			t.Error(err1)
 			continue
 		}
-		dst := make(map[string]interface{})
+		dst := make(map[string]any)
 		err2 := s1.Decode("sid", encoded, &dst)
 		if err2 != nil {
 			t.Fatalf("%v: %v", err2, encoded)
@@ -51,7 +51,7 @@ func TestSecureCookie(t *testing.T) {
 		if !reflect.DeepEqual(dst, value) {
 			t.Fatalf("Expected %v, got %v.", value, dst)
 		}
-		dst2 := make(map[string]interface{})
+		dst2 := make(map[string]any)
 		err3 := s2.Decode("sid", encoded, &dst2)
 		if err3 == nil {
 			t.Fatalf("Expected failure decoding.")
@@ -76,7 +76,7 @@ func TestSecureCookie(t *testing.T) {
 
 func TestSecureCookieNilKey(t *testing.T) {
 	s1 := New(nil, nil)
-	value := map[string]interface{}{
+	value := map[string]any{
 		"foo": "bar",
 		"baz": 128,
 	}

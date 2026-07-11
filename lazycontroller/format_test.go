@@ -442,7 +442,7 @@ func newRenderTestBase(t *testing.T, files fstest.MapFS) (Base, *httptest.Respon
 
 func headerValuesContain(values []string, header string) bool {
 	for _, value := range values {
-		for _, part := range strings.Split(value, ",") {
+		for part := range strings.SplitSeq(value, ",") {
 			if strings.EqualFold(strings.TrimSpace(part), header) {
 				return true
 			}

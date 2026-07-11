@@ -31,8 +31,8 @@ func notzero(b []byte) int {
 func TestMaskBytes(t *testing.T) {
 	key := [4]byte{1, 2, 3, 4}
 	for size := 1; size <= 1024; size++ {
-		for align := 0; align < wordSize; align++ {
-			for pos := 0; pos < 4; pos++ {
+		for align := range wordSize {
+			for pos := range 4 {
 				b := make([]byte, size+align)[align:]
 				maskBytes(key, pos, b)
 				maskBytesByByte(key, pos, b)

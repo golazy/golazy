@@ -266,7 +266,7 @@ func (r *JobRunner) Start(ctx context.Context) {
 
 	var wg sync.WaitGroup
 	wg.Add(workers)
-	for workerID := 0; workerID < workers; workerID++ {
+	for range workers {
 		go func() {
 			defer wg.Done()
 			r.runWorker(runCtx)
@@ -670,13 +670,6 @@ func closedDone() chan struct{} {
 	done := make(chan struct{})
 	close(done)
 	return done
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 var ErrNoWork = errors.New("lazyjobs: no work")

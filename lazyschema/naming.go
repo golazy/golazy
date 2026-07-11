@@ -37,7 +37,7 @@ func ModelName(model any) (string, error) {
 
 // ModelNameForType returns the default lower-camel key for a struct type.
 func ModelNameForType(t reflect.Type) (string, error) {
-	for t.Kind() == reflect.Ptr {
+	for t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 	if t.Kind() != reflect.Struct {
@@ -161,7 +161,7 @@ func structType(model any) (reflect.Type, error) {
 		return nil, fmt.Errorf("lazyschema: model is nil")
 	}
 	t := reflect.TypeOf(model)
-	for t.Kind() == reflect.Ptr {
+	for t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 	if t.Kind() != reflect.Struct {

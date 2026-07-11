@@ -140,7 +140,6 @@ func (app *App) Check(cases ...Case) {
 		Run(string, func(*testing.T)) bool
 	})
 	for _, testCase := range cases {
-		testCase := testCase
 		if hasRun {
 			tester.Run(caseName(testCase), func(t *testing.T) {
 				app.runCase(testCase, t)

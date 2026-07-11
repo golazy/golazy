@@ -2,6 +2,7 @@ package lazyview
 
 import (
 	"fmt"
+	"maps"
 	"reflect"
 )
 
@@ -62,7 +63,7 @@ func bindHelper(ctx *Context, helper any) any {
 		return helper
 	}
 
-	contextType := reflect.TypeOf((*Context)(nil))
+	contextType := reflect.TypeFor[*Context]()
 	helperType := value.Type()
 	if helperType.NumIn() == 0 || helperType.In(0) != contextType {
 		return helper
@@ -140,8 +141,6 @@ func copyHelpers(source map[string]any) map[string]any {
 		return map[string]any{}
 	}
 	out := make(map[string]any, len(source))
-	for name, helper := range source {
-		out[name] = helper
-	}
+	maps.Copy(out, source)
 	return out
 }

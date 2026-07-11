@@ -104,7 +104,7 @@ func modelRouteParam(model any) (any, bool) {
 		return param.RouteParam(), true
 	}
 	value := reflect.ValueOf(model)
-	if value.IsValid() && value.Kind() != reflect.Ptr && value.CanAddr() {
+	if value.IsValid() && value.Kind() != reflect.Pointer && value.CanAddr() {
 		model = value.Addr().Interface()
 	}
 	if id, ok := model.(interface{ ID() int }); ok {
@@ -118,7 +118,7 @@ func modelRouteParam(model any) (any, bool) {
 
 func namedParamNamesFromPath(path string) []string {
 	var names []string
-	for _, segment := range strings.Split(strings.Trim(path, "/"), "/") {
+	for segment := range strings.SplitSeq(strings.Trim(path, "/"), "/") {
 		if !strings.HasPrefix(segment, "{") || !strings.HasSuffix(segment, "}") {
 			continue
 		}

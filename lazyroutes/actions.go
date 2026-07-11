@@ -33,8 +33,8 @@ func newControllerConstructor(controller any) controllerConstructor {
 	}
 
 	constructorType := constructorValue.Type()
-	contextType := reflect.TypeOf((*context.Context)(nil)).Elem()
-	errorType := reflect.TypeOf((*error)(nil)).Elem()
+	contextType := reflect.TypeFor[context.Context]()
+	errorType := reflect.TypeFor[error]()
 
 	if constructorType.Kind() != reflect.Func ||
 		constructorType.NumIn() != 1 ||

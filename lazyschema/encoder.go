@@ -25,14 +25,14 @@ func NewEncoder() *Encoder {
 // Encode encodes a struct into map[string][]string.
 //
 // Intended for use with url.Values.
-func (e *Encoder) Encode(src interface{}, dst map[string][]string) error {
+func (e *Encoder) Encode(src any, dst map[string][]string) error {
 	v := reflect.ValueOf(src)
 
 	return e.encode(v, dst)
 }
 
 // RegisterEncoder registers a converter for encoding a custom type.
-func (e *Encoder) RegisterEncoder(value interface{}, encoder func(reflect.Value) string) {
+func (e *Encoder) RegisterEncoder(value any, encoder func(reflect.Value) string) {
 	e.regenc[reflect.TypeOf(value)] = encoder
 }
 
@@ -44,7 +44,7 @@ func (e *Encoder) SetAliasTag(tag string) {
 
 // isValidStructPointer test if input value is a valid struct pointer.
 func isValidStructPointer(v reflect.Value) bool {
-	return v.Type().Kind() == reflect.Ptr && v.Elem().IsValid() && v.Elem().Type().Kind() == reflect.Struct
+	return v.Type().Kind() == reflect.Pointer && v.Elem().IsValid() && v.Elem().Type().Kind() == reflect.Struct
 }
 
 func isZero(v reflect.Value) bool {
@@ -62,13 +62,13 @@ func isZero(v reflect.Value) bool {
 		type zero interface {
 			IsZero() bool
 		}
-		if v.Type().Implements(reflect.TypeOf((*zero)(nil)).Elem()) {
+		if v.Type().Implements(reflect.TypeFor[zero]()) {
 			iz := v.MethodByName("IsZero").Call([]reflect.Value{})[0]
 			return iz.Interface().(bool)
 		}
 		z := true
-		for i := 0; i < v.NumField(); i++ {
-			z = z && isZero(v.Field(i))
+		for _, field := range v.Fields() {
+			z = z && isZero(field)
 		}
 		return z
 	}
@@ -78,7 +78,7 @@ func isZero(v reflect.Value) bool {
 }
 
 func (e *Encoder) encode(v reflect.Value, dst map[string][]string) error {
-	if v.Kind() == reflect.Ptr {
+	if v.Kind() == reflect.Pointer {
 		v = v.Elem()
 	}
 	if v.Kind() != reflect.Struct {
@@ -171,7 +171,7 @@ func typeEncoder(t reflect.Type, reg map[reflect.Type]encoderFunc) encoderFunc {
 		return encodeFloat32
 	case reflect.Float64:
 		return encodeFloat64
-	case reflect.Ptr:
+	case reflect.Pointer:
 		f := typeEncoder(t.Elem(), reg)
 		return func(v reflect.Value) string {
 			if v.IsNil() {

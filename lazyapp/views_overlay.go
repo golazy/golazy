@@ -120,10 +120,7 @@ func (d *overlayDir) ReadDir(n int) ([]fs.DirEntry, error) {
 		return remaining, nil
 	}
 
-	end := d.offset + n
-	if end > len(d.entries) {
-		end = len(d.entries)
-	}
+	end := min(d.offset+n, len(d.entries))
 	entries := d.entries[d.offset:end]
 	d.offset = end
 	if len(entries) == 0 {

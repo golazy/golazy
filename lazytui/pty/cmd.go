@@ -166,18 +166,14 @@ func (c *Cmd) startCopyLocked() {
 
 	var wg sync.WaitGroup
 	if c.Stdin != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			_, _ = io.Copy(c.master, c.Stdin)
-		}()
+		})
 	}
 	if c.Stdout != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			_, _ = io.Copy(c.Stdout, c.master)
-		}()
+		})
 	}
 	go func() {
 		wg.Wait()

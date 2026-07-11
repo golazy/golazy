@@ -1,5 +1,7 @@
 package lazydoc
 
+import "slices"
+
 import "strings"
 
 type Index struct {
@@ -223,12 +225,7 @@ func packageSlug(importPath string) string {
 }
 
 func contains(values []string, want string) bool {
-	for _, value := range values {
-		if value == want {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(values, want)
 }
 
 func matches(query string, values ...string) bool {

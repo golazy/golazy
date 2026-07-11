@@ -12,6 +12,7 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"net"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -150,10 +151,8 @@ func (e *CloseError) Error() string {
 // with one of the specified codes.
 func IsCloseError(err error, codes ...int) bool {
 	if e, ok := err.(*CloseError); ok {
-		for _, code := range codes {
-			if e.Code == code {
-				return true
-			}
+		if slices.Contains(codes, e.Code) {
+			return true
 		}
 	}
 	return false
@@ -163,12 +162,7 @@ func IsCloseError(err error, codes ...int) bool {
 // *CloseError with a code not in the list of expected codes.
 func IsUnexpectedCloseError(err error, expectedCodes ...int) bool {
 	if e, ok := err.(*CloseError); ok {
-		for _, code := range expectedCodes {
-			if e.Code == code {
-				return false
-			}
-		}
-		return true
+		return !slices.Contains(expectedCodes, e.Code)
 	}
 	return false
 }
@@ -228,9 +222,9 @@ func isValidReceivedCloseCode(code int) bool {
 // interface.  The type of the value stored in a pool is not specified.
 type BufferPool interface {
 	// Get gets a value from the pool or returns nil if the pool is empty.
-	Get() interface{}
+	Get() any
 	// Put adds a value to the pool.
-	Put(interface{})
+	Put(any)
 }
 
 // writePoolData is the type added to the write buffer pool. This wrapper is
@@ -1094,7 +1088,7 @@ func (c *Conn) ReadMessage() (messageType int, p []byte, err error) {
 	if err != nil {
 		return messageType, nil, err
 	}
-	p, err = ioutil.ReadAll(r)
+	p, err = io.ReadAll(r)
 	return messageType, p, err
 }
 

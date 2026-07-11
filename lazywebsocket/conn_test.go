@@ -125,7 +125,7 @@ func TestFraming(t *testing.T) {
 						}
 
 						t.Logf("frame size: %d", n)
-						rbuf, err := ioutil.ReadAll(r)
+						rbuf, err := io.ReadAll(r)
 						if err != nil {
 							t.Errorf("%s: ReadFull() returned rbuf, %v", name, err)
 							continue
@@ -187,16 +187,16 @@ func TestControl(t *testing.T) {
 
 // simpleBufferPool is an implementation of BufferPool for TestWriteBufferPool.
 type simpleBufferPool struct {
-	v interface{}
+	v any
 }
 
-func (p *simpleBufferPool) Get() interface{} {
+func (p *simpleBufferPool) Get() any {
 	v := p.v
 	p.v = nil
 	return v
 }
 
-func (p *simpleBufferPool) Put(v interface{}) {
+func (p *simpleBufferPool) Put(v any) {
 	p.v = v
 }
 
@@ -285,7 +285,7 @@ func TestWriteBufferPoolSync(t *testing.T) {
 	rc := newTestConn(&buf, nil, false)
 
 	const message = "Hello World!"
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		if err := wc.WriteMessage(TextMessage, []byte(message)); err != nil {
 			t.Fatalf("wc.WriteMessage() returned %v", err)
 		}
@@ -699,7 +699,7 @@ func TestFailedConnectionReadPanic(t *testing.T) {
 		}
 	}()
 
-	for i := 0; i < 20000; i++ {
+	for range 20000 {
 		c.ReadMessage()
 	}
 	t.Fatal("should not get here")

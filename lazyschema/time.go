@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-var timeType = reflect.TypeOf(time.Time{})
+var timeType = reflect.TypeFor[time.Time]()
 
 func registerDefaultConverters(decoder *Decoder) {
 	decoder.RegisterConverter(time.Time{}, convertTime)

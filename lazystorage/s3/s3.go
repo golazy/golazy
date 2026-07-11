@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -342,10 +343,8 @@ func (s *Storage) do(req *http.Request, statuses ...int) (*http.Response, error)
 	if err != nil {
 		return nil, err
 	}
-	for _, status := range statuses {
-		if resp.StatusCode == status {
-			return resp, nil
-		}
+	if slices.Contains(statuses, resp.StatusCode) {
+		return resp, nil
 	}
 	defer resp.Body.Close()
 	data, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"maps"
 	"net/http"
 	"net/url"
 	"slices"
@@ -523,18 +524,14 @@ func (server *Server) writeJSON(w http.ResponseWriter, value any) {
 
 func defaultClaims(_ context.Context, user lazyauth.User, _ Client) (lazyjwt.Claims, error) {
 	extra := map[string]any{"data": user.Data}
-	for key, value := range user.Data {
-		extra[key] = value
-	}
+	maps.Copy(extra, user.Data)
 	return lazyjwt.Claims{Subject: user.ID, Extra: extra}, nil
 }
 
 func userFromClaims(claims lazyjwt.Claims) lazyauth.User {
 	data := map[string]any{}
 	if raw, ok := claims.Extra["data"].(map[string]any); ok {
-		for key, value := range raw {
-			data[key] = value
-		}
+		maps.Copy(data, raw)
 	}
 	return lazyauth.User{ID: claims.Subject, Data: data}
 }

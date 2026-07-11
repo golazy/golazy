@@ -2,6 +2,7 @@ package lazyforms
 
 import (
 	"fmt"
+	"maps"
 	"reflect"
 	"sort"
 	"strings"
@@ -96,7 +97,7 @@ func modelType(model any) (reflect.Type, error) {
 		return nil, fmt.Errorf("lazyforms: model is nil")
 	}
 	t := reflect.TypeOf(model)
-	for t.Kind() == reflect.Ptr {
+	for t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 	if t.Kind() != reflect.Struct {
@@ -165,9 +166,7 @@ func copyStringMap(source map[string]string) map[string]string {
 		return nil
 	}
 	out := make(map[string]string, len(source))
-	for key, value := range source {
-		out[key] = value
-	}
+	maps.Copy(out, source)
 	return out
 }
 

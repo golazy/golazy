@@ -3,6 +3,7 @@ package lazyconfig
 import (
 	"encoding"
 	"fmt"
+	"maps"
 	"os"
 	"reflect"
 	"sort"
@@ -80,9 +81,7 @@ func RemoveEnvNamePrefix(prefix string) Option {
 			}
 			aliases[alias] = value
 		}
-		for name, value := range aliases {
-			loader.env[name] = value
-		}
+		maps.Copy(loader.env, aliases)
 	}
 }
 
@@ -104,7 +103,7 @@ func newLoader(options ...Option) loader {
 }
 
 func (l loader) fillRoot(value reflect.Value) error {
-	for value.Kind() == reflect.Ptr {
+	for value.Kind() == reflect.Pointer {
 		if value.IsNil() {
 			value.Set(reflect.New(value.Type().Elem()))
 		}
@@ -135,7 +134,7 @@ func (l loader) fillField(value reflect.Value, field reflect.StructField, prefix
 		return nil
 	}
 
-	if value.Kind() == reflect.Ptr {
+	if value.Kind() == reflect.Pointer {
 		return l.fillPointer(value, field, prefix)
 	}
 
@@ -269,8 +268,7 @@ func (l loader) lookupValue(envNames []string, field reflect.StructField) (strin
 }
 
 func (l loader) hasDirectStructEnv(prefix string, typ reflect.Type) bool {
-	for index := 0; index < typ.NumField(); index++ {
-		field := typ.Field(index)
+	for field := range typ.Fields() {
 		if !field.IsExported() {
 			continue
 		}

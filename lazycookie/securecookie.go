@@ -114,8 +114,8 @@ var (
 
 // Codec defines an interface to encode and decode cookie values.
 type Codec interface {
-	Encode(name string, value interface{}) (string, error)
-	Decode(name, value string, dst interface{}) error
+	Encode(name string, value any) (string, error)
+	Decode(name, value string, dst any) error
 }
 
 // New returns a new SecureCookie.
@@ -170,8 +170,8 @@ type SecureCookie struct {
 // Serializer provides an interface for providing custom serializers for cookie
 // values.
 type Serializer interface {
-	Serialize(src interface{}) ([]byte, error)
-	Deserialize(src []byte, dst interface{}) error
+	Serialize(src any) ([]byte, error)
+	Deserialize(src []byte, dst any) error
 }
 
 // GobEncoder encodes cookie values using encoding/gob. This is the simplest
@@ -256,7 +256,7 @@ func (s *SecureCookie) SetSerializer(sz Serializer) *SecureCookie {
 // It is the client's responsibility to ensure that value, when encoded using
 // the current serialization/encryption settings on s and then base64-encoded,
 // is shorter than the maximum permissible length.
-func (s *SecureCookie) Encode(name string, value interface{}) (string, error) {
+func (s *SecureCookie) Encode(name string, value any) (string, error) {
 	if s.err != nil {
 		return "", s.err
 	}
@@ -278,7 +278,7 @@ func (s *SecureCookie) Encode(name string, value interface{}) (string, error) {
 	}
 	b = encode(b)
 	// 3. Create MAC for "name|date|value". Extra pipe to be used later.
-	b = []byte(fmt.Sprintf("%s|%d|%s|", name, s.timestamp(), b))
+	b = fmt.Appendf(nil, "%s|%d|%s|", name, s.timestamp(), b)
 	mac := createMac(hmac.New(s.hashFunc, s.hashKey), b[:len(b)-1])
 	// Append mac, remove name.
 	b = append(b, mac...)[len(name)+1:]
@@ -300,7 +300,7 @@ func (s *SecureCookie) Encode(name string, value interface{}) (string, error) {
 // The name argument is the cookie name. It must be the same name used when
 // it was stored. The value argument is the encoded cookie value. The dst
 // argument is where the cookie will be decoded. It must be a pointer.
-func (s *SecureCookie) Decode(name, value string, dst interface{}) error {
+func (s *SecureCookie) Decode(name, value string, dst any) error {
 	if s.err != nil {
 		return s.err
 	}
@@ -427,7 +427,7 @@ func decrypt(block cipher.Block, value []byte) ([]byte, error) {
 // Serialization --------------------------------------------------------------
 
 // Serialize encodes a value using gob.
-func (e GobEncoder) Serialize(src interface{}) ([]byte, error) {
+func (e GobEncoder) Serialize(src any) ([]byte, error) {
 	buf := new(bytes.Buffer)
 	enc := gob.NewEncoder(buf)
 	if err := enc.Encode(src); err != nil {
@@ -437,7 +437,7 @@ func (e GobEncoder) Serialize(src interface{}) ([]byte, error) {
 }
 
 // Deserialize decodes a value using gob.
-func (e GobEncoder) Deserialize(src []byte, dst interface{}) error {
+func (e GobEncoder) Deserialize(src []byte, dst any) error {
 	dec := gob.NewDecoder(bytes.NewBuffer(src))
 	if err := dec.Decode(dst); err != nil {
 		return cookieError{cause: err, typ: decodeError}
@@ -446,7 +446,7 @@ func (e GobEncoder) Deserialize(src []byte, dst interface{}) error {
 }
 
 // Serialize encodes a value using encoding/json.
-func (e JSONEncoder) Serialize(src interface{}) ([]byte, error) {
+func (e JSONEncoder) Serialize(src any) ([]byte, error) {
 	buf := new(bytes.Buffer)
 	enc := json.NewEncoder(buf)
 	if err := enc.Encode(src); err != nil {
@@ -456,7 +456,7 @@ func (e JSONEncoder) Serialize(src interface{}) ([]byte, error) {
 }
 
 // Deserialize decodes a value using encoding/json.
-func (e JSONEncoder) Deserialize(src []byte, dst interface{}) error {
+func (e JSONEncoder) Deserialize(src []byte, dst any) error {
 	dec := json.NewDecoder(bytes.NewReader(src))
 	if err := dec.Decode(dst); err != nil {
 		return cookieError{cause: err, typ: decodeError}
@@ -465,7 +465,7 @@ func (e JSONEncoder) Deserialize(src []byte, dst interface{}) error {
 }
 
 // Serialize passes a []byte through as-is.
-func (e NopEncoder) Serialize(src interface{}) ([]byte, error) {
+func (e NopEncoder) Serialize(src any) ([]byte, error) {
 	if b, ok := src.([]byte); ok {
 		return b, nil
 	}
@@ -474,7 +474,7 @@ func (e NopEncoder) Serialize(src interface{}) ([]byte, error) {
 }
 
 // Deserialize passes a []byte through as-is.
-func (e NopEncoder) Deserialize(src []byte, dst interface{}) error {
+func (e NopEncoder) Deserialize(src []byte, dst any) error {
 	if dat, ok := dst.(*[]byte); ok {
 		*dat = src
 		return nil
@@ -562,7 +562,7 @@ func CodecsFromPairs(keyPairs ...[]byte) []Codec {
 // key rotation.
 //
 // On error, may return a MultiError.
-func EncodeMulti(name string, value interface{}, codecs ...Codec) (string, error) {
+func EncodeMulti(name string, value any, codecs ...Codec) (string, error) {
 	if len(codecs) == 0 {
 		return "", errNoCodecs
 	}
@@ -584,7 +584,7 @@ func EncodeMulti(name string, value interface{}, codecs ...Codec) (string, error
 // key rotation.
 //
 // On error, may return a MultiError.
-func DecodeMulti(name string, value string, dst interface{}, codecs ...Codec) error {
+func DecodeMulti(name string, value string, dst any, codecs ...Codec) error {
 	if len(codecs) == 0 {
 		return errNoCodecs
 	}

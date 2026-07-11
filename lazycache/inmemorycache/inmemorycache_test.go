@@ -193,9 +193,7 @@ func TestConcurrentAccess(t *testing.T) {
 	}
 	var wg sync.WaitGroup
 	for worker := range 8 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for i := range 100 {
 				key := fmt.Sprintf("%d-%d", worker, i)
 				if err := backend.Set(key, i); err != nil {
@@ -204,7 +202,7 @@ func TestConcurrentAccess(t *testing.T) {
 				}
 				_, _ = backend.Get(key)
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	if stats := backend.Stats(); stats.Entries > 50 {

@@ -440,7 +440,7 @@ func decodeLabels(encoded string) Labels {
 	if encoded == "" {
 		return labels
 	}
-	for _, part := range strings.Split(encoded, "\n") {
+	for part := range strings.SplitSeq(encoded, "\n") {
 		name, value, ok := strings.Cut(part, "=")
 		if ok && name != "" {
 			labels[name] = value

@@ -102,9 +102,6 @@ func retryAfter(duration time.Duration) string {
 	if duration <= 0 {
 		return "0"
 	}
-	seconds := int(duration.Round(time.Second) / time.Second)
-	if seconds < 1 {
-		seconds = 1
-	}
+	seconds := max(int(duration.Round(time.Second)/time.Second), 1)
 	return strconv.Itoa(seconds)
 }

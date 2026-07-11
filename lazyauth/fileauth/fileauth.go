@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"strconv"
 	"strings"
@@ -155,8 +156,6 @@ func copyData(data map[string]any) map[string]any {
 		return map[string]any{}
 	}
 	copied := make(map[string]any, len(data))
-	for key, value := range data {
-		copied[key] = value
-	}
+	maps.Copy(copied, data)
 	return copied
 }

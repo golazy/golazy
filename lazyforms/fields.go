@@ -11,7 +11,7 @@ import (
 	"golazy.dev/lazyview"
 )
 
-var timeValueType = reflect.TypeOf(time.Time{})
+var timeValueType = reflect.TypeFor[time.Time]()
 
 func fieldHelper(inputType string) lazyview.Helper {
 	return func(ctx *lazyview.Context, args ...any) (any, error) {
@@ -138,18 +138,17 @@ func collectFields(form *Form, t reflect.Type, prefix string, indexes []string) 
 	if t == nil {
 		return nil
 	}
-	for t.Kind() == reflect.Ptr {
+	for t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 	var fields []Field
-	for i := 0; i < t.NumField(); i++ {
-		sf := t.Field(i)
+	for sf := range t.Fields() {
 		if sf.PkgPath != "" || sf.Tag.Get("schema") == "-" || sf.Tag.Get("form") == "-" {
 			continue
 		}
 		fieldPath := joinGoPath(prefix, sf.Name)
 		ft := sf.Type
-		for ft.Kind() == reflect.Ptr {
+		for ft.Kind() == reflect.Pointer {
 			ft = ft.Elem()
 		}
 		if ft == timeValueType || ft.Kind() != reflect.Struct {
@@ -211,7 +210,7 @@ func defaultFieldType(value any) string {
 		return "text"
 	}
 	v := reflect.ValueOf(value)
-	for v.IsValid() && v.Kind() == reflect.Ptr {
+	for v.IsValid() && v.Kind() == reflect.Pointer {
 		if v.IsNil() {
 			return "text"
 		}
@@ -240,13 +239,13 @@ func fieldValue(model any, fieldPath string) any {
 		return nil
 	}
 	value := reflect.ValueOf(model)
-	for value.Kind() == reflect.Ptr {
+	for value.Kind() == reflect.Pointer {
 		if value.IsNil() {
 			return nil
 		}
 		value = value.Elem()
 	}
-	for _, part := range strings.Split(fieldPath, ".") {
+	for part := range strings.SplitSeq(fieldPath, ".") {
 		if value.Kind() == reflect.Slice || value.Kind() == reflect.Array {
 			index := 0
 			if _, err := fmt.Sscan(part, &index); err != nil || index < 0 || index >= value.Len() {
@@ -262,7 +261,7 @@ func fieldValue(model any, fieldPath string) any {
 		if !value.IsValid() {
 			return nil
 		}
-		for value.Kind() == reflect.Ptr {
+		for value.Kind() == reflect.Pointer {
 			if value.IsNil() {
 				return nil
 			}

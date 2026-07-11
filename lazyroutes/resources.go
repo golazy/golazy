@@ -293,7 +293,7 @@ func modelType(model any) reflect.Type {
 		return nil
 	}
 	t := reflect.TypeOf(model)
-	for t.Kind() == reflect.Ptr {
+	for t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 	if t.Kind() != reflect.Struct {

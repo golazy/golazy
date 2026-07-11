@@ -12,7 +12,7 @@ func TestMemoryLimiterFixedWindow(t *testing.T) {
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	limiter := NewMemory(2, time.Minute)
 	limiter.Now = func() time.Time { return now }
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		result, err := limiter.Allow(context.Background(), "alice")
 		if err != nil {
 			t.Fatal(err)

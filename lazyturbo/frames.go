@@ -3,8 +3,10 @@ package lazyturbo
 import (
 	"fmt"
 	"html"
+	"maps"
 	"mime"
 	"net/http"
+	"slices"
 	"strings"
 	"unicode"
 
@@ -57,7 +59,7 @@ func AcceptsStream(r *http.Request) bool {
 	if r == nil {
 		return false
 	}
-	for _, part := range strings.Split(r.Header.Get("Accept"), ",") {
+	for part := range strings.SplitSeq(r.Header.Get("Accept"), ",") {
 		mediaType, _, err := mime.ParseMediaType(strings.TrimSpace(part))
 		if err == nil && strings.EqualFold(mediaType, StreamMIME) {
 			return true
@@ -67,7 +69,7 @@ func AcceptsStream(r *http.Request) bool {
 }
 
 func headerToken(value string, token string) bool {
-	for _, part := range strings.Split(value, ",") {
+	for part := range strings.SplitSeq(value, ",") {
 		if strings.EqualFold(strings.TrimSpace(part), token) {
 			return true
 		}
@@ -202,9 +204,7 @@ func copyVariables(source map[string]any) map[string]any {
 		return map[string]any{}
 	}
 	out := make(map[string]any, len(source))
-	for name, value := range source {
-		out[name] = value
-	}
+	maps.Copy(out, source)
 	return out
 }
 
@@ -305,10 +305,8 @@ func validateFrameAttribute(attr frameAttribute) error {
 }
 
 func validateOneOf(name string, value string, allowed ...string) error {
-	for _, candidate := range allowed {
-		if value == candidate {
-			return nil
-		}
+	if slices.Contains(allowed, value) {
+		return nil
 	}
 	return fmt.Errorf("lazyturbo: invalid %s value %q", name, value)
 }

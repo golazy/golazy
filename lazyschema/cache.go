@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -34,7 +35,7 @@ type cache struct {
 }
 
 // registerConverter registers a converter function for a custom type.
-func (c *cache) registerConverter(value interface{}, converterFunc Converter) {
+func (c *cache) registerConverter(value any, converterFunc Converter) {
 	c.regconv[reflect.TypeOf(value)] = converterFunc
 }
 
@@ -100,18 +101,18 @@ func (c *cache) parsePathParts(keys []string, t reflect.Type) ([]pathPart, error
 			path = make([]string, 0)
 
 			// Get the next struct type, dropping ptrs.
-			if field.typ.Kind() == reflect.Ptr {
+			if field.typ.Kind() == reflect.Pointer {
 				t = field.typ.Elem()
 			} else {
 				t = field.typ
 			}
 			if t.Kind() == reflect.Slice {
 				t = t.Elem()
-				if t.Kind() == reflect.Ptr {
+				if t.Kind() == reflect.Pointer {
 					t = t.Elem()
 				}
 			}
-		} else if field.typ.Kind() == reflect.Ptr {
+		} else if field.typ.Kind() == reflect.Pointer {
 			t = field.typ.Elem()
 		} else {
 			t = field.typ
@@ -144,8 +145,8 @@ func (c *cache) get(t reflect.Type) *structInfo {
 func (c *cache) create(t reflect.Type, parentAlias string) *structInfo {
 	info := &structInfo{}
 	var anonymousInfos []*structInfo
-	for i := 0; i < t.NumField(); i++ {
-		if f := c.createField(t.Field(i), parentAlias); f != nil {
+	for field := range t.Fields() {
+		if f := c.createField(field, parentAlias); f != nil {
 			info.fields = append(info.fields, f)
 			if ft := indirectType(f.typ); ft.Kind() == reflect.Struct && f.isAnonymous {
 				anonymousInfos = append(anonymousInfos, c.create(ft, f.canonicalAlias))
@@ -182,18 +183,18 @@ func (c *cache) createField(field reflect.StructField, parentAlias string) *fiel
 	isSlice, isStruct := false, false
 	ft := field.Type
 	m := isTextUnmarshaler(reflect.Zero(ft))
-	if ft.Kind() == reflect.Ptr {
+	if ft.Kind() == reflect.Pointer {
 		ft = ft.Elem()
 	}
 	if isSlice = ft.Kind() == reflect.Slice; isSlice {
 		ft = ft.Elem()
-		if ft.Kind() == reflect.Ptr {
+		if ft.Kind() == reflect.Pointer {
 			ft = ft.Elem()
 		}
 	}
 	if ft.Kind() == reflect.Array {
 		ft = ft.Elem()
-		if ft.Kind() == reflect.Ptr {
+		if ft.Kind() == reflect.Pointer {
 			ft = ft.Elem()
 		}
 	}
@@ -310,7 +311,7 @@ type pathPart struct {
 // ----------------------------------------------------------------------------
 
 func indirectType(typ reflect.Type) reflect.Type {
-	if typ.Kind() == reflect.Ptr {
+	if typ.Kind() == reflect.Pointer {
 		return typ.Elem()
 	}
 	return typ
@@ -340,12 +341,7 @@ func parseTag(tag string) (string, tagOptions) {
 
 // Contains checks whether the tagOptions contains the specified option.
 func (o tagOptions) Contains(option string) bool {
-	for _, s := range o {
-		if s == option {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(o, option)
 }
 
 func (o tagOptions) getDefaultOptionValue() string {

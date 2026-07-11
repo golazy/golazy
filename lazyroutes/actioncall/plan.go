@@ -47,14 +47,14 @@ type requestState struct {
 }
 
 var (
-	contextType = reflect.TypeOf((*context.Context)(nil)).Elem()
-	errorType   = reflect.TypeOf((*error)(nil)).Elem()
-	requestType = reflect.TypeOf((*http.Request)(nil))
-	writerType  = reflect.TypeOf((*http.ResponseWriter)(nil)).Elem()
-	stringType  = reflect.TypeOf("")
-	stringsType = reflect.TypeOf([]string(nil))
-	intType     = reflect.TypeOf(0)
-	intsType    = reflect.TypeOf([]int(nil))
+	contextType = reflect.TypeFor[context.Context]()
+	errorType   = reflect.TypeFor[error]()
+	requestType = reflect.TypeFor[*http.Request]()
+	writerType  = reflect.TypeFor[http.ResponseWriter]()
+	stringType  = reflect.TypeFor[string]()
+	stringsType = reflect.TypeFor[[]string]()
+	intType     = reflect.TypeFor[int]()
+	intsType    = reflect.TypeFor[[]int]()
 )
 
 func Compile(controllerType reflect.Type, action reflect.Value, opts Options) (*Plan, error) {
@@ -210,8 +210,7 @@ func standardAction(controllerType reflect.Type, actionType reflect.Type) bool {
 
 func collectGenerators(controllerType reflect.Type) (map[reflect.Type]*generatorPlan, error) {
 	generators := map[reflect.Type]*generatorPlan{}
-	for i := 0; i < controllerType.NumMethod(); i++ {
-		method := controllerType.Method(i)
+	for method := range controllerType.Methods() {
 		if !generatorName(method.Name) {
 			continue
 		}

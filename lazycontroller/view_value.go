@@ -100,8 +100,8 @@ func (v *viewValue) resolve() {
 }
 
 var (
-	errorType   = reflect.TypeOf((*error)(nil)).Elem()
-	contextType = reflect.TypeOf((*context.Context)(nil)).Elem()
+	errorType   = reflect.TypeFor[error]()
+	contextType = reflect.TypeFor[context.Context]()
 )
 
 func normalizeViewValueLoader(loader any) (func(context.Context) (any, error), error) {

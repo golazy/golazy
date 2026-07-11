@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"mime"
 	"net/http"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -377,7 +378,7 @@ type acceptPreference struct {
 
 func acceptPreferences(accept string) []acceptPreference {
 	var preferences []acceptPreference
-	for _, item := range strings.Split(accept, ",") {
+	for item := range strings.SplitSeq(accept, ",") {
 		item = strings.TrimSpace(item)
 		if item == "" {
 			continue
@@ -520,10 +521,8 @@ func appendFormat(formats []Format, format Format) []Format {
 	if format == "" {
 		return formats
 	}
-	for _, existing := range formats {
-		if existing == format {
-			return formats
-		}
+	if slices.Contains(formats, format) {
+		return formats
 	}
 	return append(formats, format)
 }

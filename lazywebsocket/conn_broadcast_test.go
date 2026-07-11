@@ -58,7 +58,7 @@ func newBroadcastBench(usePrepared, compression bool) *broadcastBench {
 func (b *broadcastBench) makeConns(numConns int) {
 	conns := make([]*broadcastConn, numConns)
 
-	for i := 0; i < numConns; i++ {
+	for i := range numConns {
 		c := newTestConn(nil, b.w, true)
 		if b.compression {
 			c.enableWriteCompression = true

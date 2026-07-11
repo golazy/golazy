@@ -3,6 +3,7 @@ package lazyforms
 import (
 	"fmt"
 	"html/template"
+	"maps"
 	"reflect"
 	"strings"
 
@@ -168,9 +169,7 @@ func collectOptions(args ...any) (formOptions, error) {
 func formVariables(original any, form *Form) map[string]any {
 	variables := map[string]any{}
 	if values, ok := original.(map[string]any); ok {
-		for key, value := range values {
-			variables[key] = value
-		}
+		maps.Copy(variables, values)
 	} else if original != nil {
 		variables["Context"] = original
 	}
@@ -262,7 +261,7 @@ func isNil(model any) bool {
 		return true
 	}
 	value := reflect.ValueOf(model)
-	return value.Kind() == reflect.Ptr && value.IsNil()
+	return value.Kind() == reflect.Pointer && value.IsNil()
 }
 
 func methodFor(model any, explicit string) (string, string) {

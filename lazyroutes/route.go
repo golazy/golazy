@@ -2,6 +2,7 @@ package lazyroutes
 
 import (
 	"context"
+	"maps"
 	"net/http"
 	"strings"
 )
@@ -34,9 +35,7 @@ func RouteFromContext(ctx context.Context) (Route, map[string]string, bool) {
 		return Route{}, nil, false
 	}
 	values := map[string]string{}
-	for key, value := range routeContext.Values {
-		values[key] = value
-	}
+	maps.Copy(values, routeContext.Values)
 	return routeContext.Route, values, true
 }
 
@@ -99,8 +98,8 @@ func inferRouteName(method string, path string) string {
 
 func namedParamsFromPath(path string) map[string]bool {
 	params := map[string]bool{}
-	segments := strings.Split(strings.Trim(path, "/"), "/")
-	for _, segment := range segments {
+	segments := strings.SplitSeq(strings.Trim(path, "/"), "/")
+	for segment := range segments {
 		if !strings.HasPrefix(segment, "{") || !strings.HasSuffix(segment, "}") {
 			continue
 		}

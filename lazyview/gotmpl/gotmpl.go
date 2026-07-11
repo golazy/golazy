@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"io"
 	"io/fs"
+	"maps"
 	"path"
 	"reflect"
 	"strings"
@@ -195,9 +196,7 @@ func copyHelpers(helpers map[string]any) map[string]any {
 		return map[string]any{}
 	}
 	out := make(map[string]any, len(helpers))
-	for name, helper := range helpers {
-		out[name] = helper
-	}
+	maps.Copy(out, helpers)
 	return out
 }
 

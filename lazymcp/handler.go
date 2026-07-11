@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"slices"
 	"strings"
 
 	"golazy.dev/lazyjwt"
@@ -371,7 +372,7 @@ func callFunction(ctx context.Context, fn any, raw json.RawMessage) (any, error)
 	typ := value.Type()
 	args := []reflect.Value{}
 	argIndex := 0
-	if typ.NumIn() > 0 && typ.In(0) == reflect.TypeOf((*context.Context)(nil)).Elem() {
+	if typ.NumIn() > 0 && typ.In(0) == reflect.TypeFor[context.Context]() {
 		args = append(args, reflect.ValueOf(ctx))
 		argIndex = 1
 	}
@@ -404,7 +405,7 @@ func inputSchema(fn any) map[string]any {
 	typ := reflect.TypeOf(fn)
 	input := -1
 	for i := 0; i < typ.NumIn(); i++ {
-		if typ.In(i) == reflect.TypeOf((*context.Context)(nil)).Elem() {
+		if typ.In(i) == reflect.TypeFor[context.Context]() {
 			continue
 		}
 		input = i
@@ -414,8 +415,7 @@ func inputSchema(fn any) map[string]any {
 		return schema
 	}
 	properties := map[string]any{}
-	for i := 0; i < typ.In(input).NumField(); i++ {
-		field := typ.In(input).Field(i)
+	for field := range typ.In(input).Fields() {
 		name := strings.Split(field.Tag.Get("json"), ",")[0]
 		if name == "" {
 			name = camelToSnake(field.Name)
@@ -467,12 +467,7 @@ func mustJSON(value any) json.RawMessage {
 }
 
 func contains(values []string, value string) bool {
-	for _, candidate := range values {
-		if candidate == value {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(values, value)
 }
 
 func minifiedJSON(value any) string {

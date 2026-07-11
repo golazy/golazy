@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
+	"maps"
 	"net/http"
 	"path"
 	"path/filepath"
@@ -204,12 +205,8 @@ func (v *Views) renderContext(options Options) *Context {
 		data = variables
 	}
 	helpers := make(map[string]any, len(v.Helpers)+len(options.Helpers))
-	for name, helper := range v.Helpers {
-		helpers[name] = helper
-	}
-	for name, helper := range options.Helpers {
-		helpers[name] = helper
-	}
+	maps.Copy(helpers, v.Helpers)
+	maps.Copy(helpers, options.Helpers)
 
 	return &Context{
 		Context:    ctx,
@@ -447,9 +444,7 @@ func copyVariables(source map[string]any) map[string]any {
 		return map[string]any{}
 	}
 	out := make(map[string]any, len(source))
-	for name, value := range source {
-		out[name] = value
-	}
+	maps.Copy(out, source)
 	return out
 }
 

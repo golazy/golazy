@@ -233,10 +233,7 @@ func copyWithSniff(dst io.Writer, src io.Reader, sniff *bytes.Buffer) (int64, er
 		if n > 0 {
 			chunk := buffer[:n]
 			if sniff.Len() < 512 {
-				remaining := 512 - sniff.Len()
-				if remaining > len(chunk) {
-					remaining = len(chunk)
-				}
+				remaining := min(512-sniff.Len(), len(chunk))
 				_, _ = sniff.Write(chunk[:remaining])
 			}
 			written, writeErr := dst.Write(chunk)

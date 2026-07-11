@@ -300,7 +300,7 @@ func Get[T any](cache *Cache, parts ...any) (T, error) {
 		return typed, nil
 	}
 
-	target := reflect.TypeOf((*T)(nil)).Elem()
+	target := reflect.TypeFor[T]()
 	if value == nil {
 		if nilAssignableTo(target) {
 			return zero, nil

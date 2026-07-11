@@ -3,7 +3,6 @@
 // LICENSE.gorilla.
 
 //go:build appengine
-// +build appengine
 
 package lazywebsocket
 

@@ -147,7 +147,7 @@ func isUpgradeRequest(r *http.Request) bool {
 		return true
 	}
 	for _, value := range r.Header.Values("Connection") {
-		for _, part := range strings.Split(value, ",") {
+		for part := range strings.SplitSeq(value, ",") {
 			if strings.EqualFold(strings.TrimSpace(part), "upgrade") {
 				return true
 			}

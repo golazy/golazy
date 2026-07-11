@@ -80,7 +80,7 @@ type LazyDevStorageObject struct {
 	ContentType string    `json:"content_type,omitempty"`
 	Size        int64     `json:"size,omitempty"`
 	Checksum    string    `json:"checksum,omitempty"`
-	ModifiedAt  time.Time `json:"modified_at,omitempty"`
+	ModifiedAt  time.Time `json:"modified_at"`
 	URL         string    `json:"url,omitempty"`
 	URLError    string    `json:"url_error,omitempty"`
 }
@@ -93,10 +93,10 @@ type LazyDevFileSnapshot struct {
 	Size        int64                    `json:"size,omitempty"`
 	Checksum    string                   `json:"checksum,omitempty"`
 	Metadata    json.RawMessage          `json:"metadata,omitempty"`
-	CreatedAt   time.Time                `json:"created_at,omitempty"`
-	UpdatedAt   time.Time                `json:"updated_at,omitempty"`
-	DeletedAt   time.Time                `json:"deleted_at,omitempty"`
-	Location    LazyDevFileLocation      `json:"location,omitempty"`
+	CreatedAt   time.Time                `json:"created_at"`
+	UpdatedAt   time.Time                `json:"updated_at"`
+	DeletedAt   time.Time                `json:"deleted_at"`
+	Location    LazyDevFileLocation      `json:"location"`
 	Locations   []LazyDevFileLocation    `json:"locations,omitempty"`
 	URL         string                   `json:"url,omitempty"`
 	URLError    string                   `json:"url_error,omitempty"`
@@ -123,6 +123,6 @@ type LazyDevVariantSnapshot struct {
 	OutputURLError string          `json:"output_url_error,omitempty"`
 	Status         string          `json:"status,omitempty"`
 	Error          string          `json:"error,omitempty"`
-	CreatedAt      time.Time       `json:"created_at,omitempty"`
-	UpdatedAt      time.Time       `json:"updated_at,omitempty"`
+	CreatedAt      time.Time       `json:"created_at"`
+	UpdatedAt      time.Time       `json:"updated_at"`
 }

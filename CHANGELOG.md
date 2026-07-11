@@ -37,6 +37,10 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- `lazyassets/assetmigrate`, `lazyfiles`, `lazymedia`, and
+  `lazytui/encoding/tty` JSON payloads now emit explicit zero-value metadata
+  fields such as timestamps, file locations, variants, and terminal sizes
+  instead of omitting them.
 - `lazyapp.New` now caps its default in-memory cache backend at 50 MiB when an
   application does not provide `lazyapp.Config.Cache.Backend` or
   `LAZYAPP_CACHE_SIZE`.

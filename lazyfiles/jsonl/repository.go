@@ -29,10 +29,10 @@ type JSONLRepository struct {
 
 type logEvent struct {
 	Op       string             `json:"op"`
-	File     lazyfiles.File     `json:"file,omitempty"`
-	Location lazyfiles.Location `json:"location,omitempty"`
+	File     lazyfiles.File     `json:"file"`
+	Location lazyfiles.Location `json:"location"`
 	FileID   string             `json:"file_id,omitempty"`
-	Time     time.Time          `json:"time,omitempty"`
+	Time     time.Time          `json:"time"`
 }
 
 // New opens or creates an append-only JSONL repository at path.

@@ -19,13 +19,13 @@ const (
 // Request is a wire-friendly terminal-control request.
 type Request struct {
 	Op    Op      `json:"op"`
-	Size  Size    `json:"size,omitempty"`
+	Size  Size    `json:"size"`
 	State StateID `json:"state,omitempty"`
 }
 
 // Response is a wire-friendly terminal-control response.
 type Response struct {
-	Size       Size    `json:"size,omitempty"`
+	Size       Size    `json:"size"`
 	State      StateID `json:"state,omitempty"`
 	IsTerminal bool    `json:"is_terminal,omitempty"`
 	Error      string  `json:"error,omitempty"`

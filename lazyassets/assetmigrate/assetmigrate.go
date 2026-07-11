@@ -105,9 +105,9 @@ type metadata struct {
 type marker struct {
 	metadata
 	Owner       string    `json:"owner,omitempty"`
-	StartedAt   time.Time `json:"started_at,omitempty"`
-	UpdatedAt   time.Time `json:"updated_at,omitempty"`
-	CompletedAt time.Time `json:"completed_at,omitempty"`
+	StartedAt   time.Time `json:"started_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+	CompletedAt time.Time `json:"completed_at"`
 }
 
 type source struct {

@@ -20,9 +20,9 @@ type File struct {
 	Size        int64           `json:"size,omitempty"`
 	Checksum    string          `json:"checksum,omitempty"`
 	Metadata    json.RawMessage `json:"metadata,omitempty"`
-	CreatedAt   time.Time       `json:"created_at,omitempty"`
-	UpdatedAt   time.Time       `json:"updated_at,omitempty"`
-	DeletedAt   time.Time       `json:"deleted_at,omitempty"`
+	CreatedAt   time.Time       `json:"created_at"`
+	UpdatedAt   time.Time       `json:"updated_at"`
+	DeletedAt   time.Time       `json:"deleted_at"`
 }
 
 // Location tells lazyfiles where a file's bytes live.

@@ -28,10 +28,10 @@ type JSONLRepository struct {
 
 type logEvent struct {
 	Op           string            `json:"op"`
-	Variant      lazymedia.Variant `json:"variant,omitempty"`
+	Variant      lazymedia.Variant `json:"variant"`
 	SourceFileID string            `json:"source_file_id,omitempty"`
 	VariantKey   string            `json:"variant_key,omitempty"`
-	Time         time.Time         `json:"time,omitempty"`
+	Time         time.Time         `json:"time"`
 }
 
 // New opens or creates an append-only JSONL variant repository.

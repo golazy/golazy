@@ -1,0 +1,31 @@
+manifest = 1
+
+[package]
+id = "golazy.dev/pg"
+version = "v0.1.21"
+
+[[addons]]
+id = "postgres"
+description = "PostgreSQL pool and migration backend"
+go_import = "golazy.dev/pg/addon/postgres"
+hooks = ["dependencies", "migrations", "controlplane"]
+capabilities = ["golazy.dev/pg/postgres/pool", "golazy.dev/pg/postgres/migration-backend"]
+dependency_service = "postgres"
+database_url_variable = "DATABASE_URL"
+migration_database = "postgres"
+migration_backend = "golazy.dev/pg/pgmigrate.New"
+control_plane = ["postgres"]
+tasks = ["postgres:start", "postgres:check", "postgres:create", "postgres:reset"]
+files = [".mise/tasks/postgres/start", ".mise/tasks/postgres/check", ".mise/tasks/postgres/create", ".mise/tasks/postgres/reset", "db/postgres/migrations.go", "db/postgres/migrations/migrations.toml", "lazy.toml", "mise.toml"]
+
+[[addons]]
+id = "postgres/jobs"
+description = "PostgreSQL-backed durable jobs"
+requires = ["postgres"]
+go_import = "golazy.dev/pg/addon/postgres/jobs"
+hooks = ["migrations", "jobs"]
+capabilities = ["golazy.dev/pg/postgres/jobs/backend"]
+migration_database = "postgres"
+migration_source = "golazy.dev/pg/pgjobs.Migrations"
+jobs_backend = "golazy.dev/pg/pgjobs.New"
+control_plane = ["jobs"]

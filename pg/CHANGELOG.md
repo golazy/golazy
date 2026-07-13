@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+- Added the `postgres` and dependent `postgres/jobs` add-on packages. The base
+  add-on registers the shared pgx pool, migration backend, and lazydev database
+  panel with a safe database-ping action; the jobs add-on mounts its migrations
+  and supplies the durable jobs backend only when selected.
+- The `postgres` add-on accepts committed `database_url_variable`
+  configuration so applications can name the environment variable containing
+  their secret connection URL without storing the URL in `addons.toml`.
+- Added `pgjobs.MigrationFiles` for mounting the embedded jobs migration
+  filesystem into a shared `lazymigrate.Catalog`.
 - Added `pgauth`, a PostgreSQL `lazyauth.Authenticator` with embedded user
   table migrations and helper methods for creating password-backed users.
 - `pgjobs` now persists fixed-interval schedules, records job `schedule_key`,

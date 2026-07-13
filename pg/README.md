@@ -4,8 +4,27 @@
 packages. The module keeps PostgreSQL driver dependencies out of the core
 `golazy.dev` module.
 
+Install the conventional pool, migrations, and local development service into
+a GoLazy application with:
+
+```sh
+lazy add postgres
+```
+
+Add the PostgreSQL jobs backend and its migrations separately with:
+
+```sh
+lazy add postgres/jobs
+```
+
+The second add-on requires the first. Applications with custom lifecycle or
+backend requirements can continue wiring the packages below directly.
+
 Current packages:
 
+- `addon/postgres`: base PostgreSQL add-on registration, including its
+  development pool-status panel and safe database-ping action.
+- `addon/postgres/jobs`: dependent durable-jobs add-on registration.
 - `pg`: shared `pgxpool` connection and app-context helpers.
 - `pgauth`: PostgreSQL `lazyauth.Authenticator` plus embedded auth user
   migrations.

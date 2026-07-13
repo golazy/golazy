@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"golazy.dev/lazyaddon"
 	"golazy.dev/lazyassets"
 	"golazy.dev/lazyauth"
 	"golazy.dev/lazyauth/memoryauth"
@@ -28,6 +29,7 @@ import (
 	"golazy.dev/lazyerrors"
 	"golazy.dev/lazyfiles"
 	"golazy.dev/lazyforms"
+	"golazy.dev/lazyfs"
 	"golazy.dev/lazyjobs"
 	"golazy.dev/lazyjobs/inmemoryjobs"
 	"golazy.dev/lazymcp"
@@ -54,6 +56,7 @@ type WorkersConfig func(context.Context, *lazyworkers.Registry) error
 
 type Config struct {
 	Name              string
+	Addons            lazyaddon.Selection
 	Drawer            func(*lazyroutes.Scope)
 	Public            func() (fs.FS, error)
 	Views             func() (fs.FS, error)
@@ -84,6 +87,7 @@ type Config struct {
 
 type App struct {
 	Name         string
+	Addons       *lazyaddon.Scope
 	Context      context.Context
 	Dispatcher   *lazydispatch.Dispatcher
 	Router       *lazyroutes.Scope
@@ -138,6 +142,10 @@ func MustSub(fsys fs.FS, dir string) func() (fs.FS, error) {
 func New(config Config) *App {
 	ctx := context.Background()
 	ctx = lazycache.WithBuildVersion(ctx, appBuildVersion())
+	addons, err := lazyaddon.Resolve(config.Addons)
+	if err != nil {
+		panic(fmt.Errorf("resolve add-ons: %w", err))
+	}
 	runtime := newRuntimeState()
 	migrationMode, err := configuredMigrationMode()
 	if err != nil {
@@ -192,13 +200,35 @@ func New(config Config) *App {
 	if err != nil {
 		panic(err)
 	}
-	views := defaultViews
+	views := lazyfs.New()
+	if err := views.Add(defaultViews, lazyfs.Name("framework"), lazyfs.Owner("golazy.dev/lazycontroller")); err != nil {
+		panic(fmt.Errorf("add framework views: %w", err))
+	}
+	public := lazyfs.New()
+	runAddonHook(addons, FilesHook, &FilesEvent{Context: ctx, Views: views, Public: public, Addons: addons})
 	if config.Views != nil {
 		configuredViews, err := openConfiguredViews(config.Views)
 		if err != nil {
 			panic(fmt.Errorf("open views: %w", err))
 		}
-		views = overlayViewFS(configuredViews, defaultViews)
+		if err := views.Add(configuredViews, lazyfs.Name("application")); err != nil {
+			panic(fmt.Errorf("add application views: %w", err))
+		}
+	}
+	if config.Public != nil {
+		configuredPublic, err := openConfiguredPublic(config.Public)
+		if err != nil {
+			panic(fmt.Errorf("open public files: %w", err))
+		}
+		if err := public.Add(configuredPublic, lazyfs.Name("application")); err != nil {
+			panic(fmt.Errorf("add application public files: %w", err))
+		}
+	}
+	if err := views.Seal(); err != nil {
+		panic(fmt.Errorf("seal views: %w", err))
+	}
+	if err := public.Seal(); err != nil {
+		panic(fmt.Errorf("seal public files: %w", err))
 	}
 	renderer, err := lazycontroller.NewRenderer(views)
 	if err != nil {
@@ -215,11 +245,7 @@ func New(config Config) *App {
 	assetOptions := append([]lazyassets.Option{}, config.AssetOptions...)
 	assetOptions = append(assetOptions, lazyDevAssetOptions()...)
 	assets := lazyassets.New(assetOptions...)
-	if config.Public != nil {
-		public, err := openConfiguredPublic(config.Public)
-		if err != nil {
-			panic(fmt.Errorf("open public files: %w", err))
-		}
+	if len(public.Layers()) > 0 {
 		ctx = lazycontroller.WithErrorPages(ctx, public)
 		if err := assets.AddFS(public); err != nil {
 			panic(fmt.Errorf("register public assets: %w", err))
@@ -240,6 +266,12 @@ func New(config Config) *App {
 	if err != nil {
 		panic(fmt.Errorf("initialize telemetry: %w", err))
 	}
+	ctx = dependencies.Context()
+	runAddonHook(addons, DependenciesHook, &DependenciesEvent{
+		Context:      ctx,
+		Dependencies: dependencies,
+		Addons:       addons,
+	})
 	ctx = dependencies.Context()
 	if config.Dependencies != nil {
 		if err := config.Dependencies(dependencies); err != nil {
@@ -283,6 +315,26 @@ func New(config Config) *App {
 		}
 		migrations = configuredMigrations
 	}
+	if addons.HasCallbacks(MigrationsHook.ID()) && migrations == nil {
+		migrations = lazymigrate.Databases{}
+	}
+	migrationCatalog := new(lazymigrate.Catalog)
+	runAddonHook(addons, MigrationsHook, &MigrationsEvent{
+		Context:   ctx,
+		Databases: &migrations,
+		Catalog:   migrationCatalog,
+		Addons:    addons,
+	})
+	for _, databaseName := range migrations.Names() {
+		database := migrations[databaseName]
+		for _, source := range database.SourcesFor() {
+			if err := migrationCatalog.Add(databaseName, source); err != nil {
+				panic(fmt.Errorf("register %s migration source: %w", databaseName, err))
+			}
+		}
+		database.Sources = migrationCatalog.Sources(databaseName)
+		migrations[databaseName] = database
+	}
 	if migrationMode != migrationModeOff {
 		if err := applyConfiguredMigrations(ctx, migrations); err != nil {
 			panic(fmt.Errorf("run migrations: %w", err))
@@ -300,16 +352,21 @@ func New(config Config) *App {
 		}
 	}
 
-	var jobs *lazyjobs.JobRunner
+	jobsEvent := JobsEvent{Context: ctx, Enabled: config.Jobs != nil, Addons: addons}
 	if config.Jobs != nil {
 		jobsConfig, err := config.Jobs(ctx)
 		if err != nil {
 			panic(fmt.Errorf("initialize jobs: %w", err))
 		}
-		if jobsConfig.Backend == nil {
-			jobsConfig.Backend = inmemoryjobs.New()
+		jobsEvent.Config = jobsConfig
+	}
+	runAddonHook(addons, JobsHook, &jobsEvent)
+	var jobs *lazyjobs.JobRunner
+	if jobsEvent.Enabled {
+		if jobsEvent.Config.Backend == nil {
+			jobsEvent.Config.Backend = inmemoryjobs.New()
 		}
-		jobs, err = lazyjobs.New(jobsConfig)
+		jobs, err = lazyjobs.New(jobsEvent.Config)
 		if err != nil {
 			panic(fmt.Errorf("initialize jobs: %w", err))
 		}
@@ -349,6 +406,7 @@ func New(config Config) *App {
 	if config.Drawer != nil {
 		config.Drawer(router)
 	}
+	runAddonHook(addons, RoutesHook, &RoutesEvent{Context: ctx, Router: router, Addons: addons})
 	afterDraw(router)
 	renderer.AddHelpers(router.RegisterHelpers())
 	renderer.AddHelpers(assets.Helpers())
@@ -361,6 +419,11 @@ func New(config Config) *App {
 	renderer.AddHelpers(lazyseo.Helpers(seo...))
 	renderer.AddHelpers(lazyturbo.Helpers())
 	renderer.AddHelpers(cacheHelpers())
+	addonHelpers := Helpers{}
+	runAddonHook(addons, HelpersHook, &HelpersEvent{Context: ctx, Helpers: &addonHelpers, Addons: addons})
+	for _, helpers := range addonHelpers {
+		renderer.AddHelpers(helpers)
+	}
 	for _, helpers := range config.Helpers {
 		renderer.AddHelpers(helpers)
 	}
@@ -379,6 +442,16 @@ func New(config Config) *App {
 	controlPlane = jobsControlPlane(controlPlane, jobs)
 	controlPlane = lazyDevControlPlane(controlPlane, renderer, router, assets, cache, dependencies, jobs, workers, pwa, runtime, media)
 	controlPlane = telemetryControlPlane(controlPlane, telemetry, cache)
+	if addons.HasCallbacks(ControlPlaneHook.ID()) && controlPlane == nil {
+		controlPlane = lazycontrolplane.New(lazycontrolplane.Config{})
+	}
+	if controlPlane != nil {
+		runAddonHook(addons, ControlPlaneHook, &ControlPlaneEvent{
+			Context:      ctx,
+			ControlPlane: controlPlane,
+			Addons:       addons,
+		})
+	}
 	if err := renderer.Cache(); err != nil {
 		panic(fmt.Errorf("cache views: %w", err))
 	}
@@ -421,6 +494,7 @@ func New(config Config) *App {
 
 	app := &App{
 		Name:         config.Name,
+		Addons:       addons,
 		Context:      ctx,
 		Dispatcher:   dispatcher,
 		Router:       router,
@@ -499,9 +573,12 @@ func appBuildVersion() string {
 }
 
 func (app *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if controlPlane := app.controlPlaneInServeHTTP(); controlPlane != nil && controlPlane.HandlesPath(r.URL.Path) {
-		controlPlane.ServeHTTP(w, r)
-		return
+	if controlPlane := app.controlPlaneInServeHTTP(); controlPlane != nil {
+		controlPlane.Seal()
+		if controlPlane.HandlesPath(r.URL.Path) {
+			controlPlane.ServeHTTP(w, r)
+			return
+		}
 	}
 	app.handler().ServeHTTP(w, r)
 }
@@ -628,11 +705,14 @@ func (app *App) handlersForListen(appAddr string, controlAddr string, controlAdd
 	if controlPlane == nil {
 		return appHandler, nil
 	}
+	if controlAddrSet && !sameListenAddr(appAddr, controlAddr) {
+		controlPlane.EnablePprof()
+	}
+	controlPlane.Seal()
 	if controlAddrSet && sameListenAddr(appAddr, controlAddr) {
 		return controlPlane.Handler(appHandler), nil
 	}
 	if controlAddrSet {
-		controlPlane.EnablePprof()
 		return appHandler, controlPlane.StandaloneHandler()
 	}
 	return appHandler, controlPlane

@@ -39,6 +39,8 @@ func ExampleNew() {
 		"layouts/app.html.tpl": {Data: []byte("<main>{{.content}}</main>")},
 		"pages/index.html.tpl": {Data: []byte("<h1>{{.Title}}</h1>")},
 	}
+	cleanup := configureExampleFiles(public, views)
+	defer cleanup()
 
 	app := lazyapp.New(lazyapp.Config{
 		Name: "example",

@@ -29,13 +29,18 @@ type FS struct {
 	Dir   string
 }
 
+// TreeFS loads migrations recursively from one filesystem tree. It is useful
+// with a lazyfs stack containing package-owned migrations mounted under stable
+// namespaces.
+type TreeFS struct {
+	Files fs.FS
+	Dir   string
+}
+
 func (source FS) LoadMigrations(ctx context.Context) ([]Migration, error) {
-	if source.Files == nil {
-		return nil, fmt.Errorf("lazymigrate: fs source is nil")
-	}
-	dir := strings.Trim(strings.TrimSpace(source.Dir), "/")
-	if dir == "" {
-		return nil, fmt.Errorf("lazymigrate: migration directory is required")
+	dir, err := migrationDirectory(source.Files, source.Dir)
+	if err != nil {
+		return nil, err
 	}
 	entries, err := fs.ReadDir(source.Files, dir)
 	if err != nil {
@@ -67,14 +72,76 @@ func (source FS) LoadMigrations(ctx context.Context) ([]Migration, error) {
 	return normalizeMigrations(migrations)
 }
 
+// LoadMigrations implements Source.
+func (source TreeFS) LoadMigrations(ctx context.Context) ([]Migration, error) {
+	dir, err := migrationDirectory(source.Files, source.Dir)
+	if err != nil {
+		return nil, err
+	}
+	var migrations []Migration
+	err = fs.WalkDir(source.Files, dir, func(migrationPath string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if entry.IsDir() || entry.Name() == migrationConfigFile {
+			return nil
+		}
+		if path.Ext(entry.Name()) == ".go" {
+			return fmt.Errorf("lazymigrate: Go migration files are not supported: %s", migrationPath)
+		}
+		content, err := fs.ReadFile(source.Files, migrationPath)
+		if err != nil {
+			return fmt.Errorf("read migration %s: %w", migrationPath, err)
+		}
+		migration, err := parseMigrationFile(migrationPath, content)
+		if err != nil {
+			return err
+		}
+		migrations = append(migrations, migration)
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("read migrations %s: %w", dir, err)
+	}
+	return normalizeMigrations(migrations)
+}
+
 // FromFS returns a Source that loads direct migration files from dir in files.
 func FromFS(files fs.FS, dir string) FS {
 	return FS{Files: files, Dir: dir}
 }
 
+// FromTree returns a Source that recursively loads migration files from dir.
+func FromTree(files fs.FS, dir string) TreeFS {
+	return TreeFS{Files: files, Dir: dir}
+}
+
 // ForDatabase returns a conventional app-root Source for db/database/migrations.
 func ForDatabase(files fs.FS, database string) FS {
 	return FromFS(files, path.Join("db", database, "migrations"))
+}
+
+// ForDatabaseTree returns a recursive conventional app-root Source for
+// db/database/migrations.
+func ForDatabaseTree(files fs.FS, database string) TreeFS {
+	return FromTree(files, path.Join("db", database, "migrations"))
+}
+
+func migrationDirectory(files fs.FS, dir string) (string, error) {
+	if files == nil {
+		return "", fmt.Errorf("lazymigrate: fs source is nil")
+	}
+	dir = strings.Trim(strings.TrimSpace(dir), "/")
+	if dir == "" {
+		return "", fmt.Errorf("lazymigrate: migration directory is required")
+	}
+	if !fs.ValidPath(dir) {
+		return "", fmt.Errorf("lazymigrate: migration directory %q is invalid", dir)
+	}
+	return dir, nil
 }
 
 func parseMigrationFile(migrationPath string, content []byte) (Migration, error) {

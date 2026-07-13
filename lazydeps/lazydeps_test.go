@@ -96,6 +96,50 @@ func TestServiceCancelsNodeContextOnError(t *testing.T) {
 	}
 }
 
+func TestServiceRejectsDuplicateNameWithoutRunningOrLosingCleanup(t *testing.T) {
+	u := New(context.Background())
+	cleanups := 0
+	_, err := Service(u, "postgres", func(ctx context.Context) (context.Context, string, error, context.CancelFunc) {
+		return ctx, "first", nil, func() { cleanups++ }
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	duplicateRan := false
+	_, err = Service(u, "postgres", func(ctx context.Context) (context.Context, string, error, context.CancelFunc) {
+		duplicateRan = true
+		return ctx, "second", nil, nil
+	})
+	if err == nil || !strings.Contains(err.Error(), "already registered") {
+		t.Fatalf("duplicate service error = %v", err)
+	}
+	if duplicateRan {
+		t.Fatal("duplicate initializer ran")
+	}
+	if err := u.Shutdown(context.Background(), "test"); err != nil {
+		t.Fatal(err)
+	}
+	if cleanups != 1 {
+		t.Fatalf("first cleanup calls = %d, want 1", cleanups)
+	}
+}
+
+func TestServiceNameCanRetryAfterInitializerFailure(t *testing.T) {
+	u := New(context.Background())
+	_, err := Service(u, "postgres", func(ctx context.Context) (context.Context, string, error, context.CancelFunc) {
+		return ctx, "", errors.New("first failed"), nil
+	})
+	if err == nil {
+		t.Fatal("first initializer error = nil")
+	}
+	_, err = Service(u, "postgres", func(ctx context.Context) (context.Context, string, error, context.CancelFunc) {
+		return ctx, "second", nil, nil
+	})
+	if err != nil {
+		t.Fatalf("retry service: %v", err)
+	}
+}
+
 func TestRefUsePanicsOutsideServiceInitialization(t *testing.T) {
 	u := New(context.Background())
 

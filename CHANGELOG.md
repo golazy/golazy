@@ -7,6 +7,32 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `golazy.dev/lazyaddon` provides application-local add-on selection, opaque
+  package registration handles, dependency-ordered typed hooks, and versioned
+  typed capabilities. `lazyapp.Config.Addons` runs add-on contributions for
+  files, dependencies, migrations, jobs, routes, helpers, and the development
+  control plane without loading unselected package callbacks.
+- `golazy.dev/lazyfs` provides a concurrency-safe layered `fs.FS` with
+  deterministic last-added precedence, merged directories, metadata, mounts,
+  sub-filesystems, and correct ancestor shadowing. `lazyapp` now composes
+  framework, add-on, and application view/public layers through it while
+  development keeps application files on disk.
+- `lazymigrate.Catalog` can mount layered migration filesystems by database and
+  namespace. Add-ons receive the shared catalog before migration sources are
+  materialized, allowing independently packaged migrations to compose without
+  flattening their ownership.
+- `lazycontrolplane` supports owned, validated development-panel descriptors
+  and same-owner POST action descriptors, and publishes schema-versioned
+  discovery at `/_golazy/panels`.
+
+### Changed
+
+- `lazydeps.Scope` now rejects duplicate service names before initialization,
+  runs the first service cleanup exactly once, and releases a reserved name
+  when initialization fails so a later retry can succeed.
+
 ## [0.1.20] - 2026-07-12
 
 ### Added

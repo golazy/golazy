@@ -20,10 +20,13 @@
 // across all loaded sources are rejected.
 //
 // Catalog is useful when an application combines its own migrations with
-// package-provided migrations. PostgreSQL service packages in golazy.dev/pg,
-// such as pgjobs, pgfiles, pgmedia, and pgstorage, expose embedded migrations
-// as lazymigrate.Source values so an application can add them to the same
-// catalog as application migrations.
+// package-provided migrations. Add accepts an already adapted Source. Mount
+// places an fs.FS beneath a stable namespace in a lazyfs stack, allowing
+// independently initialized add-ons to contribute migration trees before the
+// catalog is loaded. PostgreSQL service packages in golazy.dev/pg, such as
+// pgjobs, pgfiles, pgmedia, and pgstorage, expose embedded migrations as
+// lazymigrate.Source values so an application can add them to the same catalog
+// as application migrations.
 //
 // DB and Databases describe the same source/backend relationship for lazyapp
 // integration. Each Databases entry is one logical database with its own Backend

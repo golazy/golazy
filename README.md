@@ -43,6 +43,7 @@ framework itself is just Go packages.
 
 ```text
 golazy.dev/lazyapp                 Application composition
+golazy.dev/lazyaddon               Typed, application-local add-on hooks and capabilities
 golazy.dev/lazyassets              Asset registry, fingerprints, and serving
 golazy.dev/lazycache               Application cache contract and helpers
 golazy.dev/lazycache/inmemorycache In-process LRU-capable cache backend
@@ -54,6 +55,7 @@ golazy.dev/lazydoc                 Package documentation extraction and search
 golazy.dev/lazyerrors              Caller-prefixed errors, typed backtraces, and validation errors
 golazy.dev/lazyfiles               Logical file catalog and fallback file URLs
 golazy.dev/lazyforms               Form helpers aligned with schema decoding
+golazy.dev/lazyfs                  Layered standard-library filesystems
 golazy.dev/lazymailer              Mailer rendering and delivery interfaces
 golazy.dev/lazymedia               Generated file/media variants
 golazy.dev/lazymigrate             Backend-agnostic migration loading and planning

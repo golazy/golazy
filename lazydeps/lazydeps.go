@@ -15,13 +15,14 @@ const appNode = "app"
 type Func[T any] func(context.Context) (context.Context, T, error, context.CancelFunc)
 
 type Scope struct {
-	mu      sync.Mutex
-	ctx     context.Context
-	nodes   map[string]*node
-	edges   map[string]map[string]struct{}
-	current []string
-	nextID  int
-	logger  *slog.Logger
+	mu       sync.Mutex
+	ctx      context.Context
+	nodes    map[string]*node
+	edges    map[string]map[string]struct{}
+	services map[string]struct{}
+	current  []string
+	nextID   int
+	logger   *slog.Logger
 }
 
 type node struct {
@@ -64,9 +65,10 @@ func New(ctx context.Context, opts ...Option) *Scope {
 		ctx = context.Background()
 	}
 	u := &Scope{
-		ctx:   ctx,
-		nodes: map[string]*node{appNode: {name: appNode, done: closedNodeDone()}},
-		edges: make(map[string]map[string]struct{}),
+		ctx:      ctx,
+		nodes:    map[string]*node{appNode: {name: appNode, done: closedNodeDone()}},
+		edges:    make(map[string]map[string]struct{}),
+		services: make(map[string]struct{}),
 	}
 	for _, opt := range opts {
 		if opt != nil {
@@ -102,6 +104,15 @@ func Service[T any](u *Scope, name string, fn Func[T]) (Ref[T], error) {
 	if fn == nil {
 		return zero, fmt.Errorf("lazydeps: service %q initializer is nil", name)
 	}
+	if !u.reserveService(name) {
+		return zero, fmt.Errorf("lazydeps: service %q is already registered", name)
+	}
+	initialized := false
+	defer func() {
+		if !initialized {
+			u.releaseService(name)
+		}
+	}()
 
 	serviceCtx, cancelCause := context.WithCancelCause(u.Context())
 	serviceCtx = withCurrent(serviceCtx, name)
@@ -120,7 +131,24 @@ func Service[T any](u *Scope, name string, fn Func[T]) (Ref[T], error) {
 	u.addNode(name, cancelCause, stop)
 	u.addEdge(appNode, name)
 	u.SetContext(nextCtx)
+	initialized = true
 	return Ref[T]{scope: u, name: name, value: value}, nil
+}
+
+func (u *Scope) reserveService(name string) bool {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if _, exists := u.services[name]; exists {
+		return false
+	}
+	u.services[name] = struct{}{}
+	return true
+}
+
+func (u *Scope) releaseService(name string) {
+	u.mu.Lock()
+	delete(u.services, name)
+	u.mu.Unlock()
 }
 
 func (r Ref[T]) Use() T {

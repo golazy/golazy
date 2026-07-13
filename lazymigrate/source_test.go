@@ -7,6 +7,7 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"golazy.dev/lazyfs"
 	"golazy.dev/lazymigrate"
 )
 
@@ -66,6 +67,69 @@ func TestForDatabaseReadsConventionalDirectory(t *testing.T) {
 	}
 	if migrations[0].Path != "db/postgres/migrations/202603010101_create_documents.sql" {
 		t.Fatalf("path = %q", migrations[0].Path)
+	}
+}
+
+func TestFromTreeLoadsMountedMigrationNamespaces(t *testing.T) {
+	app, err := lazyfs.Mount("db/postgres/migrations/app", fstest.MapFS{
+		"202607010101_create_documents.sql": {Data: []byte("documents")},
+	})
+	if err != nil {
+		t.Fatalf("Mount(app) error = %v", err)
+	}
+	jobs, err := lazyfs.Mount("db/postgres/migrations/postgres-jobs", fstest.MapFS{
+		"postgres-jobs-20260702.sql": {Data: []byte("jobs")},
+	})
+	if err != nil {
+		t.Fatalf("Mount(jobs) error = %v", err)
+	}
+	files := lazyfs.New()
+	if err := files.Add(app, lazyfs.Name("application")); err != nil {
+		t.Fatal(err)
+	}
+	if err := files.Add(jobs, lazyfs.Name("postgres/jobs")); err != nil {
+		t.Fatal(err)
+	}
+	if err := files.Seal(); err != nil {
+		t.Fatal(err)
+	}
+
+	migrations, err := lazymigrate.ForDatabaseTree(files, "postgres").LoadMigrations(context.Background())
+	if err != nil {
+		t.Fatalf("LoadMigrations() error = %v", err)
+	}
+	if got, want := ids(migrations), []string{"202607010101_create_documents", "postgres-jobs-20260702"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("ids = %v, want %v", got, want)
+	}
+	if got, want := migrations[1].Path, "db/postgres/migrations/postgres-jobs/postgres-jobs-20260702.sql"; got != want {
+		t.Fatalf("jobs path = %q, want %q", got, want)
+	}
+}
+
+func TestFromTreeRejectsDuplicateIDsAcrossMountedNamespaces(t *testing.T) {
+	first, err := lazyfs.Mount("db/postgres/migrations/app", fstest.MapFS{
+		"202607010101_create.sql": {Data: []byte("first")},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := lazyfs.Mount("db/postgres/migrations/addon", fstest.MapFS{
+		"202607010101_create.txt": {Data: []byte("second")},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	files := lazyfs.New()
+	if err := files.Add(first); err != nil {
+		t.Fatal(err)
+	}
+	if err := files.Add(second); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = lazymigrate.ForDatabaseTree(files, "postgres").LoadMigrations(context.Background())
+	if err == nil || !strings.Contains(err.Error(), `migration "202607010101_create" is duplicated`) {
+		t.Fatalf("LoadMigrations() error = %v, want duplicate id", err)
 	}
 }
 

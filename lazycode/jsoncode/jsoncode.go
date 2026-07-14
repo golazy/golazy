@@ -1,6 +1,3 @@
-// Package jsoncode provides structured JSON object edits as lazycode
-// operations. It preserves the document's indentation and final newline but
-// intentionally normalizes object key order through encoding/json.
 package jsoncode
 
 import (
@@ -14,14 +11,18 @@ import (
 	"golazy.dev/lazycode"
 )
 
+// Document is a parsed JSON object with its detected indentation and final
+// newline style.
 type Document struct {
 	root         map[string]any
 	indent       string
 	finalNewline bool
 }
 
+// EditFunc mutates a Document and reports whether it changed.
 type EditFunc func(*Document) (bool, error)
 
+// Parse parses exactly one JSON object from data.
 func Parse(data []byte) (*Document, error) {
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.UseNumber()
@@ -43,6 +44,7 @@ func Parse(data []byte) (*Document, error) {
 	}, nil
 }
 
+// Bytes encodes the document using its detected indentation and final newline.
 func (d *Document) Bytes() ([]byte, error) {
 	if d == nil {
 		return nil, errors.New("jsoncode: nil document")
@@ -61,6 +63,8 @@ func (d *Document) Bytes() ([]byte, error) {
 	return append([]byte(nil), data...), nil
 }
 
+// Set assigns value at an object-key path, creating intermediate objects when
+// needed, and reports whether the document changed.
 func (d *Document) Set(path []string, value any) (bool, error) {
 	if d == nil {
 		return false, errors.New("jsoncode: nil document")
@@ -101,6 +105,8 @@ func (d *Document) Set(path []string, value any) (bool, error) {
 	return true, nil
 }
 
+// Remove deletes the value at an object-key path and reports whether it
+// existed.
 func (d *Document) Remove(path []string) (bool, error) {
 	if d == nil {
 		return false, errors.New("jsoncode: nil document")
@@ -128,6 +134,8 @@ func (d *Document) Remove(path []string) (bool, error) {
 	return true, nil
 }
 
+// EnsureDependency sets name to version in a supported package.json dependency
+// group.
 func (d *Document) EnsureDependency(group, name, version string) (bool, error) {
 	if !validDependencyGroup(group) {
 		return false, fmt.Errorf("jsoncode: unsupported dependency group %q", group)
@@ -138,6 +146,8 @@ func (d *Document) EnsureDependency(group, name, version string) (bool, error) {
 	return d.Set([]string{group, name}, version)
 }
 
+// RemoveDependency removes name from a supported package.json dependency
+// group.
 func (d *Document) RemoveDependency(group, name string) (bool, error) {
 	if !validDependencyGroup(group) {
 		return false, fmt.Errorf("jsoncode: unsupported dependency group %q", group)
@@ -145,6 +155,8 @@ func (d *Document) RemoveDependency(group, name string) (bool, error) {
 	return d.Remove([]string{group, name})
 }
 
+// Edit returns an operation that parses name, applies edit, and replaces the
+// file in memory only when it changed.
 func Edit(name string, edit EditFunc) lazycode.Operation {
 	return lazycode.OperationFunc(func(workspace *lazycode.Workspace) error {
 		if edit == nil {
@@ -173,12 +185,14 @@ func Edit(name string, edit EditFunc) lazycode.Operation {
 	})
 }
 
+// Set returns an operation that assigns value at an object-key path in name.
 func Set(name string, path []string, value any) lazycode.Operation {
 	return Edit(name, func(document *Document) (bool, error) {
 		return document.Set(path, value)
 	})
 }
 
+// Dependency returns an operation that sets one package.json dependency.
 func Dependency(name, group, dependency, version string) lazycode.Operation {
 	return Edit(name, func(document *Document) (bool, error) {
 		return document.EnsureDependency(group, dependency, version)

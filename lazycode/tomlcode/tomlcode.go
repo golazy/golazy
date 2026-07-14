@@ -1,6 +1,3 @@
-// Package tomlcode provides conservative, comment-preserving TOML edits.
-// It deliberately edits only ordinary tables and single keys; unsupported or
-// ambiguous structure is returned as an error instead of being reformatted.
 package tomlcode
 
 import (
@@ -13,6 +10,8 @@ import (
 	"golazy.dev/lazycode"
 )
 
+// Document is a parsed TOML document that retains its original line endings,
+// comments, and unrelated source text.
 type Document struct {
 	lines        []string
 	newline      string
@@ -38,8 +37,10 @@ type documentIndex struct {
 	entries  []entry
 }
 
+// EditFunc mutates a Document and reports whether it changed.
 type EditFunc func(*Document) (bool, error)
 
+// Parse validates data as a document supported by this conservative editor.
 func Parse(data []byte) (*Document, error) {
 	text := string(data)
 	newline := "\n"
@@ -62,6 +63,7 @@ func Parse(data []byte) (*Document, error) {
 	return document, nil
 }
 
+// Bytes returns the document's current source representation.
 func (d *Document) Bytes() []byte {
 	if d == nil {
 		return nil
@@ -73,6 +75,8 @@ func (d *Document) Bytes() []byte {
 	return []byte(text)
 }
 
+// EnsureTable creates an ordinary table when it is absent and reports whether
+// the document changed.
 func (d *Document) EnsureTable(table string) (bool, error) {
 	if d == nil {
 		return false, errors.New("tomlcode: nil document")
@@ -192,18 +196,22 @@ func (d *Document) SetRaw(table, key, value string) (bool, error) {
 	return true, nil
 }
 
+// SetString sets table.key to a TOML string.
 func (d *Document) SetString(table, key, value string) (bool, error) {
 	return d.SetRaw(table, key, EncodeString(value))
 }
 
+// SetBool sets table.key to a TOML boolean.
 func (d *Document) SetBool(table, key string, value bool) (bool, error) {
 	return d.SetRaw(table, key, strconv.FormatBool(value))
 }
 
+// SetInteger sets table.key to a TOML integer.
 func (d *Document) SetInteger(table, key string, value int64) (bool, error) {
 	return d.SetRaw(table, key, strconv.FormatInt(value, 10))
 }
 
+// SetStrings sets table.key to a single-line array of TOML strings.
 func (d *Document) SetStrings(table, key string, values []string) (bool, error) {
 	return d.SetRaw(table, key, EncodeStrings(values))
 }
@@ -252,6 +260,7 @@ func (d *Document) Raw(table, key string) (string, bool, error) {
 	return "", false, nil
 }
 
+// Remove removes table.key and reports whether it existed.
 func (d *Document) Remove(table, key string) (bool, error) {
 	if d == nil {
 		return false, errors.New("tomlcode: nil document")
@@ -269,6 +278,7 @@ func (d *Document) Remove(table, key string) (bool, error) {
 	return false, nil
 }
 
+// RemoveTable removes an ordinary table and all of its keys.
 func (d *Document) RemoveTable(table string) (bool, error) {
 	if d == nil {
 		return false, errors.New("tomlcode: nil document")
@@ -317,6 +327,8 @@ func (d *Document) RemoveTableIfEmpty(table string) (bool, error) {
 	return d.RemoveTable(table)
 }
 
+// Edit returns an operation that parses name, applies edit, validates the
+// result, and replaces the file in memory only when it changed.
 func Edit(name string, edit EditFunc) lazycode.Operation {
 	return lazycode.OperationFunc(func(workspace *lazycode.Workspace) error {
 		if edit == nil {
@@ -344,6 +356,7 @@ func Edit(name string, edit EditFunc) lazycode.Operation {
 	})
 }
 
+// Set returns an operation that assigns a validated raw TOML value.
 func Set(name, table, key, value string) lazycode.Operation {
 	return Edit(name, func(document *Document) (bool, error) {
 		return document.SetRaw(table, key, value)
@@ -365,6 +378,7 @@ func SetStrings(name, table, key string, values []string) lazycode.Operation {
 	})
 }
 
+// Remove returns an operation that removes table.key from name.
 func Remove(name, table, key string) lazycode.Operation {
 	return Edit(name, func(document *Document) (bool, error) {
 		return document.Remove(table, key)

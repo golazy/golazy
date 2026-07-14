@@ -1,8 +1,3 @@
-// Package lazycode plans source-file changes without writing them.
-//
-// Format-specific packages build Operations that edit an in-memory Workspace.
-// Plan returns baseline-bound edits for a caller, such as the lazy CLI, to
-// review and apply transactionally.
 package lazycode
 
 import (
@@ -17,24 +12,34 @@ import (
 	"strings"
 )
 
+// AbsentHash marks a planned creation whose baseline path did not exist.
 const AbsentHash = "absent"
 
+// EditKind describes how a planned edit changes one file.
 type EditKind string
 
 const (
+	// EditCreate creates a path that was absent from the baseline.
 	EditCreate EditKind = "create"
+	// EditUpdate replaces the contents of a baseline file.
 	EditUpdate EditKind = "update"
+	// EditDelete removes a baseline file.
 	EditDelete EditKind = "delete"
 )
 
+// Severity classifies a planning diagnostic.
 type Severity string
 
 const (
-	SeverityInfo    Severity = "info"
+	// SeverityInfo reports useful context that does not require intervention.
+	SeverityInfo Severity = "info"
+	// SeverityWarning reports a condition that deserves review.
 	SeverityWarning Severity = "warning"
-	SeverityError   Severity = "error"
+	// SeverityError reports a condition that prevents a safe change.
+	SeverityError Severity = "error"
 )
 
+// Diagnostic records information discovered while planning source changes.
 type Diagnostic struct {
 	Path     string
 	Line     int
@@ -43,6 +48,8 @@ type Diagnostic struct {
 	Severity Severity
 }
 
+// FileEdit is one baseline-bound file change produced by a plan. Before and
+// After are copies of the baseline and planned contents respectively.
 type FileEdit struct {
 	Path         string
 	Kind         EditKind
@@ -59,19 +66,24 @@ func (e FileEdit) VerifyBaseline(data []byte, exists bool) bool {
 	return exists && e.BaselineHash == Hash(data)
 }
 
+// Result contains the file edits and diagnostics produced by a plan.
 type Result struct {
 	Files       []FileEdit
 	Diagnostics []Diagnostic
 }
 
+// Changed reports whether the plan contains at least one file edit.
 func (r Result) Changed() bool { return len(r.Files) != 0 }
 
+// Operation applies one in-memory change to a Workspace.
 type Operation interface {
 	Apply(*Workspace) error
 }
 
+// OperationFunc adapts a function to the Operation interface.
 type OperationFunc func(*Workspace) error
 
+// Apply calls f with workspace.
 func (f OperationFunc) Apply(workspace *Workspace) error {
 	if f == nil {
 		return errors.New("lazycode: nil operation")
@@ -93,6 +105,8 @@ type Workspace struct {
 	diagnostics []Diagnostic
 }
 
+// New returns an empty Workspace rooted at root. Root is metadata for callers;
+// New does not read or create the directory.
 func New(root string) *Workspace {
 	return &Workspace{
 		root:     root,
@@ -101,6 +115,8 @@ func New(root string) *Workspace {
 	}
 }
 
+// FromFiles returns a Workspace whose baseline is populated from files. Input
+// paths must be relative and file contents are copied.
 func FromFiles(root string, files map[string][]byte) (*Workspace, error) {
 	workspace := New(root)
 	paths := make([]string, 0, len(files))
@@ -135,6 +151,7 @@ func Load(root string, paths ...string) (*Workspace, error) {
 	return workspace, nil
 }
 
+// Root returns the caller-supplied workspace root.
 func (w *Workspace) Root() string {
 	if w == nil {
 		return ""
@@ -160,6 +177,7 @@ func (w *Workspace) Add(name string, data []byte) error {
 	return nil
 }
 
+// Read returns a copy of the current in-memory contents of name.
 func (w *Workspace) Read(name string) ([]byte, error) {
 	if w == nil {
 		return nil, errors.New("lazycode: nil workspace")
@@ -175,6 +193,7 @@ func (w *Workspace) Read(name string) ([]byte, error) {
 	return cloneBytes(state.data), nil
 }
 
+// Exists reports whether name exists in the current in-memory working copy.
 func (w *Workspace) Exists(name string) bool {
 	clean, err := cleanPath(name)
 	if w == nil || err != nil {
@@ -210,6 +229,8 @@ func (w *Workspace) Remove(name string) error {
 	return nil
 }
 
+// Diagnose appends a diagnostic to the current in-memory plan. An empty
+// severity defaults to SeverityInfo.
 func (w *Workspace) Diagnose(diagnostic Diagnostic) error {
 	if w == nil {
 		return errors.New("lazycode: nil workspace")
@@ -231,6 +252,8 @@ func (w *Workspace) Diagnose(diagnostic Diagnostic) error {
 	return nil
 }
 
+// Paths returns the existing paths in the current working copy in lexical
+// order.
 func (w *Workspace) Paths() []string {
 	if w == nil {
 		return nil
@@ -262,6 +285,7 @@ func (w *Workspace) Plan(operations ...Operation) (Result, error) {
 	return working.result(), nil
 }
 
+// Hash returns the SHA-256 baseline identifier for data.
 func Hash(data []byte) string {
 	digest := sha256.Sum256(data)
 	return fmt.Sprintf("sha256:%x", digest)

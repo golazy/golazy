@@ -1,6 +1,3 @@
-// Package jscode provides deliberately bounded JavaScript text edits. It only
-// manages exact single-line imports and explicitly marked GoLazy blocks; it is
-// not a general JavaScript parser or rewriter.
 package jscode
 
 import (
@@ -18,8 +15,10 @@ const (
 	endPrefix   = "// golazy:end "
 )
 
+// EditFunc transforms JavaScript source and reports whether it changed.
 type EditFunc func([]byte) ([]byte, bool, error)
 
+// Edit returns an operation that applies edit to name in memory.
 func Edit(name string, edit EditFunc) lazycode.Operation {
 	return lazycode.OperationFunc(func(workspace *lazycode.Workspace) error {
 		if edit == nil {
@@ -40,18 +39,23 @@ func Edit(name string, edit EditFunc) lazycode.Operation {
 	})
 }
 
+// ManagedBlock returns an operation that creates or replaces one marked block
+// in name.
 func ManagedBlock(name, id, body string) lazycode.Operation {
 	return Edit(name, func(source []byte) ([]byte, bool, error) {
 		return EnsureManagedBlock(source, id, body)
 	})
 }
 
+// Import returns an operation that ensures an exact single-line import in
+// name.
 func Import(name, statement string) lazycode.Operation {
 	return Edit(name, func(source []byte) ([]byte, bool, error) {
 		return EnsureImport(source, statement)
 	})
 }
 
+// EnsureManagedBlock creates or replaces body between matching GoLazy markers.
 func EnsureManagedBlock(source []byte, id, body string) ([]byte, bool, error) {
 	if err := validateID(id); err != nil {
 		return nil, false, err
@@ -87,6 +91,7 @@ func EnsureManagedBlock(source []byte, id, body string) ([]byte, bool, error) {
 	return encoded, true, nil
 }
 
+// RemoveManagedBlock removes a marked block and reports whether it existed.
 func RemoveManagedBlock(source []byte, id string) ([]byte, bool, error) {
 	if err := validateID(id); err != nil {
 		return nil, false, err
@@ -146,6 +151,7 @@ func EnsureImport(source []byte, statement string) ([]byte, bool, error) {
 	return joinLines(lines, newline, final), true, nil
 }
 
+// EnsureSideEffectImport inserts a quoted side-effect import for module.
 func EnsureSideEffectImport(source []byte, module string) ([]byte, bool, error) {
 	if strings.TrimSpace(module) == "" {
 		return nil, false, errors.New("jscode: module is required")
@@ -153,6 +159,8 @@ func EnsureSideEffectImport(source []byte, module string) ([]byte, bool, error) 
 	return EnsureImport(source, "import "+strconv.Quote(module)+";")
 }
 
+// RemoveImport removes an exact single-line import statement and reports
+// whether it existed.
 func RemoveImport(source []byte, statement string) ([]byte, bool, error) {
 	statement = strings.TrimSpace(statement)
 	if err := validateImport(statement); err != nil {

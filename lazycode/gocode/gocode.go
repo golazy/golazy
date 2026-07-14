@@ -1,4 +1,3 @@
-// Package gocode provides syntax-aware Go edits as lazycode operations.
 package gocode
 
 import (
@@ -15,8 +14,11 @@ import (
 	"golazy.dev/lazycode"
 )
 
+// RewriteFunc mutates a parsed Go file and reports whether it changed.
 type RewriteFunc func(*token.FileSet, *ast.File) (bool, error)
 
+// Parse parses source as a Go file, preserving comments and skipping deprecated
+// object resolution.
 func Parse(name string, source []byte) (*token.FileSet, *ast.File, error) {
 	fileSet := token.NewFileSet()
 	file, err := parser.ParseFile(fileSet, name, source, parser.ParseComments|parser.SkipObjectResolution)
@@ -86,15 +88,21 @@ func EnsureFile(name string, source []byte) lazycode.Operation {
 	})
 }
 
+// EnsureImport adds an ordinary import if it is absent and reports whether the
+// syntax tree changed. Use EnsureNamedImport when validation errors must be
+// distinguished from an unchanged file.
 func EnsureImport(file *ast.File, importPath string) bool {
 	changed, _ := ensureNamedImport(file, "", importPath)
 	return changed
 }
 
+// EnsureBlankImport adds importPath with the blank identifier.
 func EnsureBlankImport(file *ast.File, importPath string) (bool, error) {
 	return ensureNamedImport(file, "_", importPath)
 }
 
+// EnsureNamedImport adds importPath with name. An empty name creates an
+// ordinary import; "_" and "." create blank and dot imports respectively.
 func EnsureNamedImport(file *ast.File, name, importPath string) (bool, error) {
 	if name == "_" {
 		return EnsureBlankImport(file, importPath)
@@ -152,6 +160,8 @@ func ensureNamedImport(file *ast.File, name, importPath string) (bool, error) {
 	return true, nil
 }
 
+// RemoveImport removes every declaration of importPath and reports whether the
+// syntax tree changed.
 func RemoveImport(file *ast.File, importPath string) bool {
 	if file == nil || importPath == "" {
 		return false
@@ -191,6 +201,7 @@ func RemoveImport(file *ast.File, importPath string) bool {
 	return changed
 }
 
+// HasImport reports whether file imports importPath with any import name.
 func HasImport(file *ast.File, importPath string) bool {
 	for _, spec := range importSpecs(file) {
 		path, err := strconv.Unquote(spec.Path.Value)
@@ -226,6 +237,8 @@ func ImportName(file *ast.File, importPath string) (string, bool, error) {
 	return name, found, nil
 }
 
+// UsesSelector reports whether file contains a selector rooted at packageName,
+// such as seo.Configure.
 func UsesSelector(file *ast.File, packageName string) bool {
 	if file == nil || packageName == "" {
 		return false

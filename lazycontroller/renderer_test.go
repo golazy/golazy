@@ -449,7 +449,7 @@ func TestRenderUsesControllerCacheKey(t *testing.T) {
 	}
 	base.Set("title", "First")
 	base.Variants("compact")
-	if base.CacheKey(1, "stamp") {
+	if base.CacheKey(1, nil, "stamp") {
 		t.Fatal("CacheKey returned true before cache was populated")
 	}
 	if err := base.Render(""); err != nil {
@@ -470,7 +470,7 @@ func TestRenderUsesControllerCacheKey(t *testing.T) {
 	}
 	base.Set("title", "Second")
 	base.Variants("compact")
-	if !base.CacheKey(1, "stamp") {
+	if !base.CacheKey(1, nil, "stamp") {
 		t.Fatal("CacheKey returned false for populated cache")
 	}
 	if err := base.Render(""); err != nil {
@@ -486,7 +486,7 @@ func TestRenderUsesControllerCacheKey(t *testing.T) {
 	if len(backend.keys) != 1 {
 		t.Fatalf("cache writes = %v, want one write", backend.keys)
 	}
-	if got, want := backend.keys[0], "build-devel-variant-compact-admin-posts-show-html-1-stamp"; got != want {
+	if got, want := backend.keys[0], "build-devel-variant-compact-admin-posts-show-html-1--stamp"; got != want {
 		t.Fatalf("cache key = %q, want %q", got, want)
 	}
 }

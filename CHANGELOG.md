@@ -29,6 +29,9 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- `lazycache.Key` and controller `CacheKey` helpers now preserve nil key parts
+  as empty segments instead of rejecting them, so optional values retain their
+  position in composite cache keys.
 - `lazydeps.Scope` now rejects duplicate service names before initialization,
   runs the first service cleanup exactly once, and releases a reserved name
   when initialization fails so a later retry can succeed.

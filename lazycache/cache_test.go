@@ -88,15 +88,31 @@ func TestNewRequiresBackend(t *testing.T) {
 
 func TestKeyBuildsStableJoinedParts(t *testing.T) {
 	stamp := time.Date(2026, 6, 25, 12, 30, 0, 42, time.FixedZone("CEST", 2*60*60))
-	key, err := Key("post", 42, stamp)
+	key, err := Key("post", 42, nil, stamp)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := key, "post-42-2026-06-25T10:30:00.000000042Z"; got != want {
+	if got, want := key, "post-42--2026-06-25T10:30:00.000000042Z"; got != want {
 		t.Fatalf("Key = %q, want %q", got, want)
 	}
 
-	for _, parts := range [][]any{{}, {""}, {nil}} {
+	var stampPointer *time.Time
+	key, err = Key("post", stampPointer, "card")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := key, "post--card"; got != want {
+		t.Fatalf("Key = %q, want %q", got, want)
+	}
+	key, err = Key(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if key != "" {
+		t.Fatalf("Key(nil) = %q, want empty string", key)
+	}
+
+	for _, parts := range [][]any{{}, {""}} {
 		if _, err := Key(parts...); err == nil {
 			t.Fatalf("Key(%#v) succeeded, want error", parts)
 		}

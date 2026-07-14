@@ -346,19 +346,19 @@ func Key(parts ...any) (string, error) {
 
 func keyPart(part any) (string, error) {
 	if part == nil {
-		return "", fmt.Errorf("lazycache: key part is nil")
+		return "", nil
 	}
 	if value, ok := part.(time.Time); ok {
 		return keyPartString(value.UTC().Format(time.RFC3339Nano))
 	}
 	if value, ok := part.(*time.Time); ok {
 		if value == nil {
-			return "", fmt.Errorf("lazycache: key part is nil")
+			return "", nil
 		}
 		return keyPartString(value.UTC().Format(time.RFC3339Nano))
 	}
 	if isNil(part) {
-		return "", fmt.Errorf("lazycache: key part is nil")
+		return "", nil
 	}
 	return keyPartString(fmt.Sprint(part))
 }

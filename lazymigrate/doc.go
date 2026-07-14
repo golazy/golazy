@@ -28,6 +28,24 @@
 // lazymigrate.Source values so an application can add them to the same catalog
 // as application migrations.
 //
+// A small catalog can combine both forms before loading one database:
+//
+//	var catalog lazymigrate.Catalog
+//	if err := catalog.Add(
+//		"postgres",
+//		lazymigrate.ForDatabase(appFiles, "postgres"),
+//	); err != nil {
+//		return err
+//	}
+//	if err := catalog.Mount(
+//		"postgres",
+//		"postgres/jobs",
+//		jobsMigrationFiles,
+//	); err != nil {
+//		return err
+//	}
+//	migrations, err := catalog.LoadMigrations(ctx, "postgres")
+//
 // DB and Databases describe the same source/backend relationship for lazyapp
 // integration. Each Databases entry is one logical database with its own Backend
 // and Source values. This keeps lazymigrate backend-agnostic while letting a

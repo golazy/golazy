@@ -1,6 +1,34 @@
 // Package lazycontrolplane provides operational HTTP endpoints for GoLazy
 // applications.
 //
+// Most applications compose the package through lazyapp:
+//
+//	app := lazyapp.New(lazyapp.Config{
+//		ControlPlane: lazycontrolplane.Config{
+//			Readiness: []lazycontrolplane.ReadinessCheck{{
+//				Name:  "database",
+//				Check: databaseReady,
+//			}},
+//		},
+//	})
+//
+// Direct users can register owned endpoints before sealing and serving the
+// standalone handler:
+//
+//	plane := lazycontrolplane.New(lazycontrolplane.Config{})
+//	err := plane.Register(lazycontrolplane.Endpoint{
+//		ID:          "example.com/myapp/build",
+//		Owner:       "example.com/myapp",
+//		Pattern:     "GET /build",
+//		Description: "Application build information",
+//		Handler:     buildHandler,
+//	})
+//	if err != nil {
+//		return err
+//	}
+//	plane.Seal()
+//	return http.ListenAndServe(":2001", plane.StandaloneHandler())
+//
 // A control plane owns framework and operations routes that should not be part
 // of the application's route table. The zero Config is useful: it creates
 // GET /livez, GET /readyz, and the empty developer-panel discovery document at

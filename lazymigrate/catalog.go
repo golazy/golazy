@@ -10,12 +10,15 @@ import (
 	"golazy.dev/lazyfs"
 )
 
+// Catalog collects migration sources by logical database. Its zero value is
+// ready to use and safe for packages to populate during concurrent setup.
 type Catalog struct {
 	mu      sync.RWMutex
 	sources map[string][]Source
 	files   map[string]*lazyfs.FS
 }
 
+// Add appends an already adapted migration source to database.
 func (c *Catalog) Add(database string, source Source) error {
 	if c == nil {
 		return fmt.Errorf("lazymigrate: catalog is nil")
@@ -73,6 +76,7 @@ func (c *Catalog) Mount(database, namespace string, files fs.FS) error {
 	return nil
 }
 
+// Sources returns a snapshot of the direct and mounted sources for database.
 func (c *Catalog) Sources(database string) []Source {
 	if c == nil {
 		return nil
@@ -88,6 +92,7 @@ func (c *Catalog) Sources(database string) []Source {
 	return sources
 }
 
+// LoadMigrations loads and validates all sources registered for database.
 func (c *Catalog) LoadMigrations(ctx context.Context, database string) ([]Migration, error) {
 	if c == nil {
 		return nil, fmt.Errorf("lazymigrate: catalog is nil")

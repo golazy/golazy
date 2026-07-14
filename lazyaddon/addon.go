@@ -1,5 +1,3 @@
-// Package lazyaddon provides manifest-driven, per-application add-on
-// selection and typed lifecycle hooks.
 package lazyaddon
 
 import (

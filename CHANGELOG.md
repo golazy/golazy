@@ -16,7 +16,6 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `iss` callback parameter before validation. Authorization responses continue
   to include `iss`; standards-compliant applications keep advertising support
   by default.
-
 ## [0.1.21] - 2026-07-14
 
 ### Added

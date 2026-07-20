@@ -66,6 +66,9 @@ func TestAuthorizationCodePKCEAndRefreshFlow(t *testing.T) {
 	if code == "" {
 		t.Fatal("authorization response has no code")
 	}
+	if issuer := location.Query().Get("iss"); issuer != "http://auth.example" {
+		t.Fatalf("authorization response issuer = %q", issuer)
+	}
 
 	token := httptest.NewRecorder()
 	form := url.Values{
@@ -81,6 +84,25 @@ func TestAuthorizationCodePKCEAndRefreshFlow(t *testing.T) {
 	}
 	if !strings.Contains(token.Body.String(), "access_token") {
 		t.Fatalf("token response = %s", token.Body.String())
+	}
+}
+
+func TestAuthorizationServerMetadataCanDisableIssuerRequirementForBrokenClients(t *testing.T) {
+	server, err := New(Config{
+		Issuer: "https://auth.example",
+		DisableAuthorizationResponseIssuerMetadata: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	response := httptest.NewRecorder()
+	server.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", response.Code, response.Body.String())
+	}
+	if !strings.Contains(response.Body.String(), `"authorization_response_iss_parameter_supported":false`) {
+		t.Fatalf("metadata = %s", response.Body.String())
 	}
 }
 

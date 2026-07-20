@@ -57,6 +57,12 @@ type Config struct {
 	RefreshTokenTTL time.Duration
 
 	AllowDynamicClients bool
+
+	// DisableAuthorizationResponseIssuerMetadata omits the RFC 9207 metadata
+	// claim that clients must require an iss parameter in authorization
+	// responses. The server still emits iss. Use this only as a temporary
+	// compatibility workaround for clients that discard iss before validation.
+	DisableAuthorizationResponseIssuerMetadata bool
 }
 
 // ClaimsMapper maps an authenticated user and OAuth client to JWT claims.
@@ -251,7 +257,7 @@ func (server *Server) authorizationServerMetadata(r *http.Request) map[string]an
 		"scopes_supported":                                         []string{"openid", "profile", "offline_access"},
 		"subject_types_supported":                                  []string{"public"},
 		"id_token_signing_alg_values_supported":                    []string{"HS256"},
-		"authorization_response_iss_parameter_supported":           true,
+		"authorization_response_iss_parameter_supported":           !server.config.DisableAuthorizationResponseIssuerMetadata,
 		"authorization_details_types_supported":                    []string{},
 		"pushed_authorization_request_endpoint":                    nil,
 		"require_pushed_authorization_requests":                    false,

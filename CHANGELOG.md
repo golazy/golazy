@@ -7,6 +7,16 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.22] - 2026-07-20
+
+### Fixed
+
+- `lazyoauth.Config.DisableAuthorizationResponseIssuerMetadata` provides a
+  temporary compatibility path for OAuth clients that discard the RFC 9207
+  `iss` callback parameter before validation. Authorization responses continue
+  to include `iss`; standards-compliant applications keep advertising support
+  by default.
+
 ## [0.1.21] - 2026-07-14
 
 ### Added
@@ -37,14 +47,6 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `lazydeps.Scope` now rejects duplicate service names before initialization,
   runs the first service cleanup exactly once, and releases a reserved name
   when initialization fails so a later retry can succeed.
-
-### Fixed
-
-- `lazyoauth.Config.DisableAuthorizationResponseIssuerMetadata` provides a
-  temporary compatibility path for OAuth clients that discard the RFC 9207
-  `iss` callback parameter before validation. Authorization responses continue
-  to include `iss`; standards-compliant applications keep advertising support
-  by default.
 
 ## [0.1.20] - 2026-07-12
 

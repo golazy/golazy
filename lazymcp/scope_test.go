@@ -111,6 +111,27 @@ func TestScopeDeniesUnauthorizedModule(t *testing.T) {
 	}
 }
 
+func TestScopeListsProtocolArraysWhenNoModuleIsAuthorized(t *testing.T) {
+	scope := NewScope(Options{})
+	if err := scope.Register(newAdminMCP(context.Background())); err != nil {
+		t.Fatal(err)
+	}
+	ctx := lazyjwt.WithClaims(context.Background(), lazyjwt.Claims{Extra: map[string]any{"mcps": []string{"tenant"}}})
+	for name, result := range map[string]map[string]any{
+		"tools":     scope.listTools(ctx).(map[string]any),
+		"resources": scope.listResources(ctx).(map[string]any),
+		"prompts":   scope.listPrompts(ctx).(map[string]any),
+	} {
+		items, ok := result[name].([]any)
+		if !ok {
+			t.Fatalf("%s = %#v, want an array", name, result[name])
+		}
+		if len(items) != 0 {
+			t.Fatalf("%s length = %d, want 0", name, len(items))
+		}
+	}
+}
+
 func TestScopeServesJSONRPC(t *testing.T) {
 	scope := NewScope(Options{})
 	if err := scope.Register(newAdminMCP(context.Background())); err != nil {

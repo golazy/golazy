@@ -120,7 +120,7 @@ func writeRPC(w http.ResponseWriter, response rpcResponse) {
 }
 
 func (scope *Scope) listTools(ctx context.Context) any {
-	var tools []any
+	tools := []any{}
 	for _, module := range scope.allowedModules(ctx) {
 		for name, spec := range module.tools {
 			if len(spec.Visibility) > 0 && !contains(spec.Visibility, VisibilityModel) {
@@ -165,7 +165,7 @@ func (scope *Scope) callTool(ctx context.Context, fullName string, arguments jso
 }
 
 func (scope *Scope) listResources(ctx context.Context) any {
-	var resources []any
+	resources := []any{}
 	for _, module := range scope.allowedModules(ctx) {
 		for _, spec := range module.resources {
 			resources = append(resources, resourceMetadata(spec.URI, spec.Name, spec.Desc, spec.MIMEType, nil))
@@ -246,7 +246,7 @@ func (scope *Scope) readApp(ctx context.Context, uri string) (any, error) {
 }
 
 func (scope *Scope) listPrompts(ctx context.Context) any {
-	var prompts []any
+	prompts := []any{}
 	for _, module := range scope.allowedModules(ctx) {
 		for name, spec := range module.prompts {
 			prompts = append(prompts, map[string]any{

@@ -21,7 +21,7 @@ func (scope *Scope) skillIndexMetadata(ctx context.Context) []any {
 }
 
 func (scope *Scope) readSkillIndex(ctx context.Context) (any, error) {
-	var entries []any
+	entries := []any{}
 	for _, module := range scope.allowedModules(ctx) {
 		for skillPath, spec := range module.skills {
 			frontmatter, body, err := skillFrontmatter(spec.FS)
@@ -81,7 +81,7 @@ func (scope *Scope) readDirectory(ctx context.Context, uri string) (any, error) 
 	if err != nil {
 		return nil, err
 	}
-	var children []any
+	children := []any{}
 	for _, entry := range entries {
 		mimeType := "application/octet-stream"
 		if entry.IsDir() {

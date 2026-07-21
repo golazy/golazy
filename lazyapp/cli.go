@@ -113,6 +113,10 @@ func defaultCLI(s lazycli.Scope) {
 		Controller:   lazycli.Controller[appCLIController]{},
 		Autocomplete: true,
 	})
+	s.Define("run", lazycli.Command{
+		Help:    "Start the application and serve requests",
+		Default: true,
+	})
 	s.Define("routes", lazycli.Command{
 		Help:       "Print application HTTP routes",
 		Controller: lazycli.Controller[routesCLIController]{},

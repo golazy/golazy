@@ -166,6 +166,15 @@ func parse(root *node, args []string) (parseResult, error) {
 		}
 		result.positionals = append(result.positionals, arg)
 	}
+	if !result.help && !result.logo && len(result.positionals) == 0 {
+		for _, name := range result.selected.order {
+			child := result.selected.children[name]
+			if child.defaultChild && !child.disabled {
+				result.selected = child
+				break
+			}
+		}
+	}
 	return result, nil
 }
 
@@ -283,6 +292,9 @@ func findAction(selected *node) (string, any) {
 		for index := len(current.controllers) - 1; index >= 0; index-- {
 			definition := current.controllers[index]
 			if _, ok := definition.(functionController); ok {
+				if method == "Run" {
+					return method, definition
+				}
 				continue
 			}
 			typeOf := controllerTypeOf(definition)

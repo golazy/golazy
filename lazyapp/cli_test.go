@@ -26,6 +26,9 @@ func TestCLIHelpDoesNotInitializeApplication(t *testing.T) {
 	if !bytes.Contains(stdout.Bytes(), []byte("routes")) || !bytes.Contains(stdout.Bytes(), []byte("assets")) {
 		t.Fatalf("help = %q, want framework commands", stdout.String())
 	}
+	if !bytes.Contains(stdout.Bytes(), []byte("run (default)")) || !bytes.Contains(stdout.Bytes(), []byte("Start the application and serve requests")) {
+		t.Fatalf("help = %q, want default run command", stdout.String())
+	}
 }
 
 func TestApplicationRootRunOverridesDefaultServerAction(t *testing.T) {

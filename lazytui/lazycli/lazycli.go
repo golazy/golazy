@@ -24,6 +24,7 @@ type Command struct {
 	Description  string
 	Hidden       bool
 	Disabled     bool
+	Default      bool
 	Logo         string
 	Palette      lazytui.Palette
 	Controller   any
@@ -52,6 +53,7 @@ type node struct {
 	description  string
 	hidden       bool
 	disabled     bool
+	defaultChild bool
 	logo         string
 	palette      lazytui.Palette
 	autocomplete bool
@@ -123,6 +125,12 @@ func (n *node) apply(command Command, root bool) {
 	}
 	if command.Disabled {
 		n.disabled = true
+	}
+	if command.Default {
+		if root {
+			panic("lazycli: the root command cannot be its own default")
+		}
+		n.defaultChild = true
 	}
 	if command.Logo != "" {
 		n.logo = command.Logo
@@ -223,6 +231,17 @@ func compile(draw Drawer, binaryName string) *node {
 func validateTree(root *node) {
 	var walk func(*node)
 	walk = func(current *node) {
+		var defaultName string
+		for _, name := range current.order {
+			child := current.children[name]
+			if !child.defaultChild {
+				continue
+			}
+			if defaultName != "" {
+				panic(fmt.Sprintf("lazycli: commands %q and %q are both defaults under %q", defaultName, name, current.path()))
+			}
+			defaultName = name
+		}
 		for _, controller := range current.controllers {
 			validateController(controller, current.name)
 		}

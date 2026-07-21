@@ -32,12 +32,20 @@ func writeHelp(w io.Writer, command *node) {
 		fmt.Fprintf(w, "\n%s\n", colorize(w, palette.Primary, "Commands:"))
 		width := 0
 		for _, child := range children {
-			if len(child.name) > width {
-				width = len(child.name)
+			name := child.name
+			if child.defaultChild {
+				name += " (default)"
+			}
+			if len(name) > width {
+				width = len(name)
 			}
 		}
 		for _, child := range children {
-			fmt.Fprintf(w, "  %s  %s\n", colorize(w, palette.Secondary, fmt.Sprintf("%-*s", width, child.name)), child.help)
+			name := child.name
+			if child.defaultChild {
+				name += " (default)"
+			}
+			fmt.Fprintf(w, "  %s  %s\n", colorize(w, palette.Secondary, fmt.Sprintf("%-*s", width, name)), child.help)
 		}
 	}
 	specs := applicableHelpSpecs(command)

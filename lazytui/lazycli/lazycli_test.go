@@ -102,3 +102,30 @@ func TestAutocompleteDoesNotInstantiateController(t *testing.T) {
 		t.Fatalf("code = %d, output = %q", code, stdout.String())
 	}
 }
+
+func TestDefaultCommandRunsImplicitlyAndAppearsInParentHelp(t *testing.T) {
+	called := 0
+	draw := func(s lazycli.Scope) {
+		s.Define("run", lazycli.Command{
+			Default: true,
+			Help:    "Start the application",
+			Controller: lazycli.Func(func(context.Context, struct{}) error {
+				called++
+				return nil
+			}),
+		})
+	}
+	if code := lazycli.Execute(context.Background(), draw, lazycli.ExecuteConfig{Name: "app"}); code != 0 || called != 1 {
+		t.Fatalf("implicit default: code = %d, called = %d", code, called)
+	}
+	if code := lazycli.Execute(context.Background(), draw, lazycli.ExecuteConfig{Name: "app", Args: []string{"run"}}); code != 0 || called != 2 {
+		t.Fatalf("explicit default: code = %d, called = %d", code, called)
+	}
+	var stdout bytes.Buffer
+	if code := lazycli.Execute(context.Background(), draw, lazycli.ExecuteConfig{Name: "app", Args: []string{"--help"}, Stdout: &stdout}); code != 0 {
+		t.Fatalf("help code = %d", code)
+	}
+	if !strings.Contains(stdout.String(), "run (default)") {
+		t.Fatalf("help = %q, want default marker", stdout.String())
+	}
+}

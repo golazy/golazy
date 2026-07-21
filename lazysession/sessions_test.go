@@ -40,8 +40,11 @@ func TestFlashes(t *testing.T) {
 
 	store := NewCookieStore([]byte("secret-key"))
 
-	if store.Options.SameSite != http.SameSiteNoneMode {
-		t.Fatalf("cookie store error: default same site is not set to None")
+	if store.Options.SameSite != http.SameSiteLaxMode {
+		t.Fatalf("cookie store error: default same site is not set to Lax")
+	}
+	if !store.Options.HttpOnly {
+		t.Fatal("cookie store error: default HttpOnly is not enabled")
 	}
 
 	// Round 1 ----------------------------------------------------------------
@@ -72,8 +75,8 @@ func TestFlashes(t *testing.T) {
 		t.Fatal("No cookies. Header:", hdr)
 	}
 
-	if !strings.Contains(cookies[0], "SameSite=None") || !strings.Contains(cookies[0], "Secure") {
-		t.Fatal("Set-Cookie does not contains SameSite=None with Secure, cookie string:", cookies[0])
+	if !strings.Contains(cookies[0], "SameSite=Lax") || !strings.Contains(cookies[0], "Secure") || !strings.Contains(cookies[0], "HttpOnly") {
+		t.Fatal("Set-Cookie does not contain SameSite=Lax with Secure and HttpOnly, cookie string:", cookies[0])
 	}
 
 	if _, err = store.Get(req, "session:key"); err.Error() != "sessions: invalid character in cookie name: session:key" {

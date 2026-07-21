@@ -20,6 +20,12 @@ type ToolSpec struct {
 	Visibility   []string
 }
 
+// ResultMetadata lets a typed tool result attach widget-only MCP result
+// metadata. The result itself remains the model-visible structuredContent.
+type ResultMetadata interface {
+	MCPResultMeta() map[string]any
+}
+
 // UIRef links a tool to an MCP Apps UI resource.
 type UIRef struct {
 	ResourceURI string

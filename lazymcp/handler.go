@@ -163,10 +163,16 @@ func (scope *Scope) callTool(ctx context.Context, fullName string, arguments jso
 		return nil, err
 	}
 	text := resultText(result)
-	return map[string]any{
+	response := map[string]any{
 		"content":           []any{map[string]any{"type": "text", "text": text}},
 		"structuredContent": result,
-	}, nil
+	}
+	if resultWithMetadata, ok := result.(ResultMetadata); ok {
+		if metadata := resultWithMetadata.MCPResultMeta(); metadata != nil {
+			response["_meta"] = metadata
+		}
+	}
+	return response, nil
 }
 
 func (scope *Scope) listResources(ctx context.Context) any {

@@ -23,7 +23,12 @@ type userCountParams struct {
 }
 
 type userCountResult struct {
-	Count int `json:"count"`
+	Count   int    `json:"count"`
+	Details string `json:"-"`
+}
+
+func (result userCountResult) MCPResultMeta() map[string]any {
+	return map[string]any{"details": result.Details}
 }
 
 func newAdminMCP(ctx context.Context) *adminMCP {
@@ -39,7 +44,7 @@ func (m *adminMCP) UserCountTool(context.Context) ToolSpec {
 }
 
 func (m *adminMCP) UserCount(context.Context, userCountParams) (userCountResult, error) {
-	return userCountResult{Count: 3}, nil
+	return userCountResult{Count: 3, Details: "widget only"}, nil
 }
 
 func (m *adminMCP) DashboardApp(context.Context) AppSpec {
@@ -181,6 +186,7 @@ func TestScopeServesJSONRPC(t *testing.T) {
 	var decoded struct {
 		Result struct {
 			Structured userCountResult `json:"structuredContent"`
+			Metadata   map[string]any  `json:"_meta"`
 		} `json:"result"`
 	}
 	if err := json.Unmarshal(response.Body.Bytes(), &decoded); err != nil {
@@ -188,6 +194,12 @@ func TestScopeServesJSONRPC(t *testing.T) {
 	}
 	if decoded.Result.Structured.Count != 3 {
 		t.Fatalf("count = %d, want 3", decoded.Result.Structured.Count)
+	}
+	if decoded.Result.Structured.Details != "" {
+		t.Fatalf("structured details = %q, want hidden", decoded.Result.Structured.Details)
+	}
+	if decoded.Result.Metadata["details"] != "widget only" {
+		t.Fatalf("result metadata = %#v", decoded.Result.Metadata)
 	}
 }
 

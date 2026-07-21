@@ -30,6 +30,9 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   schema. MCP App resources publish standard `ui` metadata and compatible
   ChatGPT widget aliases on both list and read responses, including CSP and
   dedicated widget domain declarations.
+- `lazymcp.ResultMetadata` lets typed tool results attach a top-level MCP
+  `_meta` payload for widget-only data while keeping model-visible
+  `structuredContent` concise.
 - `lazyoauth.Config.LoginTitle` and `LoginDescription` brand the built-in OAuth
   login page. The responsive page now preserves authorization parameters,
   renders failed authentication without echoing passwords, and sends a strict

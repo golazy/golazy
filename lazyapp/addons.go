@@ -10,6 +10,7 @@ import (
 	"golazy.dev/lazyjobs"
 	"golazy.dev/lazymigrate"
 	"golazy.dev/lazyroutes"
+	"golazy.dev/lazytui/lazycli"
 )
 
 // FilesEvent lets selected add-ons contribute view and public filesystem
@@ -54,6 +55,14 @@ type RoutesEvent struct {
 	Addons  *lazyaddon.Scope
 }
 
+// CLIEvent lets selected add-ons contribute static application commands. CLI
+// callbacks run before the application is initialized and must not start
+// services or perform runtime work.
+type CLIEvent struct {
+	Scope  lazycli.Scope
+	Addons *lazyaddon.Scope
+}
+
 // HelpersEvent lets add-ons register view helpers before application-owned
 // helpers are applied.
 type HelpersEvent struct {
@@ -90,6 +99,8 @@ var (
 	JobsHook = lazyaddon.DefineHook[JobsEvent]("golazy.dev/lazyapp/jobs", 1)
 	// RoutesHook owns application route contributions.
 	RoutesHook = lazyaddon.DefineHook[RoutesEvent]("golazy.dev/lazyapp/routes", 1)
+	// CLIHook owns application command contributions.
+	CLIHook = lazyaddon.DefineHook[CLIEvent]("golazy.dev/lazyapp/cli", 1)
 	// HelpersHook owns template helper contributions.
 	HelpersHook = lazyaddon.DefineHook[HelpersEvent]("golazy.dev/lazyapp/helpers", 1)
 	// ControlPlaneHook owns operational control-plane contributions.

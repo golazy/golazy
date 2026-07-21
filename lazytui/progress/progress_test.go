@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"golazy.dev/lazytui"
 )
 
 func TestNewRunsTasksAndHidesSuccessfulOutput(t *testing.T) {
@@ -392,10 +394,14 @@ func TestInteractiveSingleUsesRewriteAndColor(t *testing.T) {
 	}
 
 	got := stdout.String()
-	for _, want := range []string{"\r\x1b[2K", ansiCyan, ansiTeal} {
+	for _, color := range []lazytui.Color{lazytui.GoLazyPalette.Primary, lazytui.GoLazyPalette.Success} {
+		want := fmt.Sprintf("\x1b[38;2;%d;%d;%dm", color.R, color.G, color.B)
 		if !strings.Contains(got, want) {
 			t.Fatalf("stdout = %q, missing %q", got, want)
 		}
+	}
+	if !strings.Contains(got, "\r\x1b[2K") {
+		t.Fatalf("stdout = %q, missing interactive line rewrite", got)
 	}
 }
 

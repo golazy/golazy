@@ -1,6 +1,7 @@
 package lazyapp
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -12,6 +13,7 @@ import (
 	"golazy.dev/lazyaddon"
 	"golazy.dev/lazycontrolplane"
 	"golazy.dev/lazydeps"
+	"golazy.dev/lazytui/lazycli"
 )
 
 func TestSelectedAddonRunsLifecycleHooksPerApp(t *testing.T) {
@@ -103,6 +105,33 @@ func TestSelectedAddonRunsLifecycleHooksPerApp(t *testing.T) {
 		Handler:     http.NotFoundHandler(),
 	}); !errors.Is(err, lazycontrolplane.ErrSealed) {
 		t.Fatalf("late control-plane registration error = %v, want ErrSealed", err)
+	}
+}
+
+func TestSelectedAddonMergesCLIWithoutStartingApplication(t *testing.T) {
+	const addonID = "lazyapp-test/cli"
+	registration := lazyaddon.MustRegisterDefinition(lazyaddon.Definition{ID: addonID, Version: "v1"})
+	called := false
+	lazyaddon.MustOn(registration, CLIHook, lazyaddon.CallbackOptions{ID: "cli"}, func(event *CLIEvent) error {
+		event.Scope.Define("addon-command", lazycli.Command{
+			Help: "Run the test add-on command",
+			Controller: lazycli.Func(func(context.Context, struct{}) error {
+				called = true
+				return nil
+			}),
+		})
+		return nil
+	})
+
+	var stdout, stderr bytes.Buffer
+	code := Execute(context.Background(), Config{Addons: lazyaddon.Select(addonID)}, lazycli.ExecuteConfig{
+		Name: "example", Args: []string{"addon-command"}, Stdout: &stdout, Stderr: &stderr,
+	})
+	if code != 0 {
+		t.Fatalf("code = %d, stderr = %s", code, stderr.String())
+	}
+	if !called {
+		t.Fatal("selected add-on CLI controller was not called")
 	}
 }
 

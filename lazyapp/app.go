@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"sort"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -41,6 +42,7 @@ import (
 	"golazy.dev/lazyseo"
 	"golazy.dev/lazysession"
 	"golazy.dev/lazystorage"
+	"golazy.dev/lazytui/lazycli"
 	"golazy.dev/lazyturbo"
 	_ "golazy.dev/lazyview/gotmpl"
 	"golazy.dev/lazyworkers"
@@ -82,6 +84,7 @@ type Config struct {
 	PWA               lazypwa.Config
 	ControlPlane      lazycontrolplane.Builder
 	Middlewares       []lazydispatch.Middleware
+	CLI               lazycli.Drawer
 	ForceDetailErrors bool
 }
 
@@ -108,6 +111,8 @@ type App struct {
 	Dependencies *lazydeps.Scope
 	runtime      *runtimeState
 	earlyControl *migrationControlPlane
+	shutdownOnce sync.Once
+	shutdownErr  error
 }
 
 type assetsMiddleware struct {
@@ -634,9 +639,17 @@ func (app *App) shutdownDependencies(reason string) error {
 	if app == nil || app.Dependencies == nil {
 		return nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), appShutdownTimeout)
-	defer cancel()
-	return app.Dependencies.Shutdown(ctx, reason)
+	app.shutdownOnce.Do(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), appShutdownTimeout)
+		defer cancel()
+		app.shutdownErr = app.Dependencies.Shutdown(ctx, reason)
+	})
+	return app.shutdownErr
+}
+
+// Shutdown stops application dependencies. It is safe to call more than once.
+func (app *App) Shutdown(reason string) error {
+	return app.shutdownDependencies(reason)
 }
 
 func (app *App) closeEarlyControl() error {

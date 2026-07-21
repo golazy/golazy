@@ -9,6 +9,15 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `golazy.dev/lazytui/lazycli` provides a reflection-driven command router
+  with controller lifecycle methods, inferred struct parameters, merged
+  scopes, hidden lightweight completion, logos, and inherited palettes.
+- `lazyapp.Run` exposes every application as a CLI with built-in route and
+  asset commands. Application drawers and selected add-ons can extend or
+  override the command tree without initializing the app for help or
+  completion.
+- `lazytui.GoLazyPalette` centralizes the website-aligned terminal colors for
+  framework and CLI output.
 - `lazyoauth` can advertise and resolve OAuth Client ID Metadata Documents
   (CIMD) from an explicit HTTPS host allowlist, validating the document
   identity and exact redirect URI while retaining dynamic client registration

@@ -5,15 +5,13 @@ import (
 	"io"
 	"strings"
 	"sync"
+
+	"golazy.dev/lazytui"
 )
 
 const (
 	ansiClearLine = "\x1b[2K"
 	ansiReset     = "\x1b[0m"
-	ansiCyan      = "\x1b[38;2;0;173;216m"
-	ansiTeal      = "\x1b[38;2;0;162;156m"
-	ansiYellow    = "\x1b[38;2;253;221;0m"
-	ansiMagenta   = "\x1b[38;2;206;50;98m"
 )
 
 type renderer struct {
@@ -143,16 +141,16 @@ func (r *renderer) decorate(value string, status taskStatus) string {
 	if !r.color {
 		return value
 	}
-	color := ansiTeal
+	color := lazytui.GoLazyPalette.Success
 	switch status {
 	case statusWarn:
-		color = ansiYellow
+		color = lazytui.GoLazyPalette.Warning
 	case statusError:
-		color = ansiMagenta
+		color = lazytui.GoLazyPalette.Error
 	case statusDone:
 		if value == "Working" {
-			color = ansiCyan
+			color = lazytui.GoLazyPalette.Primary
 		}
 	}
-	return color + value + ansiReset
+	return fmt.Sprintf("\x1b[38;2;%d;%d;%dm%s%s", color.R, color.G, color.B, value, ansiReset)
 }

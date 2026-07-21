@@ -72,6 +72,12 @@ type Config struct {
 	// responses. The server still emits iss. Use this only as a temporary
 	// compatibility workaround for clients that discard iss before validation.
 	DisableAuthorizationResponseIssuerMetadata bool
+
+	// LoginTitle and LoginDescription brand the built-in authorization login
+	// page. They are rendered as escaped text and may be left empty for the
+	// framework defaults.
+	LoginTitle       string
+	LoginDescription string
 }
 
 // ClaimsMapper maps an authenticated user and OAuth client to JWT claims.
@@ -129,6 +135,12 @@ func New(config Config) (*Server, error) {
 	}
 	if config.ClaimsMapper == nil {
 		config.ClaimsMapper = ClaimsMapperFunc(defaultClaims)
+	}
+	if strings.TrimSpace(config.LoginTitle) == "" {
+		config.LoginTitle = "Sign in"
+	}
+	if strings.TrimSpace(config.LoginDescription) == "" {
+		config.LoginDescription = "Authenticate to continue securely."
 	}
 	if config.AllowClientIDMetadataDocuments && len(config.ClientIDMetadataDocumentHosts) == 0 {
 		return nil, fmt.Errorf("lazyoauth: client ID metadata document hosts are required")
@@ -355,7 +367,7 @@ func (server *Server) authorize(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		if r.URL.Query().Get("username") == "" {
-			server.loginForm(w, r)
+			server.loginForm(w, r.URL.Query(), "", http.StatusOK)
 			return
 		}
 	case http.MethodPost:
@@ -383,7 +395,7 @@ func (server *Server) authorize(w http.ResponseWriter, r *http.Request) {
 		Secret:     values.Get("password"),
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+		server.loginForm(w, values, "The username or password is incorrect.", http.StatusUnauthorized)
 		return
 	}
 	code := "code_" + randomToken()
@@ -531,21 +543,185 @@ func (server *Server) client(ctx context.Context, id string, redirectURI string)
 	return client, nil
 }
 
-func (server *Server) loginForm(w http.ResponseWriter, r *http.Request) {
+type loginPageData struct {
+	Title       string
+	Description string
+	Username    string
+	Error       string
+	Hidden      url.Values
+}
+
+func (server *Server) loginForm(w http.ResponseWriter, values url.Values, message string, status int) {
+	hidden := make(url.Values, len(values))
+	for key, items := range values {
+		if key == "username" || key == "password" {
+			continue
+		}
+		hidden[key] = append([]string(nil), items...)
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = loginTemplate.Execute(w, r.URL.Query())
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.WriteHeader(status)
+	_ = loginTemplate.Execute(w, loginPageData{
+		Title:       server.config.LoginTitle,
+		Description: server.config.LoginDescription,
+		Username:    values.Get("username"),
+		Error:       message,
+		Hidden:      hidden,
+	})
 }
 
 var loginTemplate = template.Must(template.New("login").Parse(`<!doctype html>
-<html><head><meta charset="utf-8"><title>Sign in</title></head>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>{{.Title}}</title>
+<style>
+  :root {
+    color-scheme: light;
+    --ink: #17211b;
+    --muted: #647069;
+    --line: #dfe7e1;
+    --panel: rgba(255, 255, 255, .92);
+    --field: #f8faf8;
+    --accent: #2b7a4b;
+    --accent-hover: #22633d;
+    --accent-soft: #e4f3e9;
+    --danger: #a33636;
+    --danger-soft: #fff0ef;
+    --shadow: 0 24px 70px rgba(28, 57, 40, .16), 0 4px 18px rgba(28, 57, 40, .08);
+  }
+  * { box-sizing: border-box; }
+  html { min-height: 100%; background: #edf4ef; }
+  body {
+    min-height: 100vh;
+    margin: 0;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    color: var(--ink);
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background:
+      radial-gradient(circle at 12% 12%, rgba(91, 164, 113, .22), transparent 34rem),
+      radial-gradient(circle at 88% 90%, rgba(55, 114, 78, .16), transparent 31rem),
+      linear-gradient(145deg, #f8fbf8, #e7f0ea);
+  }
+  .shell { width: min(100%, 440px); }
+  .card {
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, .78);
+    border-radius: 24px;
+    background: var(--panel);
+    box-shadow: var(--shadow);
+    backdrop-filter: blur(18px);
+  }
+  .topline { height: 6px; background: linear-gradient(90deg, #225f3a, #58a66f 55%, #92c99f); }
+  .content { padding: 34px 34px 30px; }
+  .mark {
+    width: 52px;
+    height: 52px;
+    display: grid;
+    place-items: center;
+    margin-bottom: 22px;
+    border-radius: 16px;
+    color: #fff;
+    background: linear-gradient(145deg, #38885a, #22623d);
+    box-shadow: 0 10px 24px rgba(43, 122, 75, .25);
+  }
+  .mark svg { width: 27px; height: 27px; }
+  h1 { margin: 0; font-size: 1.75rem; line-height: 1.15; letter-spacing: -.035em; }
+  .intro { margin: 10px 0 26px; color: var(--muted); font-size: .96rem; line-height: 1.55; }
+  .error {
+    margin: 0 0 18px;
+    padding: 11px 13px;
+    border: 1px solid #f0cbc8;
+    border-radius: 11px;
+    color: var(--danger);
+    background: var(--danger-soft);
+    font-size: .9rem;
+  }
+  label { display: block; margin: 0 0 16px; color: #34423a; font-size: .86rem; font-weight: 650; }
+  input {
+    width: 100%;
+    margin-top: 7px;
+    padding: 12px 13px;
+    border: 1px solid var(--line);
+    border-radius: 11px;
+    outline: none;
+    color: var(--ink);
+    background: var(--field);
+    font: inherit;
+    transition: border-color .16s ease, box-shadow .16s ease, background .16s ease;
+  }
+  input:focus { border-color: #68a97b; background: #fff; box-shadow: 0 0 0 4px rgba(72, 145, 94, .14); }
+  button {
+    width: 100%;
+    margin-top: 4px;
+    padding: 13px 16px;
+    border: 0;
+    border-radius: 11px;
+    color: #fff;
+    background: var(--accent);
+    box-shadow: 0 8px 18px rgba(43, 122, 75, .2);
+    font: inherit;
+    font-weight: 720;
+    cursor: pointer;
+    transition: transform .16s ease, background .16s ease, box-shadow .16s ease;
+  }
+  button:hover { background: var(--accent-hover); box-shadow: 0 10px 22px rgba(43, 122, 75, .25); transform: translateY(-1px); }
+  button:active { transform: translateY(0); }
+  .security {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    margin: 18px 0 0;
+    color: var(--muted);
+    font-size: .78rem;
+  }
+  .security svg { width: 14px; height: 14px; color: var(--accent); }
+  @media (max-width: 520px) {
+    body { padding: 14px; }
+    .content { padding: 28px 23px 24px; }
+    .card { border-radius: 20px; }
+  }
+  @media (prefers-reduced-motion: reduce) { button, input { transition: none; } }
+</style>
+</head>
 <body>
-<form method="post">
-{{range $key, $values := .}}{{range $values}}<input type="hidden" name="{{$key}}" value="{{.}}">{{end}}{{end}}
-<label>User <input name="username" autocomplete="username"></label>
-<label>Password <input name="password" type="password" autocomplete="current-password"></label>
-<button type="submit">Sign in</button>
-</form>
-</body></html>`))
+<main class="shell">
+  <section class="card" aria-labelledby="login-title">
+    <div class="topline"></div>
+    <div class="content">
+      <div class="mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3.75h7l3 3v13.5H7z"/><path d="M14 3.75v3h3M9.5 11h5M9.5 14h5M9.5 17h3"/></svg>
+      </div>
+      <h1 id="login-title">{{.Title}}</h1>
+      <p class="intro">{{.Description}}</p>
+      {{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
+      <form method="post">
+        {{range $key, $values := .Hidden}}{{range $values}}<input type="hidden" name="{{$key}}" value="{{.}}">{{end}}{{end}}
+        <label>Username
+          <input name="username" value="{{.Username}}" autocomplete="username" autocapitalize="none" spellcheck="false" required autofocus>
+        </label>
+        <label>Password
+          <input name="password" type="password" autocomplete="current-password" required>
+        </label>
+        <button type="submit">Continue securely</button>
+      </form>
+      <p class="security">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M7 10V8a5 5 0 0 1 10 0v2M6 10h12v10H6z"/></svg>
+        Your credentials stay with this server
+      </p>
+    </div>
+  </section>
+</main>
+</body>
+</html>`))
 
 func (server *Server) writeJSON(w http.ResponseWriter, value any) {
 	w.Header().Set("Content-Type", "application/json")

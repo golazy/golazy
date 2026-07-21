@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -42,7 +43,16 @@ func (m *adminMCP) UserCount(context.Context, userCountParams) (userCountResult,
 }
 
 func (m *adminMCP) DashboardApp(context.Context) AppSpec {
-	return AppSpec{Name: "dashboard", View: "dashboard"}
+	return AppSpec{
+		Name:   "dashboard",
+		Desc:   "Admin dashboard",
+		View:   "dashboard",
+		Domain: "https://widgets.example.com",
+		CSP: AppCSP{
+			ConnectDomains:  []string{"https://api.example.com"},
+			ResourceDomains: []string{"https://static.example.com"},
+		},
+	}
 }
 
 func (m *adminMCP) OncallSkill(context.Context) SkillSpec {
@@ -84,8 +94,33 @@ func TestScopeRegistersReflectedToolsAppsAndSkills(t *testing.T) {
 	if meta["ui/resourceUri"] != "ui://admin/dashboard" {
 		t.Fatalf("tool ui resource = %q", meta["ui/resourceUri"])
 	}
-	if _, err := scope.readApp(ctx, "ui://admin/dashboard"); err != nil {
+	if meta["openai/outputTemplate"] != "ui://admin/dashboard" {
+		t.Fatalf("tool output template = %q", meta["openai/outputTemplate"])
+	}
+	output := tool["outputSchema"].(map[string]any)
+	if output["type"] != "object" {
+		t.Fatalf("tool output schema = %#v", output)
+	}
+	properties := output["properties"].(map[string]any)
+	if properties["count"].(map[string]any)["type"] != "integer" {
+		t.Fatalf("count output schema = %#v", properties["count"])
+	}
+	appResult, err := scope.readApp(ctx, "ui://admin/dashboard")
+	if err != nil {
 		t.Fatal(err)
+	}
+	appContent := appResult.(map[string]any)["contents"].([]any)[0].(map[string]any)
+	appMetadata := appContent["_meta"].(map[string]any)
+	ui := appMetadata["ui"].(map[string]any)
+	if ui["domain"] != "https://widgets.example.com" {
+		t.Fatalf("app domain = %#v", ui["domain"])
+	}
+	csp := ui["csp"].(map[string]any)
+	if !slices.Equal(csp["connectDomains"].([]string), []string{"https://api.example.com"}) {
+		t.Fatalf("app CSP = %#v", csp)
+	}
+	if appMetadata["openai/widgetDomain"] != "https://widgets.example.com" {
+		t.Fatalf("legacy widget domain = %#v", appMetadata["openai/widgetDomain"])
 	}
 	if views.view != "mcp/admin/dashboard" {
 		t.Fatalf("rendered view = %q, want mcp/admin/dashboard", views.view)

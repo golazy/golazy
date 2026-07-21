@@ -12,11 +12,12 @@ const (
 
 // ToolSpec describes one MCP tool.
 type ToolSpec struct {
-	Name       string
-	Desc       string
-	Fn         any
-	UI         UIRef
-	Visibility []string
+	Name         string
+	Desc         string
+	Fn           any
+	OutputSchema map[string]any
+	UI           UIRef
+	Visibility   []string
 }
 
 // UIRef links a tool to an MCP Apps UI resource.
@@ -96,6 +97,7 @@ type AppSpec struct {
 type AppCSP struct {
 	ConnectDomains  []string `json:"connect_domains,omitempty"`
 	ResourceDomains []string `json:"resource_domains,omitempty"`
+	FrameDomains    []string `json:"frame_domains,omitempty"`
 }
 
 // AppPermissions describes optional MCP Apps permission metadata.

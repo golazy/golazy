@@ -136,6 +136,79 @@ func TestAuthorizationServerMetadataAdvertisesConfiguredClientRegistrationMethod
 	}
 }
 
+func TestLoginPageUsesBrandingAndPreservesOAuthRequest(t *testing.T) {
+	server, err := New(Config{
+		Issuer:           "https://auth.example",
+		LoginTitle:       "Paperless MCP",
+		LoginDescription: "Secure, read-only document access.",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := httptest.NewRecorder()
+	server.ServeHTTP(response, httptest.NewRequest(http.MethodGet,
+		"/oauth/authorize?client_id=client&redirect_uri=https%3A%2F%2Fclient.example%2Fcallback&state=opaque", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", response.Code, response.Body.String())
+	}
+	body := response.Body.String()
+	for _, expected := range []string{
+		"<title>Paperless MCP</title>",
+		"Secure, read-only document access.",
+		`name="client_id" value="client"`,
+		`name="state" value="opaque"`,
+		"Continue securely",
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("login page is missing %q: %s", expected, body)
+		}
+	}
+	if got := response.Header().Get("Content-Security-Policy"); !strings.Contains(got, "form-action 'self'") {
+		t.Fatalf("login CSP = %q", got)
+	}
+}
+
+func TestInvalidCredentialsRerenderLoginWithoutPassword(t *testing.T) {
+	store := NewMemoryStore()
+	if err := store.SaveClient(context.Background(), Client{
+		ID:           "client",
+		RedirectURIs: []string{"https://client.example/callback"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	server, err := New(Config{
+		Issuer: "https://auth.example",
+		Auth:   lazyauth.Config{Authenticator: testAuth{}},
+		Store:  store,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	form := url.Values{
+		"client_id":    {"client"},
+		"redirect_uri": {"https://client.example/callback"},
+		"username":     {"alice"},
+		"password":     {"wrong-secret"},
+	}
+	request := httptest.NewRequest(http.MethodPost, "/oauth/authorize", strings.NewReader(form.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	response := httptest.NewRecorder()
+	server.ServeHTTP(response, request)
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d body=%s", response.Code, response.Body.String())
+	}
+	body := response.Body.String()
+	if !strings.Contains(body, "The username or password is incorrect.") {
+		t.Fatalf("friendly error missing: %s", body)
+	}
+	if strings.Contains(body, "wrong-secret") {
+		t.Fatal("login page echoed the submitted password")
+	}
+	if !strings.Contains(body, `name="username" value="alice"`) {
+		t.Fatalf("login page did not preserve username: %s", body)
+	}
+}
+
 func TestAuthorizationCodeFlowWithClientIDMetadataDocument(t *testing.T) {
 	const redirectURI = "https://chatgpt.com/connector/oauth/paperless"
 	var metadataURL string

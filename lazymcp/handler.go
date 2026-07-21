@@ -127,12 +127,17 @@ func (scope *Scope) listTools(ctx context.Context) any {
 				continue
 			}
 			tool := map[string]any{
-				"name":        module.name + "." + name,
-				"description": spec.Desc,
-				"inputSchema": inputSchema(spec.Fn),
+				"name":         module.name + "." + name,
+				"description":  spec.Desc,
+				"inputSchema":  inputSchema(spec.Fn),
+				"outputSchema": firstNonNilMap(spec.OutputSchema, outputSchema(spec.Fn)),
 			}
 			if spec.UI.ResourceURI != "" {
-				tool["_meta"] = map[string]any{"ui/resourceUri": spec.UI.ResourceURI}
+				tool["_meta"] = map[string]any{
+					"ui":                    map[string]any{"resourceUri": spec.UI.ResourceURI},
+					"ui/resourceUri":        spec.UI.ResourceURI,
+					"openai/outputTemplate": spec.UI.ResourceURI,
+				}
 			}
 			tools = append(tools, tool)
 		}
@@ -242,7 +247,7 @@ func (scope *Scope) readApp(ctx context.Context, uri string) (any, error) {
 		}
 		html = rendered
 	}
-	return resourceReadResult(uri, "text/html;profile=mcp-app", ResourceContent{Text: html}), nil
+	return resourceReadResult(uri, "text/html;profile=mcp-app", ResourceContent{Text: html}, appMeta(spec)), nil
 }
 
 func (scope *Scope) listPrompts(ctx context.Context) any {
@@ -343,24 +348,55 @@ func resourceMetadata(uri string, name string, desc string, mimeType string, met
 	return out
 }
 
-func resourceReadResult(uri string, mimeType string, content ResourceContent) map[string]any {
+func resourceReadResult(uri string, mimeType string, content ResourceContent, metadata ...map[string]any) map[string]any {
 	item := map[string]any{"uri": uri, "mimeType": mimeType}
 	if len(content.Blob) > 0 {
 		item["blob"] = base64.StdEncoding.EncodeToString(content.Blob)
 	} else {
 		item["text"] = content.Text
 	}
+	if len(metadata) > 0 && metadata[0] != nil {
+		item["_meta"] = metadata[0]
+	}
 	return map[string]any{"contents": []any{item}}
 }
 
 func appMeta(spec AppSpec) map[string]any {
+	connectDomains := nonNilStrings(spec.CSP.ConnectDomains)
+	resourceDomains := nonNilStrings(spec.CSP.ResourceDomains)
+	frameDomains := nonNilStrings(spec.CSP.FrameDomains)
+	standardCSP := map[string]any{
+		"connectDomains":  connectDomains,
+		"resourceDomains": resourceDomains,
+	}
+	legacyCSP := map[string]any{
+		"connect_domains":  connectDomains,
+		"resource_domains": resourceDomains,
+	}
+	if len(frameDomains) > 0 {
+		standardCSP["frameDomains"] = frameDomains
+		legacyCSP["frame_domains"] = frameDomains
+	}
+	ui := map[string]any{
+		"name":          spec.Name,
+		"description":   spec.Desc,
+		"csp":           standardCSP,
+		"permissions":   spec.Permissions,
+		"domain":        spec.Domain,
+		"prefersBorder": spec.PrefersBorder,
+	}
 	return map[string]any{
-		"ui.name":          spec.Name,
-		"ui.description":   spec.Desc,
-		"ui.csp":           spec.CSP,
-		"ui.permissions":   spec.Permissions,
-		"ui.domain":        spec.Domain,
-		"ui.prefersBorder": spec.PrefersBorder,
+		"ui":                         ui,
+		"ui.name":                    spec.Name,
+		"ui.description":             spec.Desc,
+		"ui.csp":                     standardCSP,
+		"ui.permissions":             spec.Permissions,
+		"ui.domain":                  spec.Domain,
+		"ui.prefersBorder":           spec.PrefersBorder,
+		"openai/widgetDescription":   spec.Desc,
+		"openai/widgetPrefersBorder": spec.PrefersBorder,
+		"openai/widgetCSP":           legacyCSP,
+		"openai/widgetDomain":        spec.Domain,
 	}
 }
 
@@ -427,6 +463,95 @@ func inputSchema(fn any) map[string]any {
 	}
 	schema["properties"] = properties
 	return schema
+}
+
+func outputSchema(fn any) map[string]any {
+	if fn == nil {
+		return map[string]any{"type": "object", "additionalProperties": true}
+	}
+	typ := reflect.TypeOf(fn)
+	if typ.Kind() != reflect.Func || typ.NumOut() == 0 {
+		return map[string]any{"type": "object", "additionalProperties": true}
+	}
+	return schemaForType(typ.Out(0), map[reflect.Type]bool{})
+}
+
+func schemaForType(typ reflect.Type, visiting map[reflect.Type]bool) map[string]any {
+	for typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
+	}
+	switch typ.Kind() {
+	case reflect.Bool:
+		return map[string]any{"type": "boolean"}
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return map[string]any{"type": "integer"}
+	case reflect.Float32, reflect.Float64:
+		return map[string]any{"type": "number"}
+	case reflect.String:
+		return map[string]any{"type": "string"}
+	case reflect.Interface:
+		return map[string]any{}
+	case reflect.Slice, reflect.Array:
+		return map[string]any{"type": "array", "items": schemaForType(typ.Elem(), visiting)}
+	case reflect.Map:
+		return map[string]any{
+			"type":                 "object",
+			"additionalProperties": schemaForType(typ.Elem(), visiting),
+		}
+	case reflect.Struct:
+		if visiting[typ] {
+			return map[string]any{"type": "object", "additionalProperties": true}
+		}
+		visiting[typ] = true
+		defer delete(visiting, typ)
+		properties := map[string]any{}
+		required := []string{}
+		for field := range typ.Fields() {
+			if field.PkgPath != "" {
+				continue
+			}
+			tag := strings.Split(field.Tag.Get("json"), ",")
+			name := tag[0]
+			if name == "" {
+				name = camelToSnake(field.Name)
+			}
+			if name == "-" {
+				continue
+			}
+			properties[name] = schemaForType(field.Type, visiting)
+			if !slices.Contains(tag[1:], "omitempty") {
+				required = append(required, name)
+			}
+		}
+		schema := map[string]any{
+			"type":                 "object",
+			"properties":           properties,
+			"additionalProperties": false,
+		}
+		if len(required) > 0 {
+			schema["required"] = required
+		}
+		return schema
+	default:
+		return map[string]any{}
+	}
+}
+
+func firstNonNilMap(values ...map[string]any) map[string]any {
+	for _, value := range values {
+		if value != nil {
+			return value
+		}
+	}
+	return map[string]any{}
+}
+
+func nonNilStrings(values []string) []string {
+	if values == nil {
+		return []string{}
+	}
+	return values
 }
 
 func jsonSchemaType(typ reflect.Type) string {

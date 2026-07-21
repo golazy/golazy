@@ -13,6 +13,15 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (CIMD) from an explicit HTTPS host allowlist, validating the document
   identity and exact redirect URI while retaining dynamic client registration
   as an independent fallback.
+- `lazymcp` now publishes reflected output schemas for tool structured content,
+  with `ToolSpec.OutputSchema` available when an application needs an explicit
+  schema. MCP App resources publish standard `ui` metadata and compatible
+  ChatGPT widget aliases on both list and read responses, including CSP and
+  dedicated widget domain declarations.
+- `lazyoauth.Config.LoginTitle` and `LoginDescription` brand the built-in OAuth
+  login page. The responsive page now preserves authorization parameters,
+  renders failed authentication without echoing passwords, and sends a strict
+  browser security policy.
 
 ## [0.1.22] - 2026-07-20
 

@@ -57,6 +57,15 @@ type Config struct {
 	RefreshTokenTTL time.Duration
 
 	AllowDynamicClients bool
+	// AllowClientIDMetadataDocuments advertises and accepts HTTPS URLs as
+	// client IDs. ClientIDMetadataDocumentHosts must contain the exact trusted
+	// authorities (host or host:port) from which metadata may be fetched.
+	AllowClientIDMetadataDocuments bool
+	ClientIDMetadataDocumentHosts  []string
+	// ClientIDMetadataDocumentHTTPClient overrides the bounded default client,
+	// primarily for custom transports and tests. Redirects remain constrained
+	// to ClientIDMetadataDocumentHosts.
+	ClientIDMetadataDocumentHTTPClient *http.Client
 
 	// DisableAuthorizationResponseIssuerMetadata omits the RFC 9207 metadata
 	// claim that clients must require an iss parameter in authorization
@@ -120,6 +129,9 @@ func New(config Config) (*Server, error) {
 	}
 	if config.ClaimsMapper == nil {
 		config.ClaimsMapper = ClaimsMapperFunc(defaultClaims)
+	}
+	if config.AllowClientIDMetadataDocuments && len(config.ClientIDMetadataDocumentHosts) == 0 {
+		return nil, fmt.Errorf("lazyoauth: client ID metadata document hosts are required")
 	}
 	return &Server{config: config}, nil
 }
@@ -244,11 +256,10 @@ func (server *Server) authorizationServerMetadata(r *http.Request) map[string]an
 	if server.config.Issuer != "" {
 		base = server.config.Issuer
 	}
-	return map[string]any{
+	metadata := map[string]any{
 		"issuer":                                                   server.config.Issuer,
 		"authorization_endpoint":                                   base + server.config.AuthorizePath,
 		"token_endpoint":                                           base + server.config.TokenPath,
-		"registration_endpoint":                                    base + server.config.RegisterPath,
 		"jwks_uri":                                                 base + server.config.JWKSPath,
 		"response_types_supported":                                 []string{"code"},
 		"grant_types_supported":                                    []string{"authorization_code", "refresh_token"},
@@ -294,6 +305,13 @@ func (server *Server) authorizationServerMetadata(r *http.Request) map[string]an
 		"revocation_endpoint_auth_signing_alg_values_supported":    []string{},
 		"introspection_endpoint_auth_signing_alg_values_supported": []string{},
 	}
+	if server.config.AllowClientIDMetadataDocuments {
+		metadata["client_id_metadata_document_supported"] = true
+	}
+	if server.config.AllowDynamicClients {
+		metadata["registration_endpoint"] = base + server.config.RegisterPath
+	}
+	return metadata
 }
 
 func (server *Server) registerClient(w http.ResponseWriter, r *http.Request) {
@@ -499,7 +517,13 @@ func (server *Server) issueTokens(w http.ResponseWriter, r *http.Request, client
 func (server *Server) client(ctx context.Context, id string, redirectURI string) (Client, error) {
 	client, err := server.config.Store.GetClient(ctx, id)
 	if err != nil {
-		return Client{}, err
+		if !server.config.AllowClientIDMetadataDocuments || !errors.Is(err, ErrInvalidClient) {
+			return Client{}, err
+		}
+		client, err = server.clientFromMetadataDocument(ctx, id)
+		if err != nil {
+			return Client{}, err
+		}
 	}
 	if redirectURI != "" && !slices.Contains(client.RedirectURIs, redirectURI) {
 		return Client{}, ErrInvalidClient

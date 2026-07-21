@@ -7,6 +7,13 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `lazyoauth` can advertise and resolve OAuth Client ID Metadata Documents
+  (CIMD) from an explicit HTTPS host allowlist, validating the document
+  identity and exact redirect URI while retaining dynamic client registration
+  as an independent fallback.
+
 ## [0.1.22] - 2026-07-20
 
 ### Fixed

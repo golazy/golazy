@@ -18,6 +18,9 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   completion.
 - `lazytui.GoLazyPalette` centralizes the website-aligned terminal colors for
   framework and CLI output.
+- `lazycli.Command.Default` selects a real child command when its parent is
+  invoked without an action. Application help now presents `run (default)`
+  while invoking the application binary directly still starts the server.
 - `lazyoauth` can advertise and resolve OAuth Client ID Metadata Documents
   (CIMD) from an explicit HTTPS host allowlist, validating the document
   identity and exact redirect URI while retaining dynamic client registration
@@ -31,6 +34,13 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   login page. The responsive page now preserves authorization parameters,
   renders failed authentication without echoing passwords, and sends a strict
   browser security policy.
+
+### Fixed
+
+- The built-in OAuth login page posts explicitly to the authorization endpoint
+  without a `form-action 'self'` CSP restriction. Chromium may enforce that
+  directive on the subsequent validated cross-origin client redirect, leaving
+  the user on the login page even after authentication succeeds.
 
 ## [0.1.22] - 2026-07-20
 

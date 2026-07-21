@@ -546,6 +546,7 @@ func (server *Server) client(ctx context.Context, id string, redirectURI string)
 type loginPageData struct {
 	Title       string
 	Description string
+	Action      string
 	Username    string
 	Error       string
 	Hidden      url.Values
@@ -560,13 +561,18 @@ func (server *Server) loginForm(w http.ResponseWriter, values url.Values, messag
 		hidden[key] = append([]string(nil), items...)
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
+	// Do not add form-action here. Chromium can carry that directive across a
+	// successful form POST's redirect and block the validated cross-origin OAuth
+	// callback. The explicit action keeps the credential POST on this server;
+	// client redirect URIs are separately exact-matched before authorization.
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'")
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(status)
 	_ = loginTemplate.Execute(w, loginPageData{
 		Title:       server.config.LoginTitle,
 		Description: server.config.LoginDescription,
+		Action:      server.config.AuthorizePath,
 		Username:    values.Get("username"),
 		Error:       message,
 		Hidden:      hidden,
@@ -703,7 +709,7 @@ var loginTemplate = template.Must(template.New("login").Parse(`<!doctype html>
       <h1 id="login-title">{{.Title}}</h1>
       <p class="intro">{{.Description}}</p>
       {{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
-      <form method="post">
+      <form method="post" action="{{.Action}}">
         {{range $key, $values := .Hidden}}{{range $values}}<input type="hidden" name="{{$key}}" value="{{.}}">{{end}}{{end}}
         <label>Username
           <input name="username" value="{{.Username}}" autocomplete="username" autocapitalize="none" spellcheck="false" required autofocus>

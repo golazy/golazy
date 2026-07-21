@@ -157,14 +157,59 @@ func TestLoginPageUsesBrandingAndPreservesOAuthRequest(t *testing.T) {
 		"Secure, read-only document access.",
 		`name="client_id" value="client"`,
 		`name="state" value="opaque"`,
+		`<form method="post" action="/oauth/authorize">`,
 		"Continue securely",
 	} {
 		if !strings.Contains(body, expected) {
 			t.Fatalf("login page is missing %q: %s", expected, body)
 		}
 	}
-	if got := response.Header().Get("Content-Security-Policy"); !strings.Contains(got, "form-action 'self'") {
-		t.Fatalf("login CSP = %q", got)
+	if got := response.Header().Get("Content-Security-Policy"); strings.Contains(got, "form-action") {
+		t.Fatalf("login CSP blocks cross-origin OAuth redirects: %q", got)
+	}
+}
+
+func TestLoginSubmissionRedirectsToOAuthClient(t *testing.T) {
+	store := NewMemoryStore()
+	const redirectURI = "https://client.example/callback"
+	if err := store.SaveClient(context.Background(), Client{
+		ID:           "client",
+		RedirectURIs: []string{redirectURI},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	server, err := New(Config{
+		Issuer: "https://auth.example",
+		Auth:   lazyauth.Config{Authenticator: testAuth{}},
+		Store:  store,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	form := url.Values{
+		"response_type": {"code"},
+		"client_id":     {"client"},
+		"redirect_uri":  {redirectURI},
+		"state":         {"opaque"},
+		"username":      {"alice"},
+		"password":      {"secret"},
+	}
+	request := httptest.NewRequest(http.MethodPost, "/oauth/authorize", strings.NewReader(form.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	response := httptest.NewRecorder()
+	server.ServeHTTP(response, request)
+	if response.Code != http.StatusFound {
+		t.Fatalf("status = %d body=%s", response.Code, response.Body.String())
+	}
+	location, err := url.Parse(response.Header().Get("Location"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if location.Scheme+"://"+location.Host+location.Path != redirectURI {
+		t.Fatalf("redirect location = %q", location.String())
+	}
+	if location.Query().Get("code") == "" || location.Query().Get("state") != "opaque" {
+		t.Fatalf("redirect query = %q", location.RawQuery)
 	}
 }
 

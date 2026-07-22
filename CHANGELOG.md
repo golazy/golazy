@@ -9,6 +9,10 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `golazy.dev/lazytui/encoding/tty` supports raw terminal state and window
+  sizing on macOS, and `encoding/ansi` exposes typed alternate-buffer, cursor,
+  and focus-mode operations for higher-level terminal runtimes.
+
 - `golazy.dev/lazytui/lazycli` provides a reflection-driven command router
   with controller lifecycle methods, inferred struct parameters, merged
   scopes, hidden lightweight completion, logos, and inherited palettes.

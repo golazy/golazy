@@ -171,6 +171,30 @@ func DisableMouse() Op {
 	)
 }
 
+// EnterAlternateBuffer saves the cursor and selects the alternate screen.
+func EnterAlternateBuffer() Op { return CSIWithPrefix("?", codes.SM, 1049) }
+
+// LeaveAlternateBuffer restores the normal screen and saved cursor.
+func LeaveAlternateBuffer() Op { return CSIWithPrefix("?", codes.RM, 1049) }
+
+// HideCursor hides the terminal cursor.
+func HideCursor() Op { return CSIWithPrefix("?", codes.RM, 25) }
+
+// ShowCursor shows the terminal cursor.
+func ShowCursor() Op { return CSIWithPrefix("?", codes.SM, 25) }
+
+// EnableFocus enables xterm-compatible focus reports.
+func EnableFocus() Op { return CSIWithPrefix("?", codes.SM, 1004) }
+
+// DisableFocus disables xterm-compatible focus reports.
+func DisableFocus() Op { return CSIWithPrefix("?", codes.RM, 1004) }
+
+// SaveCursor saves the cursor position.
+func SaveCursor() Op { return CSI('s') }
+
+// RestoreCursor restores the cursor position.
+func RestoreCursor() Op { return CSI('u') }
+
 type sgrOp []codes.SGR
 
 func (s sgrOp) appendANSI(dst []byte) []byte {

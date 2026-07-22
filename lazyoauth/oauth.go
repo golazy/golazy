@@ -21,11 +21,12 @@ import (
 )
 
 var (
-	ErrInvalidClient   = errors.New("lazyoauth: invalid client")
-	ErrInvalidRequest  = errors.New("lazyoauth: invalid request")
-	ErrInvalidGrant    = errors.New("lazyoauth: invalid grant")
-	ErrUnauthorized    = errors.New("lazyoauth: unauthorized")
-	ErrUnsupportedFlow = errors.New("lazyoauth: unsupported flow")
+	ErrInvalidClient      = errors.New("lazyoauth: invalid client")
+	ErrInvalidRequest     = errors.New("lazyoauth: invalid request")
+	ErrInvalidGrant       = errors.New("lazyoauth: invalid grant")
+	ErrRefreshTokenReplay = errors.New("lazyoauth: refresh token replay detected")
+	ErrUnauthorized       = errors.New("lazyoauth: unauthorized")
+	ErrUnsupportedFlow    = errors.New("lazyoauth: unsupported flow")
 )
 
 const (
@@ -33,6 +34,14 @@ const (
 	defaultTokenPath     = "/oauth/token"
 	defaultRegisterPath  = "/oauth/register"
 	defaultJWKSPath      = "/oauth/jwks"
+	accessTokenType      = "at+jwt"
+	refreshTokenType     = "oauth-refresh+jwt"
+	accessTokenUse       = "access"
+	refreshTokenUse      = "refresh"
+	tokenUseClaim        = "token_use"
+	refreshFamilyClaim   = "refresh_token_family"
+	refreshResourceClaim = "resource"
+	refreshAccessClaim   = "refresh_access_claims"
 )
 
 // Config configures an OAuth authorization server and resource server.
@@ -41,9 +50,14 @@ type Config struct {
 	Resource string
 	Auth     lazyauth.Config
 	Store    Store
-	Signer   lazyjwt.Signer
+	// RefreshTokenStates persists the minimal rotation and replay state for
+	// signed, self-contained refresh tokens. When nil, Store is used if it
+	// implements RefreshTokenStateStore; otherwise an in-memory store is used.
+	RefreshTokenStates RefreshTokenStateStore
+	Signer             lazyjwt.Signer
 	// Validator overrides the resource-server JWT validator. When empty, a
-	// validator is derived from Signer, Issuer, and Resource.
+	// validator is derived from Signer, Issuer, and Resource. The access-token
+	// typ requirement remains framework-owned and cannot be overridden.
 	Validator lazyjwt.ValidatorConfig
 
 	ClaimsMapper ClaimsMapper
@@ -120,6 +134,13 @@ func New(config Config) (*Server, error) {
 	}
 	if config.Store == nil {
 		config.Store = NewMemoryStore()
+	}
+	if config.RefreshTokenStates == nil {
+		if states, ok := config.Store.(RefreshTokenStateStore); ok {
+			config.RefreshTokenStates = states
+		} else {
+			config.RefreshTokenStates = NewMemoryStore()
+		}
 	}
 	if len(config.Signer.Key) == 0 {
 		config.Signer.Key = randomBytes(32)
@@ -241,7 +262,15 @@ func (server *Server) validateRequest(r *http.Request) (lazyjwt.Claims, error) {
 	if len(validator.Audience) == 0 {
 		validator.Audience = []string{server.config.Resource}
 	}
-	return lazyjwt.Verify(token, validator)
+	validator.Type = accessTokenType
+	claims, err := lazyjwt.Verify(token, validator)
+	if err != nil {
+		return lazyjwt.Claims{}, err
+	}
+	if claims.Extra[tokenUseClaim] != accessTokenUse {
+		return lazyjwt.Claims{}, ErrUnauthorized
+	}
+	return claims, nil
 }
 
 func (server *Server) unauthorized(w http.ResponseWriter, err error) {
@@ -467,63 +496,247 @@ func (server *Server) authorizationCodeToken(w http.ResponseWriter, r *http.Requ
 }
 
 func (server *Server) refreshToken(w http.ResponseWriter, r *http.Request) {
-	refresh, err := server.config.Store.GetRefreshToken(r.Context(), r.Form.Get("refresh_token"))
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	rawToken := r.Form.Get("refresh_token")
+	if strings.HasPrefix(rawToken, "refresh_") {
+		server.legacyRefreshToken(w, r, rawToken)
 		return
 	}
-	if !time.Now().Before(refresh.ExpiresAt) {
+	grant, err := server.validateRefreshToken(rawToken)
+	if err != nil {
+		http.Error(w, ErrInvalidGrant.Error(), http.StatusBadRequest)
+		return
+	}
+	if clientID := r.Form.Get("client_id"); clientID != "" && clientID != grant.Access.OAuthClientID {
+		http.Error(w, ErrInvalidGrant.Error(), http.StatusBadRequest)
+		return
+	}
+	nextTokenID := randomToken()
+	tokens, err := server.buildTokens(grant.Access, grant.FamilyID, nextTokenID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	err = server.config.RefreshTokenStates.Rotate(r.Context(), RefreshTokenRotation{
+		FamilyID:         grant.FamilyID,
+		PresentedTokenID: grant.TokenID,
+		NextTokenID:      nextTokenID,
+		ExpiresAt:        tokens.RefreshExpiresAt,
+	})
+	if err != nil {
+		if errors.Is(err, ErrInvalidGrant) || errors.Is(err, ErrRefreshTokenReplay) {
+			http.Error(w, ErrInvalidGrant.Error(), http.StatusBadRequest)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	server.writeTokens(w, tokens)
+}
+
+func (server *Server) issueTokens(w http.ResponseWriter, r *http.Request, client Client, user lazyauth.User, scope []string) {
+	grant, err := server.accessGrant(r.Context(), client, user, scope)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	familyID := randomToken()
+	tokenID := randomToken()
+	tokens, err := server.buildTokens(grant, familyID, tokenID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := server.config.RefreshTokenStates.CreateFamily(r.Context(), RefreshTokenFamily{
+		ID:             familyID,
+		CurrentTokenID: tokenID,
+		ExpiresAt:      tokens.RefreshExpiresAt,
+	}); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	server.writeTokens(w, tokens)
+}
+
+type tokenResponse struct {
+	AccessToken      string
+	RefreshToken     string
+	Scope            []string
+	RefreshExpiresAt time.Time
+}
+
+type accessGrant struct {
+	Issuer            string         `json:"issuer"`
+	Audience          []string       `json:"audience"`
+	Subject           string         `json:"subject"`
+	ClientID          string         `json:"client_id"`
+	ClientDomain      string         `json:"client_domain,omitempty"`
+	UserID            string         `json:"user_id"`
+	OAuthClientID     string         `json:"oauth_client_id"`
+	OAuthClientDomain string         `json:"oauth_client_domain,omitempty"`
+	Scope             []string       `json:"scope,omitempty"`
+	Extra             map[string]any `json:"extra,omitempty"`
+}
+
+func (server *Server) accessGrant(ctx context.Context, client Client, user lazyauth.User, scope []string) (accessGrant, error) {
+	claims, err := server.config.ClaimsMapper.ClaimsFor(ctx, user, client)
+	if err != nil {
+		return accessGrant{}, err
+	}
+	extra := maps.Clone(claims.Extra)
+	if extra == nil {
+		extra = map[string]any{}
+	}
+	extra[tokenUseClaim] = accessTokenUse
+	audience := append([]string(nil), claims.Audience...)
+	if len(audience) == 0 {
+		audience = []string{server.config.Resource}
+	}
+	return accessGrant{
+		Issuer:            firstNonEmpty(claims.Issuer, server.config.Issuer),
+		Audience:          audience,
+		Subject:           firstNonEmpty(claims.Subject, user.ID),
+		ClientID:          firstNonEmpty(claims.ClientID, client.ID),
+		ClientDomain:      firstNonEmpty(claims.ClientDomain, client.Domain),
+		UserID:            user.ID,
+		OAuthClientID:     client.ID,
+		OAuthClientDomain: client.Domain,
+		Scope:             mergeStrings(claims.Scope, scope),
+		Extra:             extra,
+	}, nil
+}
+
+func (server *Server) buildTokens(grant accessGrant, familyID string, tokenID string) (tokenResponse, error) {
+	now := time.Now()
+	accessExtra := maps.Clone(grant.Extra)
+	if accessExtra == nil {
+		accessExtra = map[string]any{}
+	}
+	accessExtra[tokenUseClaim] = accessTokenUse
+	accessSigner := server.config.Signer
+	accessSigner.Type = accessTokenType
+	access, err := accessSigner.Sign(lazyjwt.Claims{
+		Issuer:       grant.Issuer,
+		Subject:      grant.Subject,
+		Audience:     append([]string(nil), grant.Audience...),
+		IssuedAt:     now,
+		ExpiresAt:    now.Add(server.config.AccessTokenTTL),
+		Scope:        append([]string(nil), grant.Scope...),
+		ClientID:     grant.ClientID,
+		ClientDomain: grant.ClientDomain,
+		Extra:        accessExtra,
+	})
+	if err != nil {
+		return tokenResponse{}, err
+	}
+	refreshExpiresAt := now.Add(server.config.RefreshTokenTTL)
+	refreshClaims := lazyjwt.Claims{
+		Issuer:       server.config.Issuer,
+		Subject:      grant.UserID,
+		Audience:     []string{server.refreshTokenAudience()},
+		IssuedAt:     now,
+		ExpiresAt:    refreshExpiresAt,
+		ID:           tokenID,
+		Scope:        append([]string(nil), grant.Scope...),
+		ClientID:     grant.OAuthClientID,
+		ClientDomain: grant.OAuthClientDomain,
+		Extra: map[string]any{
+			tokenUseClaim:        refreshTokenUse,
+			refreshFamilyClaim:   familyID,
+			refreshResourceClaim: server.config.Resource,
+			refreshAccessClaim:   grant,
+		},
+	}
+	refreshSigner := server.config.Signer
+	refreshSigner.Type = refreshTokenType
+	refresh, err := refreshSigner.Sign(refreshClaims)
+	if err != nil {
+		return tokenResponse{}, err
+	}
+	return tokenResponse{
+		AccessToken:      access,
+		RefreshToken:     refresh,
+		Scope:            append([]string(nil), grant.Scope...),
+		RefreshExpiresAt: refreshExpiresAt,
+	}, nil
+}
+
+func (server *Server) writeTokens(w http.ResponseWriter, tokens tokenResponse) {
+	server.writeJSON(w, map[string]any{
+		"access_token":  tokens.AccessToken,
+		"token_type":    "Bearer",
+		"expires_in":    int(server.config.AccessTokenTTL / time.Second),
+		"refresh_token": tokens.RefreshToken,
+		"scope":         strings.Join(tokens.Scope, " "),
+	})
+}
+
+func (server *Server) legacyRefreshToken(w http.ResponseWriter, r *http.Request, rawToken string) {
+	refresh, err := server.config.Store.GetRefreshToken(r.Context(), rawToken)
+	if err != nil || !time.Now().Before(refresh.ExpiresAt) {
+		http.Error(w, ErrInvalidGrant.Error(), http.StatusBadRequest)
+		return
+	}
+	if clientID := r.Form.Get("client_id"); clientID != "" && clientID != refresh.ClientID {
 		http.Error(w, ErrInvalidGrant.Error(), http.StatusBadRequest)
 		return
 	}
 	client, err := server.client(r.Context(), refresh.ClientID, "")
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, ErrInvalidGrant.Error(), http.StatusBadRequest)
 		return
 	}
 	server.issueTokens(w, r, client, refresh.User, refresh.Scope)
 }
 
-func (server *Server) issueTokens(w http.ResponseWriter, r *http.Request, client Client, user lazyauth.User, scope []string) {
-	claims, err := server.config.ClaimsMapper.ClaimsFor(r.Context(), user, client)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	now := time.Now()
-	claims.Issuer = firstNonEmpty(claims.Issuer, server.config.Issuer)
-	claims.Subject = firstNonEmpty(claims.Subject, user.ID)
-	if len(claims.Audience) == 0 {
-		claims.Audience = []string{server.config.Resource}
-	}
-	claims.IssuedAt = now
-	claims.ExpiresAt = now.Add(server.config.AccessTokenTTL)
-	claims.ClientID = firstNonEmpty(claims.ClientID, client.ID)
-	claims.ClientDomain = firstNonEmpty(claims.ClientDomain, client.Domain)
-	claims.Scope = mergeStrings(claims.Scope, scope)
-	access, err := server.config.Signer.Sign(claims)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	refresh := RefreshToken{
-		Token:     "refresh_" + randomToken(),
-		ClientID:  client.ID,
-		User:      user,
-		Scope:     scope,
-		ExpiresAt: now.Add(server.config.RefreshTokenTTL),
-	}
-	if err := server.config.Store.SaveRefreshToken(r.Context(), refresh); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	server.writeJSON(w, map[string]any{
-		"access_token":  access,
-		"token_type":    "Bearer",
-		"expires_in":    int(server.config.AccessTokenTTL / time.Second),
-		"refresh_token": refresh.Token,
-		"scope":         strings.Join(scope, " "),
+type refreshGrant struct {
+	FamilyID string
+	TokenID  string
+	Access   accessGrant
+}
+
+func (server *Server) validateRefreshToken(token string) (refreshGrant, error) {
+	claims, err := lazyjwt.Verify(token, lazyjwt.ValidatorConfig{
+		Keys:     map[string][]byte{server.config.Signer.KeyID: server.config.Signer.Key},
+		Issuer:   server.config.Issuer,
+		Audience: []string{server.refreshTokenAudience()},
+		Type:     refreshTokenType,
 	})
+	if err != nil || claims.ExpiresAt.IsZero() || claims.ID == "" || claims.Subject == "" || claims.ClientID == "" {
+		return refreshGrant{}, ErrInvalidGrant
+	}
+	if claims.Extra[tokenUseClaim] != refreshTokenUse || claims.Extra[refreshResourceClaim] != server.config.Resource {
+		return refreshGrant{}, ErrInvalidGrant
+	}
+	familyID, ok := claims.Extra[refreshFamilyClaim].(string)
+	if !ok || familyID == "" {
+		return refreshGrant{}, ErrInvalidGrant
+	}
+	var access accessGrant
+	if err := decodeClaim(claims.Extra[refreshAccessClaim], &access); err != nil {
+		return refreshGrant{}, ErrInvalidGrant
+	}
+	if access.Issuer == "" || len(access.Audience) == 0 || access.UserID != claims.Subject ||
+		access.OAuthClientID != claims.ClientID || access.OAuthClientDomain != claims.ClientDomain ||
+		!slices.Equal(access.Scope, claims.Scope) || access.Extra[tokenUseClaim] != accessTokenUse {
+		return refreshGrant{}, ErrInvalidGrant
+	}
+	return refreshGrant{
+		FamilyID: familyID,
+		TokenID:  claims.ID,
+		Access:   access,
+	}, nil
+}
+
+func (server *Server) refreshTokenAudience() string {
+	return server.config.Issuer + server.config.TokenPath
+}
+
+func decodeClaim(value any, target any) error {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(data, target)
 }
 
 func (server *Server) client(ctx context.Context, id string, redirectURI string) (Client, error) {

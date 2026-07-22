@@ -376,11 +376,14 @@ func TestProtectValidatesBearerToken(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	access, err := (lazyjwt.Signer{KeyID: "main", Key: []byte("secret")}).Sign(lazyjwt.Claims{
+	access, err := (lazyjwt.Signer{KeyID: "main", Key: []byte("secret"), Type: accessTokenType}).Sign(lazyjwt.Claims{
 		Issuer:   "http://auth.example",
 		Subject:  "alice",
 		Audience: []string{"http://app.example/mcp"},
-		Extra:    map[string]any{"data": map[string]any{"email": "alice@example.com"}},
+		Extra: map[string]any{
+			"data":        map[string]any{"email": "alice@example.com"},
+			tokenUseClaim: accessTokenUse,
+		},
 	})
 	if err != nil {
 		t.Fatal(err)

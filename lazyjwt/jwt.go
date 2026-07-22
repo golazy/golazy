@@ -19,6 +19,7 @@ var (
 	ErrMalformedToken   = errors.New("lazyjwt: malformed token")
 	ErrUnsupportedAlg   = errors.New("lazyjwt: unsupported signing algorithm")
 	ErrInvalidSignature = errors.New("lazyjwt: invalid signature")
+	ErrInvalidType      = errors.New("lazyjwt: invalid token type")
 	ErrExpiredToken     = errors.New("lazyjwt: token is expired")
 	ErrTokenNotYetValid = errors.New("lazyjwt: token is not yet valid")
 	ErrInvalidIssuer    = errors.New("lazyjwt: invalid issuer")
@@ -72,6 +73,9 @@ func ClaimsFromContext(ctx context.Context) (Claims, bool) {
 type Signer struct {
 	KeyID string
 	Key   []byte
+	// Type sets the protected typ header. It defaults to JWT. Use distinct
+	// explicit values when one issuer signs more than one kind of JWT.
+	Type string
 }
 
 // Sign signs claims as an HS256 JWT.
@@ -79,9 +83,13 @@ func (signer Signer) Sign(claims Claims) (string, error) {
 	if len(signer.Key) == 0 {
 		return "", fmt.Errorf("lazyjwt: signing key is required")
 	}
+	tokenType := signer.Type
+	if tokenType == "" {
+		tokenType = "JWT"
+	}
 	header := map[string]any{
 		"alg": "HS256",
-		"typ": "JWT",
+		"typ": tokenType,
 	}
 	if signer.KeyID != "" {
 		header["kid"] = signer.KeyID
@@ -101,9 +109,11 @@ func (signer Signer) Sign(claims Claims) (string, error) {
 
 // ValidatorConfig configures JWT validation.
 type ValidatorConfig struct {
-	Keys        map[string][]byte
-	Issuer      string
-	Audience    []string
+	Keys     map[string][]byte
+	Issuer   string
+	Audience []string
+	// Type requires an exact protected typ header match when non-empty.
+	Type        string
 	ClientRules []ClientRule
 	Now         func() time.Time
 }
@@ -127,6 +137,7 @@ func Verify(token string, config ValidatorConfig) (Claims, error) {
 	var header struct {
 		Alg string `json:"alg"`
 		Kid string `json:"kid"`
+		Typ string `json:"typ"`
 	}
 	if err := json.Unmarshal(headerJSON, &header); err != nil {
 		return Claims{}, fmt.Errorf("%w: header", ErrMalformedToken)
@@ -141,6 +152,9 @@ func Verify(token string, config ValidatorConfig) (Claims, error) {
 	unsigned := parts[0] + "." + parts[1]
 	if !hmac.Equal([]byte(sign(unsigned, key)), []byte(parts[2])) {
 		return Claims{}, ErrInvalidSignature
+	}
+	if config.Type != "" && header.Typ != config.Type {
+		return Claims{}, ErrInvalidType
 	}
 	payloadJSON, err := decode(parts[1])
 	if err != nil {

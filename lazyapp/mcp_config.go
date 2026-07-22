@@ -20,7 +20,9 @@ func Auth(config lazyauth.Config) AuthConfig {
 	}
 }
 
-// OAuthConfig initializes lazyoauth with the dependency-initialized app context.
+// OAuthConfig initializes lazyoauth with the dependency-initialized app
+// context. Applications can resolve a durable RefreshTokenStateStore from this
+// context and assign it to lazyoauth.Config.RefreshTokenStates.
 type OAuthConfig func(context.Context) (lazyoauth.Config, error)
 
 // OAuth adapts a static lazyoauth.Config for Config.OAuth.

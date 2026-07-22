@@ -31,7 +31,12 @@ type AuthCode struct {
 	ExpiresAt           time.Time     `json:"expires_at"`
 }
 
-// RefreshToken is a refresh token record.
+// RefreshToken is a legacy opaque refresh token record.
+//
+// Deprecated: new refresh tokens are signed, self-contained grants whose
+// replay state is persisted through RefreshTokenStateStore. Store retains
+// these methods so existing implementations and previously issued opaque
+// tokens remain compatible during migration.
 type RefreshToken struct {
 	Token     string        `json:"token"`
 	ClientID  string        `json:"client_id"`
@@ -40,7 +45,40 @@ type RefreshToken struct {
 	ExpiresAt time.Time     `json:"expires_at"`
 }
 
-// Store persists OAuth clients and transient tokens.
+// RefreshTokenFamily is the minimal server-side state for one rotating refresh
+// token family. The signed token carries the grant; the store tracks only the
+// current token ID and whether the family has been revoked.
+type RefreshTokenFamily struct {
+	ID             string    `json:"id"`
+	CurrentTokenID string    `json:"current_token_id"`
+	ExpiresAt      time.Time `json:"expires_at"`
+	Revoked        bool      `json:"revoked"`
+}
+
+// RefreshTokenRotation describes one atomic refresh-token rotation.
+type RefreshTokenRotation struct {
+	FamilyID         string
+	PresentedTokenID string
+	NextTokenID      string
+	ExpiresAt        time.Time
+}
+
+// RefreshTokenStateStore tracks refresh-token rotation and family revocation.
+//
+// Rotate must atomically compare PresentedTokenID with the family's current
+// token ID. A mismatch means replay: the implementation must revoke the family
+// and return ErrRefreshTokenReplay. Missing, expired, or already-revoked
+// families return ErrInvalidGrant. The signed refresh token carries user,
+// client, scope, resource, and expiry data; implementations must not store the
+// token itself. Implementations may opportunistically delete expired or
+// revoked families; a missing family must continue to return ErrInvalidGrant.
+type RefreshTokenStateStore interface {
+	CreateFamily(context.Context, RefreshTokenFamily) error
+	Rotate(context.Context, RefreshTokenRotation) error
+	RevokeFamily(context.Context, string) error
+}
+
+// Store persists OAuth clients, authorization codes, and refresh tokens.
 type Store interface {
 	SaveClient(context.Context, Client) error
 	GetClient(context.Context, string) (Client, error)
@@ -53,18 +91,22 @@ type Store interface {
 // MemoryStore is an in-memory OAuth store.
 type MemoryStore struct {
 	mu       sync.Mutex
-	Clients  map[string]Client       `json:"clients"`
-	Codes    map[string]AuthCode     `json:"codes"`
-	Refresh  map[string]RefreshToken `json:"refresh"`
+	Clients  map[string]Client             `json:"clients"`
+	Codes    map[string]AuthCode           `json:"codes"`
+	Refresh  map[string]RefreshToken       `json:"refresh"`
+	Families map[string]RefreshTokenFamily `json:"refresh_token_families"`
 	onChange func(*MemoryStore) error
 }
+
+var _ RefreshTokenStateStore = (*MemoryStore)(nil)
 
 // NewMemoryStore creates an empty in-memory store.
 func NewMemoryStore() *MemoryStore {
 	return &MemoryStore{
-		Clients: map[string]Client{},
-		Codes:   map[string]AuthCode{},
-		Refresh: map[string]RefreshToken{},
+		Clients:  map[string]Client{},
+		Codes:    map[string]AuthCode{},
+		Refresh:  map[string]RefreshToken{},
+		Families: map[string]RefreshTokenFamily{},
 	}
 }
 
@@ -151,6 +193,61 @@ func (store *MemoryStore) GetRefreshToken(_ context.Context, token string) (Refr
 	return record, nil
 }
 
+// CreateFamily starts refresh-token rotation state for a newly issued grant.
+func (store *MemoryStore) CreateFamily(_ context.Context, family RefreshTokenFamily) error {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	store.ensure()
+	if family.ID == "" || family.CurrentTokenID == "" || family.ExpiresAt.IsZero() {
+		return ErrInvalidGrant
+	}
+	if _, exists := store.Families[family.ID]; exists {
+		return ErrInvalidGrant
+	}
+	store.Families[family.ID] = family
+	return store.changed()
+}
+
+// Rotate atomically advances a refresh-token family or revokes it on replay.
+func (store *MemoryStore) Rotate(_ context.Context, rotation RefreshTokenRotation) error {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	store.ensure()
+	family, ok := store.Families[rotation.FamilyID]
+	if !ok || family.Revoked || !time.Now().Before(family.ExpiresAt) {
+		return ErrInvalidGrant
+	}
+	if family.CurrentTokenID != rotation.PresentedTokenID {
+		family.Revoked = true
+		store.Families[family.ID] = family
+		if err := store.changed(); err != nil {
+			return err
+		}
+		return ErrRefreshTokenReplay
+	}
+	if rotation.NextTokenID == "" || rotation.ExpiresAt.IsZero() {
+		return ErrInvalidGrant
+	}
+	family.CurrentTokenID = rotation.NextTokenID
+	family.ExpiresAt = rotation.ExpiresAt
+	store.Families[family.ID] = family
+	return store.changed()
+}
+
+// RevokeFamily invalidates a refresh-token family. It is idempotent.
+func (store *MemoryStore) RevokeFamily(_ context.Context, familyID string) error {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	store.ensure()
+	family, ok := store.Families[familyID]
+	if !ok || family.Revoked {
+		return nil
+	}
+	family.Revoked = true
+	store.Families[familyID] = family
+	return store.changed()
+}
+
 func (store *MemoryStore) ensure() {
 	if store.Clients == nil {
 		store.Clients = map[string]Client{}
@@ -160,6 +257,9 @@ func (store *MemoryStore) ensure() {
 	}
 	if store.Refresh == nil {
 		store.Refresh = map[string]RefreshToken{}
+	}
+	if store.Families == nil {
+		store.Families = map[string]RefreshTokenFamily{}
 	}
 }
 

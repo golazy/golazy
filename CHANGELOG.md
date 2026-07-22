@@ -37,6 +37,12 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   login page. The responsive page now preserves authorization parameters,
   renders failed authentication without echoing passwords, and sends a strict
   browser security policy.
+- `lazyoauth` issues signed, self-contained, explicitly typed refresh tokens
+  and rotates their `jti` on every use. `RefreshTokenStateStore` and
+  `Config.RefreshTokenStates` let applications durably track only the current
+  token family state; replay revokes the whole family. `lazyjwt` now supports
+  exact protected `typ` header signing and validation so access and refresh
+  JWTs use mutually exclusive trust profiles.
 
 ### Fixed
 

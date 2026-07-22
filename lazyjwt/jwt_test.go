@@ -61,3 +61,23 @@ func TestVerifyRejectsExpiredToken(t *testing.T) {
 		t.Fatalf("Verify error = %v, want ErrExpiredToken", err)
 	}
 }
+
+func TestVerifyRequiresExplicitTokenType(t *testing.T) {
+	key := []byte("secret")
+	token, err := (Signer{KeyID: "main", Key: key, Type: "example-access+jwt"}).Sign(Claims{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Verify(token, ValidatorConfig{
+		Keys: map[string][]byte{"main": key},
+		Type: "example-access+jwt",
+	}); err != nil {
+		t.Fatalf("Verify matching type: %v", err)
+	}
+	if _, err := Verify(token, ValidatorConfig{
+		Keys: map[string][]byte{"main": key},
+		Type: "example-refresh+jwt",
+	}); !errors.Is(err, ErrInvalidType) {
+		t.Fatalf("Verify error = %v, want ErrInvalidType", err)
+	}
+}

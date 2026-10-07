@@ -18,16 +18,16 @@ const protocolVersion = "2025-11-25"
 
 type rpcRequest struct {
 	JSONRPC string          `json:"jsonrpc"`
-	ID      any             `json:"id,omitempty"`
+	ID      json.RawMessage `json:"id,omitempty"`
 	Method  string          `json:"method"`
 	Params  json.RawMessage `json:"params,omitempty"`
 }
 
 type rpcResponse struct {
-	JSONRPC string    `json:"jsonrpc"`
-	ID      any       `json:"id,omitempty"`
-	Result  any       `json:"result,omitempty"`
-	Error   *rpcError `json:"error,omitempty"`
+	JSONRPC string          `json:"jsonrpc"`
+	ID      json.RawMessage `json:"id"`
+	Result  any             `json:"result,omitempty"`
+	Error   *rpcError       `json:"error,omitempty"`
 }
 
 type rpcError struct {
@@ -42,19 +42,21 @@ func (scope *Scope) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	var request rpcRequest
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		writeRPC(w, rpcResponse{JSONRPC: "2.0", Error: &rpcError{Code: -32700, Message: err.Error()}})
+	var body json.RawMessage
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeRPC(w, rpcFailure(nil, -32700, "Parse error"))
 		return
 	}
-	result, err := scope.handleRPC(r.Context(), request.Method, request.Params)
-	response := rpcResponse{JSONRPC: "2.0", ID: request.ID}
-	if err != nil {
-		response.Error = &rpcError{Code: -32000, Message: err.Error()}
-	} else {
-		response.Result = result
+	request, failure := decodeRPC(body)
+	if failure != nil {
+		writeRPC(w, *failure)
+		return
 	}
-	writeRPC(w, response)
+	if len(request.ID) == 0 {
+		w.WriteHeader(http.StatusAccepted)
+		return
+	}
+	writeRPC(w, scope.dispatchRPC(r.Context(), request))
 }
 
 func (scope *Scope) handleRPC(ctx context.Context, method string, params json.RawMessage) (any, error) {
@@ -82,7 +84,9 @@ func (scope *Scope) handleRPC(ctx context.Context, method string, params json.Ra
 			Name      string          `json:"name"`
 			Arguments json.RawMessage `json:"arguments"`
 		}
-		_ = json.Unmarshal(params, &args)
+		if err := json.Unmarshal(params, &args); err != nil {
+			return nil, &rpcError{Code: -32602, Message: "Invalid params"}
+		}
 		return scope.callTool(ctx, args.Name, args.Arguments)
 	case "resources/list":
 		return scope.listResources(ctx), nil
@@ -90,7 +94,9 @@ func (scope *Scope) handleRPC(ctx context.Context, method string, params json.Ra
 		var args struct {
 			URI string `json:"uri"`
 		}
-		_ = json.Unmarshal(params, &args)
+		if err := json.Unmarshal(params, &args); err != nil {
+			return nil, &rpcError{Code: -32602, Message: "Invalid params"}
+		}
 		return scope.readResource(ctx, args.URI)
 	case "resources/templates/list":
 		return map[string]any{"resourceTemplates": []any{}}, nil
@@ -98,7 +104,9 @@ func (scope *Scope) handleRPC(ctx context.Context, method string, params json.Ra
 		var args struct {
 			URI string `json:"uri"`
 		}
-		_ = json.Unmarshal(params, &args)
+		if err := json.Unmarshal(params, &args); err != nil {
+			return nil, &rpcError{Code: -32602, Message: "Invalid params"}
+		}
 		return scope.readDirectory(ctx, args.URI)
 	case "prompts/list":
 		return scope.listPrompts(ctx), nil
@@ -107,10 +115,12 @@ func (scope *Scope) handleRPC(ctx context.Context, method string, params json.Ra
 			Name      string            `json:"name"`
 			Arguments map[string]string `json:"arguments"`
 		}
-		_ = json.Unmarshal(params, &args)
+		if err := json.Unmarshal(params, &args); err != nil {
+			return nil, &rpcError{Code: -32602, Message: "Invalid params"}
+		}
 		return scope.getPrompt(ctx, args.Name, args.Arguments)
 	default:
-		return nil, fmt.Errorf("lazymcp: unsupported method %q", method)
+		return nil, &rpcError{Code: -32601, Message: fmt.Sprintf("lazymcp: unsupported method %q", method)}
 	}
 }
 

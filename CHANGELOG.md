@@ -9,6 +9,12 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `lazymcp.Scope.ServeStdio` serves existing MCP modules over stdin/stdout,
+  sharing tools, Apps, skills, schemas, and widget metadata with HTTP. It
+  preserves request IDs, suppresses notification responses, and supports
+  concurrent cancellable requests. `lazymcp.NewViewRenderer` adapts standalone
+  template rendering without starting an HTTP application.
+
 - `golazy.dev/lazytui/encoding/tty` supports raw terminal state and window
   sizing on macOS, and `encoding/ansi` exposes typed alternate-buffer, cursor,
   and focus-mode operations for higher-level terminal runtimes.

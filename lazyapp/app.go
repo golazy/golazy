@@ -436,7 +436,7 @@ func New(config Config) *App {
 	if config.MCP != nil {
 		options := config.MCPOptions
 		if options.Views == nil {
-			options.Views = mcpViews{views: renderer}
+			options.Views = lazymcp.NewViewRenderer(renderer)
 		}
 		mcpScope = lazymcp.NewScope(options)
 		if err := config.MCP(ctx, mcpScope); err != nil {

@@ -7,6 +7,8 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.23] - 2026-10-12
+
 ### Added
 
 - `lazymcp.Scope.ServeStdio` serves existing MCP modules over stdin/stdout,
@@ -726,7 +728,9 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Route construction with embedded public-file fallback.
 - Method-not-allowed handling for application routes.
 
-[Unreleased]: https://github.com/golazy/golazy/compare/v0.1.21...HEAD
+[Unreleased]: https://github.com/golazy/golazy/compare/v0.1.23...HEAD
+[0.1.23]: https://github.com/golazy/golazy/compare/v0.1.22...v0.1.23
+[0.1.22]: https://github.com/golazy/golazy/compare/v0.1.21...v0.1.22
 [0.1.21]: https://github.com/golazy/golazy/compare/v0.1.20...v0.1.21
 [0.1.20]: https://github.com/golazy/golazy/compare/v0.1.19...v0.1.20
 [0.1.19]: https://github.com/golazy/golazy/compare/v0.1.18...v0.1.19

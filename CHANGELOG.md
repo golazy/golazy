@@ -7,7 +7,7 @@ and GoLazy uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [0.1.23] - 2026-10-12
+## [0.1.23] - 2026-10-14
 
 ### Added
 

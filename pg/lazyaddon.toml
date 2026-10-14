@@ -2,7 +2,7 @@ manifest = 1
 
 [package]
 id = "golazy.dev/pg"
-version = "v0.1.23"
+version = "v0.1.24"
 
 [[addons]]
 id = "postgres"
